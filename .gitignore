@@ -1,0 +1,40 @@
+# ============================================================
+# 探索词典 / ExplorerDict —— 版本库忽略规则
+# 原则：源码、测试、文档、构建脚本入库；
+#       打包产物、本地运行数据（含词库与 API Key）、缓存不入库。
+# ============================================================
+
+# ---- 打包 / 构建产物（由 tools\build_app.ps1 重新生成）----
+/_runtime/
+/artifacts/
+*.exe
+*.pkg
+*.dll
+*.pyd
+
+# ---- Python 缓存 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.build-env/
+.venv/
+venv/
+
+# ---- 本地运行数据（词库 / 导出 / 加密 Key / 日志，绝不入库）----
+/data/
+/.tmp/
+*.log
+日志/
+
+# ---- 开发期临时文件 ----
+_enc.json
+_err.txt
+_in.txt
+_out.txt
+_probe*.ps1
+*.lnk
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
