@@ -97,13 +97,20 @@ NODE_HIT_PAD = 2
 #: 只有松手那一下 ``pin_node()`` 把卡片「啪」地瞬移到鼠标处（用户 2026-10-05 报的
 #: 「无法拖动 / 拖动不准确」）。假 Tk 因为自带 ``item_options`` 一直是绿的。
 NODE_TAG_PREFIX = "node-"
+#: 手势期间被推迟的重画：隔多久回头看一眼「手离开了没」（毫秒）。
+DRAW_DEFER_MS = 120
 
 
 def node_tag(entry_id: int) -> str:
     """一张词卡在画布上的 tag 名（框与文字共用）。"""
     return f"{NODE_TAG_PREFIX}{int(entry_id)}"
-#: 「按住 Alt」在 Tk ``event.state`` 里的位（Windows）：``<Alt-Button-1>`` 这个
-#: 绑定在某些 Tk 版本里收不到，所以按下时两条路都认（见 :meth:`_alt_held`）。
+#: 「按住 Alt」在 Tk ``event.state`` 里的位（Windows 真鼠标实测：按住 Alt 时
+#: ``state = 0x20008``；不按任何键时 ``state = 0x8``）。
+#:
+#: ★★ ``0x8`` 那一位是**普通左键本身**贡献的，而它正好就是 Tk 的 ``Mod1Mask``。
+#: 曾经为了兜底「Alt 不进 state」给 ``<Mod1-Button-1>`` 多绑了一条，结果那条
+#: 绑定把**每一次普通左键**都抢走了（Tk 只触发最具体的那一条），左键于是永远
+#: 在连线、永远拖不动卡片。现在只认这个位，绝不再绑 ``<Mod1-*``。
 ALT_MASK = 0x00020000
 #: **手势认定阈值**（屏幕像素）：左键按下后，鼠标离开按下点不足这个距离就**当单击**处理 ——
 #: 不固定卡片、也不建关系。理由：手抖一两像素是常事，若按下就算拖动，一次普通点击会把
@@ -1956,6 +1963,10 @@ class ConceptMapWindow:
         self._edge_rels: dict[int, object] = {}
         self._draw_key = None
         self._scheduled = False
+        #: 「手离开画布后补画一次」的定时器 id。手势期间 :meth:`_draw` **拒绝重画**：
+        #: 重画会把卡片按布局位置摆回去（手指底下的卡片会「跳」），更会把
+        #: :meth:`_clear` 里的手势状态一起擦掉 —— 拖动当场失效。
+        self._draw_retry = None
         #: 首开自适应缩放是否还没做过（换主题 / 首次拿到真实画布尺寸时才做一次；
         #: 用户一旦自己滚过轮就再也不自动改缩放与位置）
         self._fit_pending = True
@@ -1998,8 +2009,6 @@ class ConceptMapWindow:
         self._drag_node: tuple[int, float, float] | None = None
         #: 画布上的**拖拽临时线**：松手 / 取消时删掉，绝不留在图上
         self._link_item: int | None = None
-        #: 这一下按下时是不是按住 Alt（``<Alt-Button-1>`` 这条绑定置位；见 ``_alt_held``）
-        self._alt_armed: bool = False
         #: 拖动卡片时跟着鼠标走的 item（卡片本体 + 文字；松手重画整张图）
         self._drag_items: list[int] = []
         #: 上一次搬到的位置（拖动期间按它算增量，卡片才会严格跟着鼠标走）
@@ -2109,14 +2118,36 @@ class ConceptMapWindow:
         for sequence, handler in (("<Button-1>", self._on_canvas_press),
                                   ("<B1-Motion>", self._on_canvas_motion),
                                   ("<ButtonRelease-1>", self._on_canvas_release),
-                                  # 按住 Alt + 左键 = 建关系。Alt 在有的 Tk 版本里
-                                  # 不进 ``event.state``，所以单独绑一条兜底；
-                                  # 两条都命中时由 ``_on_canvas_press`` 自己去重。
-                                  ("<Alt-Button-1>", self._on_canvas_press_alt),
-                                  ("<Mod1-Button-1>", self._on_canvas_press_alt)):
+                                  # 按住 Alt + 左键 = 建关系。
+                                  #
+                                  # ★★ 这里**不许**再绑 ``<Mod1-Button-1>``
+                                  # （2026-10-05 的血案）：Windows 上 Tk 给「不按
+                                  # 任何键的真实左键」报的 ``event.state`` 就是
+                                  # ``0x8``，而 ``0x8`` 正是 Tk 的 ``Mod1Mask``
+                                  # 那一位 —— 于是 ``<Mod1-Button-1>`` **匹配每一次
+                                  # 普通左键**；Tk 对同一个控件只触发**最具体的
+                                  # 那一条**绑定，它比 ``<Button-1>`` 具体，普通
+                                  # 左键因此全被它抢走，``_on_canvas_press``
+                                  # （拖动那条路）根本不执行。用户两次报障
+                                  # （「左键拖不动」「左键怎么还是连线」）都是这一条
+                                  # 造成的，橡皮筋线还会留在画布上。
+                                  # 真鼠标实测：只绑 ``<Button-1>`` 时普通左键
+                                  # ``state=0x8``、按住 Alt ``state=0x20008``；
+                                  # ``<Alt-Button-1>`` 单绑时能正常命中。
+                                  ("<Alt-Button-1>", self._on_canvas_press_alt)):
             try:
                 self.canvas.bind(sequence, handler, add="+")
             except (tk.TclError, TypeError):  # pragma: no cover - 极简替身
+                continue
+        #: 松手兜底：鼠标在**画布外**松开时画布收不到 ``<ButtonRelease-1>``，那一轮
+        #: 手势会一直挂着（橡皮筋线留在画布上、下一次按下被当成「上一轮还没结束」——
+        #: 用户 2026-10-05 拍屏里那两条没有终点的长线就是这么来的）。绑在顶层窗口上，
+        #: 只要松手发生在这个窗口里就一定收得到；``<Escape>`` 是显式放弃当前手势。
+        for sequence, handler in (("<ButtonRelease-1>", self._on_foreign_release),
+                                  ("<Escape>", self._on_escape)):
+            try:
+                self.win.bind(sequence, handler, add="+")
+            except (tk.TclError, TypeError, AttributeError):  # pragma: no cover
                 continue
         # Windows 的右键 = Button-3；Button-2 是 X11 / 触控板的中间键兜底。
         # 左键**不参与**平移：平移只在右键按下时开始，节点点击仍然只认左键。
@@ -2248,6 +2279,9 @@ class ConceptMapWindow:
         # 提示的淡出定时器必须先取消：它排在 ``self.win`` 上，窗口一销毁再触发，
         # 回调就会去打已经没了的控件（真实 Tk 抛 TclError）。
         self._cancel_hint_fade()
+        # 补画定时器同理：手势中途关窗，它会比窗口活得久，Tk 会打
+        # ``invalid command name "..._draw_after_gesture"``。
+        self._cancel_deferred_draw()
         self.chrome.enable(False)
         self._pending_token = None
         try:
@@ -3170,10 +3204,52 @@ class ConceptMapWindow:
         self.open_edge_dialog(edge)
 
     # ------------------------------------ 拖拽（Alt+左键建关系 / 左键摆位置）
+    def _forget_gesture(self) -> None:
+        """把「正在进行中的手势」整个忘掉：不写库、不提示、卡片留在原处。
+
+        三处用它：①一轮没收到松手就结束之后，下一次按下时自愈；②松手落在画布**外**
+        （只有顶层窗口那条兜底绑定收得到）；③按 ``<Escape>`` 主动放弃。
+        """
+        self._clear_link_line()
+        self._link_from = None
+        self._drag_node = None
+        self._drag_items = []
+        self._drag_last = None
+        self._drag_target = None
+        self._bg_pan_last = None
+        self._press_xy = None
+        self._drag_started = False
+
+    def _on_foreign_release(self, event) -> None:
+        """顶层窗口上的松手兜底：画布自己没收到的那次松手，在这里收尾。
+
+        松手落在画布**里**时，画布那条 ``<ButtonRelease-1>`` 先把状态清干净了，
+        这里再跑一次是幂等的（手上没有手势就什么都不做）。落在画布**外**时不补
+        完手势，直接放弃：位置已经不在画布坐标系里，硬落库只会把卡片钉到莫名其
+        妙的地方（「松在画布外 = 取消」）。
+        """
+        if (self._link_from is None and self._drag_node is None
+                and self._bg_pan_last is None):
+            return
+        self._forget_gesture()
+        self._set_feedback("手势已取消：鼠标松开的位置不在图上")
+        self._draw(force=True)
+
+    def _on_escape(self, _event=None) -> None:
+        """``<Escape>``：放弃正在进行的手势（临时线删掉、卡片留在原处）。"""
+        if self._link_from is None and self._drag_node is None:
+            return
+        self._forget_gesture()
+        self._set_feedback("已取消")
+        self._draw(force=True)
+
     def _alt_held(self, event) -> bool:
-        """这一下是不是「按住 Alt」：绑定兜底 + ``event.state`` 位（两条路都认）。"""
-        if self._alt_armed:
-            return True
+        """这一下是不是「按住 Alt」：**只看** ``event.state`` 的 Alt 位（见 :data:`ALT_MASK`）。
+
+        真鼠标实测（本机 Tk）：不按任何键 ``state=0x8``、按住 Alt ``state=0x20008``。
+        这里**不留**任何跨事件的标志位 —— 标志位要靠松手事件复位，而松手事件可能
+        根本收不到，一残留就把之后的普通左键统统读成建关系（画布随之彻底不响应）。
+        """
         try:
             return bool(int(getattr(event, "state", 0) or 0) & ALT_MASK)
         except (TypeError, ValueError):  # pragma: no cover - 替身事件
@@ -3195,14 +3271,13 @@ class ConceptMapWindow:
         return (dx * dx + dy * dy) >= (DRAG_SLOP * DRAG_SLOP)
 
     def _on_canvas_press_alt(self, event) -> None:
-        """``<Alt-Button-1>``：Alt 在某些 Tk 版本里不进 ``event.state``，这条兜底。
+        """``<Alt-Button-1>``：按着 Alt 按下的左键。
 
         这条绑定**命中本身就是证据**（用户确实按着 Alt 按下的左键），所以直接把
-        「这一下是建关系」交给 :meth:`_on_canvas_press` —— 不再依赖 ``_alt_armed``
-        这个跨事件的标志位去猜意图（它要留到松手才清，中间任何一次移动都可能被
-        误读成建关系）。
+        「这一下是建关系」交给 :meth:`_on_canvas_press` —— 这里**不留任何跨事件的
+        标志位**（标志位要等松手才清，松手收不到就永久残留，之后不按 Alt 的左键
+        全被读成建关系）。
         """
-        self._alt_armed = True
         self._on_canvas_press(event, alt=True)
 
     def _on_canvas_press(self, event, *, alt: bool | None = None) -> None:
@@ -3223,8 +3298,11 @@ class ConceptMapWindow:
         if self._pan_guard():
             return
         if self._link_from is not None or self._drag_node is not None:
-            # ``<Alt-Button-1>`` 与 ``<Button-1>`` 有可能都命中同一次按下：只认第一下。
-            return
+            # 上一轮手势没有正常收尾（松手落在画布外、窗口失焦、菜单弹走…）：**自愈**。
+            # 新一轮左键按下本身就说明上一轮早就结束了 —— 在这里 early-return 的话
+            # 画布会永久卡死：用户 2026-10-05 拍屏里那两条「没有终点的长线」就是
+            # 这么留在画布上的。
+            self._forget_gesture()
         layout = self._layout
         if layout is None:
             return
@@ -3353,7 +3431,6 @@ class ConceptMapWindow:
         **没拖起来就是一次单击**：清掉内部状态直接返回 —— 不写库、不弹「已固定」，
         也不说「连线取消」（用户只是点了一下，没什么可取消的）。
         """
-        self._alt_armed = False
         if self._pan_guard():
             return
         started = bool(self._drag_started)
@@ -4600,6 +4677,45 @@ class ConceptMapWindow:
             anchor = None
         self.zoom_by(ZOOM_STEP if delta > 0 else 1.0 / ZOOM_STEP, anchor=anchor)
 
+    def _cancel_deferred_draw(self) -> None:
+        """取消还没到点的「手离开后补画」——这次已经在画了。"""
+        item = self._draw_retry
+        self._draw_retry = None
+        if item is None:
+            return
+        cancel = getattr(self.canvas, "after_cancel", None)
+        if not callable(cancel):  # pragma: no cover - 极简替身
+            return
+        try:
+            cancel(item)
+        except tk.TclError:  # pragma: no cover
+            pass
+
+    def _gesture_live(self) -> bool:
+        """手还在画布上吗（拖着卡片 / 拉着关系线 / 拖空白平移）。"""
+        return (self._drag_node is not None or self._link_from is not None
+                or self._bg_pan_last is not None)
+
+    def _draw_after_gesture(self) -> None:
+        """推迟的那次重画：手一离开画布就补上；手还在就再等一轮。"""
+        self._draw_retry = None
+        if self._gesture_live():
+            self._defer_draw()
+            return
+        self._draw(force=True)
+
+    def _defer_draw(self) -> None:
+        """排一次「等手离开画布再补画」；已经排过就不重复排。"""
+        if self._draw_retry is not None:
+            return
+        after = getattr(self.canvas, "after", None)
+        if not callable(after):  # pragma: no cover - 极简替身
+            return
+        try:
+            self._draw_retry = after(DRAW_DEFER_MS, self._draw_after_gesture)
+        except tk.TclError:  # pragma: no cover
+            self._draw_retry = None
+
     # ------------------------------------------------------------- 绘制
     def _on_canvas_configure(self, _event=None) -> None:
         """画布尺寸确定 / 变化 → 重画（首次未映射时的 1x1 不画，等真实尺寸）。"""
@@ -4739,8 +4855,19 @@ class ConceptMapWindow:
 
         内容（尺寸 / 缩放 / 主题 / 词条 / 关系）没变就不重画：``<Configure>``
         在拖动 / 缩放窗口时会反复触发，幂等才能不闪。
+
+        **手还在画布上时（拖动 / 拉线 / 平移）直接不画**：见 :meth:`_gesture_live`。
         """
         self._scheduled = False
+        self._cancel_deferred_draw()
+        if not force and self._gesture_live():
+            # ★ 手还在画布上：**这时绝不重画**。重画会把卡片按布局位置重新摆一遍
+            # （手指底下的卡片「跳」回原位），紧接着的 :meth:`_clear` 又会把手势
+            # 状态（`_drag_node` / `_link_from` / `_bg_pan_last` …）全部擦掉 ——
+            # 拖动当场失效。真鼠标探针抓到的就是这个：按下明明设好了 `_drag_node`，
+            # 一次 `after_idle` 重画之后手势就没了。改成排一次「手离开后补画」。
+            self._defer_draw()
+            return self._item_count()
         width, height = self._canvas_size()
         relations = self.relations_for_draw()
         manual = tuple(rel for rel in relations if is_manual(rel))

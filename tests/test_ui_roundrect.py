@@ -6059,7 +6059,9 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                 self.assertEqual(win._link_from, first, "第二条绑定不许把起点顶掉")
                 win._on_canvas_release(_screen(win, -900.0, -900.0))
                 self.assertIsNone(win._link_from)
-                self.assertFalse(win._alt_armed, "松开后 Alt 状态要复位")
+                self.assertFalse(hasattr(win, "_alt_armed"),
+                                 "「跨事件的 Alt 标志位」整个删掉了：Alt 只看 event.state，任何一次松手收不到都不会再把画布卡死")
+                self.assertIsNone(win._drag_node, "松开后手上不该还有手势")
 
     def test_plain_left_drag_moves_the_card_and_never_starts_a_relation(self):
         with support.temp_db() as db:
@@ -6414,6 +6416,120 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                     self.assertEqual(db.list_node_pins(bid), {entry_id: landed})
                 finally:
                     win.win.destroy()
+
+    def test_the_canvas_never_binds_the_mod1_sequence(self):
+        """★ 绑定层血案回归：**不许**再绑 ``<Mod1-Button-1>``。
+
+        真鼠标实测（本机 Windows + Tk，2026-10-05）：不按任何键的真实左键，
+        ``event.state`` 就是 ``0x8`` —— 而 ``0x8`` 正是 Tk 的 ``Mod1Mask`` 那一位。
+        Tk 对同一个控件每次事件**只触发最具体的那一条**绑定，于是只要绑了
+        ``<Mod1-Button-1>``，**每一次普通左键**都被它抢走，``<Button-1>`` 上的
+        ``_on_canvas_press`` 根本不执行：左键永远在拉连线、卡片永远拖不动
+        （用户两次报障「无法拖动」「左键怎么还是连线」都是这一条）。
+        """
+        from app.ui import concept_map as cm
+
+        with _real_root() as root:
+            with support.temp_db() as db:
+                bid, _ids = _map_db(db)
+                service, _cfg = _map_service(db, client=_MapClient([]))
+                win = cm.ConceptMapWindow(root, SimpleNamespace(
+                    db=db, map_service=service, open_settings=lambda: None))
+                win.win.geometry("+4000+4000")
+                win.refresh(topic_id=bid)
+                root.update()
+                try:
+                    sequences = [str(name) for name in win.canvas.bind()]
+                    self.assertNotIn("<Mod1-Button-1>", sequences,
+                                     "绑了它，Windows 上每一次普通左键都会被它抢走")
+                    self.assertIn("<Button-1>", sequences, "普通左键要能走到拖动那条路")
+                    self.assertIn("<Alt-Button-1>", sequences,
+                                  "按住 Alt 才建关系（Tk 把它与 <Mod1-Button-1> 当两条不同的模式）")
+                finally:
+                    win.win.destroy()
+
+    def test_a_real_click_routes_to_dragging_and_alt_click_to_linking(self):
+        """★ 走**绑定层**：真画布 + 真事件，``state`` 用真机实测的值。
+
+        现有那些拖动测试全是**直接调处理函数**，绑定被谁抢走根本看不见 ——
+        ``<Mod1-Button-1>`` 那个 bug 就是这么活下来的。这里让 Tk 自己去派发：
+        普通左键（``state=0x8``）必须进 ``_drag_node``，按住 Alt（``0x20008``）
+        必须进 ``_link_from``。
+        """
+        from app.ui import concept_map as cm
+
+        PLAIN = 0x8                      # 真机：不按任何键的左键
+        ALT = cm.ALT_MASK | 0x8          # 真机：按住 Alt
+        with _real_root() as root:
+            with support.temp_db() as db:
+                bid, ids = _map_db(db)
+                service, _cfg = _map_service(db, client=_MapClient([]))
+                win = cm.ConceptMapWindow(root, SimpleNamespace(
+                    db=db, map_service=service, open_settings=lambda: None))
+                win.win.geometry("+4000+4000")
+                win.refresh(topic_id=bid)
+                root.update()
+                try:
+                    node = win._layout.find(ids["卷积"])
+
+                    at = _screen(win, node.x, node.y)
+
+                    # ⚠ 合成事件一定要给 ``time``：不给的话 Tk 认为「两次点击相隔
+                    # 0 ms」，第二次就被判成双击、改派给 ``<Double-Button-1>``（真鼠标
+                    # 点两下不会这样）。这里每次往后推 900 ms，才是真人的时序。
+                    clock = [0]
+
+                    def press(state):
+                        clock[0] += 900
+                        win.canvas.event_generate("<Button-1>", x=int(at.x),
+                                                  y=int(at.y), state=state,
+                                                  time=clock[0])
+
+                    def release():
+                        clock[0] += 900
+                        win.canvas.event_generate("<ButtonRelease-1>", x=int(at.x),
+                                                  y=int(at.y), state=0x108,
+                                                  time=clock[0])
+
+                    press(PLAIN)
+                    self.assertIsNotNone(win._drag_node,
+                                         "普通左键必须走「拖动」，不能去拉连线")
+                    self.assertIsNone(win._link_from, "普通左键绝不许建关系")
+                    release()
+                    self.assertIsNone(win._drag_node, "松手要收干净")
+
+                    press(ALT)
+                    self.assertIsNotNone(win._link_from, "按住 Alt 才是建关系")
+                    self.assertIsNone(win._drag_node, "按住 Alt 时不许同时进入拖动")
+                    release()
+                    win._on_canvas_release(_screen(win, -9000.0, -9000.0))
+                    self.assertIsNone(win._link_from, "松在空白处 = 取消连接")
+                finally:
+                    win.win.destroy()
+
+    def test_a_redraw_in_the_middle_of_a_drag_is_deferred(self):
+        """★ 真鼠标探针抓到的第二处根因：``<Configure>`` 经 ``after_idle`` 排的那次
+        重画会走到 ``_draw()`` → ``_clear()``，把 ``_drag_node`` / ``_link_from`` /
+        ``_bg_pan_last`` 一起擦掉 —— 等 ``<B1-Motion>`` 到时手上已经没有手势，卡片
+        一动不动（假环境看不出来，因为是真事件循环里才发生的时序）。
+        """
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, ids, _bid = self._window(db)
+                node = win._layout.find(ids["卷积"])
+                win._on_canvas_press(_screen(win, node.x, node.y))
+                self.assertIsNotNone(win._drag_node, "按下就该进入拖动")
+
+                win._draw()      # 等价于 <Configure> 经 after_idle 排进来的那一次
+                self.assertIsNotNone(win._drag_node,
+                                     "手势进行中不许重画（重画会把卡片摆回原位、还会擦掉手势）")
+                self.assertIsNotNone(win._draw_retry, "改排一次「手离开后补画」")
+
+                win._on_canvas_motion(_screen(win, node.x + 30.0, node.y + 20.0))
+                self.assertTrue(win._drag_started, "过了 DRAG_SLOP 才算真的拖起来")
+                win._on_canvas_release(_screen(win, node.x + 30.0, node.y + 20.0))
+                self.assertIsNone(win._drag_node, "松手要落库并收干净")
+                self.assertIsNone(win._draw_retry, "松手重画过之后不该再留着定时器")
 
     def test_a_pinned_card_stays_put_across_regeneration_and_is_per_topic(self):
         with support.temp_db() as db:
