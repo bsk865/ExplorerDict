@@ -2950,3 +2950,129 @@ import**。批次 M 的导出功能加了 `import html`，而部署的 exe 是 *
 `tests.test_ui_roundrect` = **270 OK**；逐字 19 模块白名单改动后 **959 / failures=7**，
 stash 回 HEAD 也是 **958 / failures=7** 且失败清单相同 ⇒ 无新增失败。
 
+## 38. 批次 M11：左键怎么还是连线（思维导图）
+
+### 38.1 用户原话
+
+> 你逗我玩呢？左键怎么还是连线？你到底能不能做好？
+
+附一张拍屏：主题 10 张卡**全都在可见范围内**，画面上却有**两条没有终点的长线**（一条实线从
+画布左上角外接在 `drift-detectio` 上，一条虚线从 `Machine learning (ML) algorithms` 顶端
+拖出画布）。10 张卡都在屏幕里 ⇒ 这两条线不可能是关系边，只能是「建关系」的橡皮筋线
+（`_link_item`）卡住没收掉。
+
+### 38.2 第一处真凶：`<Mod1-Button-1>` 抢走了每一次普通左键
+
+`app/ui/concept_map.py` 原来同时绑了 `<Button-1>` → `_on_canvas_press`（拖动）
+与 `<Mod1-Button-1>` → `_on_canvas_press_alt`（当时以为是「Alt 兜底」）。
+
+**真鼠标实测**（`ctypes.windll.user32` 的 `mouse_event` + `SetCursorPos` + `keybd_event`，
+配 260×160 置顶小窗，**分步 `after` + 每步 `root.update()`**）：
+
+```
+A1 不按键 · 只绑 <Button-1>              命中: [('<Button-1>', '0x8')]
+A2 不按键 · 绑定同应用（五条）             命中: [('<Mod1-Button-1>', '0x8'), ('<ButtonRelease-1>', '0x108')]
+B1 按住 Alt · 只绑 <Button-1>            命中: [('<Button-1>', '0x20008')]
+B2 按住 Alt · 绑定同应用（五条）            命中: [('<Mod1-Button-1>', '0x20008'), ('<ButtonRelease-1>', '0x20108')]
+B3 按住 Alt · 五条探针（含 <Alt-Button-1>） 命中: [('<Alt-Button-1>', '0x20008')]
+C1 按住 Ctrl · 五条探针                   命中: [('<Control-Button-1>', '0xc')]
+```
+
+单绑逐条：`<Button-1>` ✓ `state=0x8 num=1`、`<Mod1-Button-1>` ✓ `state=0x8 num=1`、
+`<Alt-Button-1>` ✗、`<Shift-Button-1>` ✗、`<Control-Button-1>` ✗。
+
+**Windows 上「不按任何键的真实左键」`state` 就是 `0x8`**，而 `0x8` 恰好是 Tk 的 `Mod1Mask`
+那一位；Tk 对同一个控件**只触发最具体的那一条**绑定 ⇒ 同时绑这两条时，**每一次普通左键都被
+`<Mod1-Button-1>` 抢走**，拖动那条路根本不执行 ⇒ 左键永远在连线。`ALT_MASK = 0x00020000`
+本身是对的（真按 Alt 时 `state=0x20008`）。这一条同时解释了 M10 与 M11 两次报障。
+
+> ★ 排查纪律：**绝不要绑 `<Mod1-Button-1>` 做诊断**，连只加一条日志都不行 —— 它会把每一次
+> 普通左键都抢过去（我踩过，日志里只剩它）。
+
+### 38.3 第二处真凶：`after_idle` 的重画把半路手势擦掉了
+
+修掉绑定之后，真机探针（真根窗口 + 真 `ConceptMapWindow` + 真鼠标）显示：按下**确实**设好了
+`_drag_node`，卡片却仍然不动。在 `_clear()` 上挂钩子抓到「调用前状态」：
+
+```
+press_xy=(86.0, 124.0) started=False drag_node=(24, 0.4262499999999818, 0.0)
+link_from=None bg=None 图元数=37
+```
+
+调用栈：`root.update()` → `tkinter/__init__.py:876 callit` →
+`app/ui/concept_map.py:4824 in _draw` → `self._clear()`。`callit` 说明它来自
+`after` / `after_idle` 排的队 ⇒ `_on_canvas_configure`（画布首次拿到真实尺寸
+`<Configure> = [(762, 451)]`）。`_clear()` 会清
+`_press_xy / _drag_started / _link_from / _drag_node / _drag_target / _bg_pan_last`
+⇒ 紧随其后的 `<B1-Motion>` 认为「手上没有手势」，直接返回。
+
+它原本的理由（「重画后图元 id 都换了」）在 M10 改成按 tag `canvas.move()` 之后**已经过期**，
+代价却是手势随时可能被一次重画抹掉。
+
+### 38.4 改法
+
+1. 删掉 `<Mod1-Button-1>` 这条绑定，只留 `<Button-1>` 与 `<Alt-Button-1>`。
+2. 彻底删掉 `_alt_armed`（属性 / 置位 / 复位 / 读取）。`_alt_held()` 只看
+   `event.state & ALT_MASK`；`_on_canvas_press_alt()` 只做
+   `self._on_canvas_press(event, alt=True)`。
+3. 手势自愈：`_on_canvas_press()` 见到残留手势先 `_forget_gesture()` 再按新的来
+   （原来是无条件 `return`，会让画布永久卡死 —— 拍屏里那两条长线就是这么留下的）。
+4. 顶层兜底：`self.win` 再绑 `<ButtonRelease-1>`（`add="+"`）→ `_on_foreign_release()`，
+   另加 `<Escape>` → `_on_escape()`。
+5. 手势期间禁止重画：`DRAW_DEFER_MS = 120` + `_gesture_live()` / `_defer_draw()` /
+   `_draw_after_gesture()` / `_cancel_deferred_draw()`；`_draw()` 开头
+   `if not force and self._gesture_live(): self._defer_draw(); return`。
+   `close()` 里补 `_cancel_deferred_draw()`。
+
+### 38.5 量测与验证
+
+真鼠标探针 `.tmp\probe_m11_realmouse.py` **通过**（退出码 0）：
+
+```
+窗口收到的事件  : [('<Button-1>', '0x8', 86, 124), ('<B1-Motion>', '0x108', 121, 146), … ,
+                  ('<ButtonRelease-1>', '0x108', 226, 214)]
+_clear() 调用   : press_xy=None started=False drag_node=None link_from=None bg=None 图元数=37
+  移动 1/4 … 4/4 : 框图元位移 (35,22) → (70,45) → (105,67) → (140.0, 90.0) = 期望位移
+落库的固定位置 : {24: (224.6, 213.0)} =（起点 84.6,123.0）+（140,90）
+拖动期间出现过的临时线 : （没有，对）
+结论：卡片跟手 = True ；拖动期间误开连线 = False
+```
+
+**合成事件的规矩**（`.tmp\probe_double.py`）：`event_generate("<Button-1>", x=…, y=…, state=…)`
+**不给 `time` 时事件的 time 恒为 0** ⇒ Tk 认为「两次点击相隔 0 ms、同一位置」⇒ 第二次起
+全被判成**双击**，只派发给 `<Double-Button-1>`。实测不带 time ⇒
+`第1次=[('press', 0)] 第2次=[('double', 0)]`；每次 +900 ms ⇒ 四次全是 `press`。
+**必须「控件已映射」+「每次带递增 `time`」**。
+
+### 38.6 测试
+
+新增三条守卫（`tests/test_ui_roundrect.py`）：
+
+- `test_the_canvas_never_binds_the_mod1_sequence` ——
+  `"<Mod1-Button-1>" not in [str(n) for n in win.canvas.bind()]`。
+- `test_a_real_click_routes_to_dragging_and_alt_click_to_linking` —— 真画布
+  `event_generate(state=0x8)` 走拖动、`state=0x20008` 走连线（带递增 `time`）。
+- `test_a_redraw_in_the_middle_of_a_drag_is_deferred` —— 拖动中途 `_draw()` 之后手势仍在、
+  补画定时器排上了，松手后清掉。
+
+并把 `test_alt_press_is_not_swallowed_by_the_plain_binding` 里那句
+`self.assertFalse(win._alt_armed, …)` 改成 `hasattr(win, "_alt_armed")` 为假 +
+`win._drag_node is None`。
+
+`tests.test_ui_roundrect` = **273 OK**；`tests.test_export_service + tests.test_ui_roundrect`
+= **294 OK**；逐字 19 模块白名单 = **Ran 962 / failures=6**（959 + 3 条新守卫，6 条仍是
+既有陈旧失败，无新增；日志 `_check\batch_m11_whitelist.log`）。
+
+### 38.7 三条「验证层」的教训
+
+同类病已经出现四次，都是「测试全绿、产品是坏的」，但**每一次骗过测试的层不一样**：
+
+| 批次 | 骗过测试的是什么 | 谁看得出来 |
+|---|---|---|
+| M9 | 冻结运行时**比源码少**东西（缺 `html`） | 只有真双击 exe |
+| M10 | 测试替身**比真 Tk 多**东西（`item_options`） | 只有真 `tk.Canvas` |
+| M11-A | 绑定层被更具体的序列抢走 | 只有真鼠标输入 |
+| M11-B | `after_idle` 重画擦掉半路手势 | 只有真事件循环 |
+
+⇒ **替身、直接调处理函数、`event_generate` 三者各有盲区**：假环境能证明「逻辑对不对」，
+证明不了「真机上走的是哪条路」。
