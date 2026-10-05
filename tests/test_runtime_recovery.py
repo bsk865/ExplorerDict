@@ -22,6 +22,7 @@ import ast
 import contextlib
 import io
 import re
+import sys
 import threading
 import time
 import unittest
@@ -741,6 +742,100 @@ class TestShippedCodeRunsInTheFrozenRuntime(unittest.TestCase):
         explain = (APP_DIR / "ui" / "explain_window.py").read_text(encoding="utf-8")
         self.assertNotIn("from tkinter import ttk", explain)
         self.assertIn("thin_scrollbar", explain)
+
+
+# ============================ 8. 打包清单与源码 import 对得上（静态检查）
+SPEC_PATH = Path(__file__).resolve().parent.parent / "ExplorerDict.spec"
+
+#: 允许出现的第三方顶层模块；每一个都必须出现在 spec 的 HIDDEN_IMPORTS 里。
+THIRD_PARTY_ALLOWED = ("PIL", "pystray", "six")
+
+
+class TestPackagingKeepsUpWithTheSource(unittest.TestCase):
+    """``app\\`` 是从磁盘加载的，冻进 exe 的只有**构建那一刻**收进来的模块。
+
+    2026-10-05 的真实事故（批次 M）：导出功能新增了 ``import html``，而当时部署的
+    exe 是 10-03 构建的、``PYZ.pyz`` 里没有 ``html`` ⇒ 用户双击只看到「探索词典
+    启动失败。详情见日志文件…」，日志里躺着 ``ModuleNotFoundError: No module
+    named 'html'``。当时 ``app\\`` 本身没错、白名单也全绿 —— 因为源码模式跑的是
+    系统 Python，标准库齐全，这件事只有「双击 exe」才暴露得出来。
+
+    所以在这里立两道静态护栏：①源码只许 import「标准库 / 本仓库 / 已声明的第三
+    方」；②打包清单必须把标准库**收全**，同时继续把自绘对话框那几个模块挡在外面。
+    """
+
+    def _imported_top_level(self, path: Path) -> set:
+        """某个文件里 import 到的顶层模块名（相对导入 = 本包内部，不算）。"""
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                names.add(node.module.split(".")[0])
+        return names
+
+    def _source_files(self) -> list:
+        root = APP_DIR.parent
+        files = sorted(APP_DIR.rglob("*.py"))
+        for extra in ("bootstrap.py", "desktop_entry.py"):
+            if (root / extra).exists():
+                files.append(root / extra)
+        return files
+
+    def test_source_only_imports_what_the_frozen_build_ships(self):
+        root = APP_DIR.parent
+        local = {p.stem for p in root.glob("*.py")}
+        local |= {p.name for p in root.iterdir() if p.is_dir()}
+        offenders = {}
+        for path in self._source_files():
+            for name in self._imported_top_level(path):
+                if name in sys.stdlib_module_names or name in local:
+                    continue
+                if name in THIRD_PARTY_ALLOWED:
+                    continue
+                offenders.setdefault(name, []).append(
+                    str(path.relative_to(root)).replace("\\", "/"))
+        self.assertEqual(
+            offenders, {},
+            "这些 import 既不是标准库、也不是本仓库的模块、又没在打包清单里声明过："
+            "冻结版 exe 里不会有它们（双击就是「启动失败」）。请把它们加进 "
+            "ExplorerDict.spec 的 HIDDEN_IMPORTS 与上面的 THIRD_PARTY_ALLOWED，"
+            "然后**重新打包**")
+
+    def test_the_declared_third_party_is_actually_in_the_spec(self):
+        spec = SPEC_PATH.read_text(encoding="utf-8")
+        for name in THIRD_PARTY_ALLOWED:
+            # 前缀匹配：清单里写的是 "PIL.Image" 这类子模块，也算声明过了
+            self.assertIn(f'"{name}', spec,
+                          f"{name} 在源码里被 import，打包清单却没有它")
+
+    def _spec_skip_set(self) -> set:
+        tree = ast.parse(SPEC_PATH.read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "_STDLIB_SKIP"
+                    for t in node.targets):
+                return {e.value for e in node.value.elts
+                        if isinstance(e, ast.Constant)}
+        self.fail("ExplorerDict.spec 里找不到 _STDLIB_SKIP")
+
+    def test_spec_collects_the_whole_standard_library(self):
+        spec = SPEC_PATH.read_text(encoding="utf-8")
+        self.assertIn(
+            "sys.stdlib_module_names", spec,
+            "打包清单必须把标准库整个收进来：只收「构建那一刻 import 到的」正是 "
+            "10-05 那次「双击 exe 启动失败」的原因")
+
+    def test_spec_keeps_the_hand_rolled_dialogs_out(self):
+        skip = self._spec_skip_set()
+        for name in ("tkinter.ttk", "tkinter.filedialog",
+                     "tkinter.colorchooser", "tkinter.scrolledtext"):
+            self.assertIn(
+                name, skip,
+                f"{name} 必须继续留在冻结运行时之外：app 里的纯 tk 界面（自绘对话框、"
+                "自绘滚动条、导出目标目录靠设置读取）都是按「没有它」写的；"
+                "要收它就得连那些理由一起改，那是一次有意识的决定")
 
 
 if __name__ == "__main__":  # pragma: no cover
