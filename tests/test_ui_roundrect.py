@@ -7821,6 +7821,31 @@ class TestMapRouteOrdering(unittest.TestCase):
                                                       (x0, y0, x1, y1)),
                                 f"模板「{key}」有条关系线穿过了「{node.label}」这张卡")
 
+    def test_two_relation_labels_never_hug_each_other(self):
+        """两个关系短标签之间要留出**看得见的缝**（批次 M12-B 补）。
+
+        只判「不重叠」时，auto / fishbone 上「因果」和「对照」实测只隔 5.03px
+        —— 实机看着就是糊成一片（用户报的「看着很乱」里有它一份）。
+        放置标签时把已放好的框按 ``LABEL_SEPARATION`` 外扩再登记，缝就出来了。
+        """
+        from app.ui import concept_map as cm
+
+        self.assertGreaterEqual(float(cm.LABEL_SEPARATION), 4.0,
+                                "标签之间的最小缝定得太小，等于没留")
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._layout(key)
+                m = cm.metrics_for(1.0)
+                boxes = [cm.label_box(edge.label_pos, edge.label, m)
+                         for edge in layout.edges]
+                for i in range(len(boxes)):
+                    for j in range(i + 1, len(boxes)):
+                        self.assertFalse(
+                            cm.rects_intersect(boxes[i], boxes[j],
+                                               tol=float(cm.LABEL_SEPARATION) - 0.05),
+                            f"模板「{key}」上有两个关系标签贴得比 "
+                            f"{cm.LABEL_SEPARATION}px 还近")
+
     def test_each_template_declares_its_own_wire_axis(self):
         """用户要的「不同模板各自的关系线排布规则」= 每个模板声明自己的走线主轴。"""
         from app.ui import map_templates as templates

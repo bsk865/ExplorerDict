@@ -186,6 +186,11 @@ CANDIDATE_OUTSET = LAYOUT_EPS
 #: 顺序就是优先级：先「贴着线、靠中间」，再往另一侧 / 更远找空位。
 LABEL_SLIDE_STEPS = (0.0, 0.08, -0.08, 0.16, -0.16, 0.24, -0.24)
 LABEL_OFFSET_STEPS = (1.0, -1.0, 1.8, -1.8, 2.6, -2.6)
+#: 两个关系短标签之间**至少**留出的空白（设备像素）。以前只要求「不压上去」，
+#: 于是 auto 模板上「因果」和「对照」只隔 5px —— 实机看着就是糊成一片
+#: （用户报「关系线不是很整齐，看着很乱」）。放过一个标签时把它的框按这个值外扩
+#: 再登记，后面的标签就自然被推开。
+LABEL_SEPARATION = 6.0
 #: 关系短标签自己的字号（逻辑像素）：比卡片文字（9）小一档
 LABEL_FONT_SIZE = 7
 #: 折线明暗：采样段数（每条边一致，真实画布与预览都是同一串点）
@@ -601,6 +606,17 @@ def label_plate(pos: tuple[float, float], label: str, m: MapMetrics
     x0, y0, x1, y1 = label_box(pos, label, m)
     inset = max(1.0, (y1 - y0) * 0.22)
     return (x0 - m.em * 0.12, y0 + inset, x1 + m.em * 0.12, y1 - inset)
+
+
+def _inflate_box(box, pad: float):
+    """把矩形四周各外扩 ``pad``（设备像素；纯函数）。
+
+    用途：登记「已经放好的关系标签」时按 :data:`LABEL_SEPARATION` 外扩，
+    让后面的标签不仅**不压上去**，还要留出一条肉眼看得出来的缝。
+    """
+    gap = max(0.0, float(pad))
+    return (float(box[0]) - gap, float(box[1]) - gap,
+            float(box[2]) + gap, float(box[3]) + gap)
 
 
 def rects_intersect(first, second, *, tol: float = 0.0) -> bool:
@@ -1289,8 +1305,8 @@ def _segments_intersect(first, second) -> bool:
 
     判据：四个叉积**都非零**、且各自跨过对方所在直线。只写
     ``(o1 > 0) != (o2 > 0)`` 会把「一条线的端头正好落在另一条线上」（T 形接头）
-    也算成交叉 —— 正交排线里那是常态（`.tmp\probe_m12_why.py` 因此虚报过
-    flow-v 4 处交叉）。叉积是**面积量纲**，浮点零判别用 ``1e-9``；
+    也算成交叉 —— 正交排线里那是常态（探查脚本 ``.tmp/probe_m12_why.py`` 因此
+    虚报过 flow-v 4 处交叉）。叉积是**面积量纲**，浮点零判别用 ``1e-9``；
     :data:`LAYOUT_EPS`（0.5）是长度量纲，在这里不合适。
     """
     ax1, ay1, ax2, ay2 = first
@@ -1756,7 +1772,10 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
             continue
         _cost, points, label_pos = chosen
         twins.setdefault(key, []).append(list(points))
-        label_blockers.append(label_box(label_pos, str(base.label), m))
+        # 登记时按 ``LABEL_SEPARATION`` 外扩：下一个标签必须离这个**至少**这么远，
+        # 不然两个短标签会贴在一起（只判「不重叠」时实测只隔 5px，实机看着糊）。
+        label_blockers.append(_inflate_box(label_box(label_pos, str(base.label), m),
+                                           LABEL_SEPARATION))
         routed.append(LayoutEdge(base.rel, base.kind, tuple(points), base.label,
                                  (float(label_pos[0]), float(label_pos[1])),
                                  bool(base.symmetric)))
