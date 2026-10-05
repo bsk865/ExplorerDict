@@ -35,8 +35,12 @@
   左栏下方是标签清单，点一下 = 只留打了这个标签的词（全库范围）；
 * 搜索命中会**指出命中的字段与片段**（``app.search_service``），不再只给一个词；
 * 卡片左侧的勾选框用于**拆分主题**（把选中的词搬进新主题 / 另一个主题）；
-* 「导出」把当前看到的词表写成 CSV + Markdown（``app.export_service``），
-  落在 ``data/exports/``（冻结运行时没有「另存为」对话框）。
+* 「导出」先弹一个**格式选择器**（``app.ui.export_dialog``），八种格式可选：
+  CSV / Markdown / JSON / JSONL / Anki 导入文本 / PDF / HTML 单页 / 纯文本 TXT
+  （内容生成在 ``app.export_service``，PDF 见 ``app.pdf_writer``）；存到哪由
+  「设置 → 导出」里的保存位置决定，留空就是 ``data/exports/``（冻结运行时
+  没有「另存为」对话框，所以是设置里写死一个目录）。导图那边不受影响，
+  仍然出 SVG + PNG。
 
 文案
 ----
@@ -54,6 +58,7 @@ from ..db import normalize_tags
 from ..logging_setup import get_logger
 from . import theme, widgets
 from .batch_dialogs import MergeBatchesDialog, MoveEntriesDialog
+from .export_dialog import ExportDialog
 
 log = get_logger("ui")
 
@@ -87,7 +92,8 @@ BUTTON_TOOLTIPS: dict[str, str] = {
     # 工具条
     "搜索": "按输入的内容筛出词条（回车同样生效）",
     "清空": "清掉搜索词，回到当前主题的全部词条",
-    "导出": "把当前看到的词表导出成 CSV + Markdown 两份（写进 data\\exports\\，不发网络请求）",
+    "导出": "选一种格式导出当前看到的词表：CSV / Markdown / JSON / JSONL / "
+            "Anki / PDF / HTML / TXT（落到「设置 → 导出」里的保存位置，不发网络请求）",
     "导图": "把**勾选**的词画成参考关系图（图里的生成要单独点，会消耗额度）",
     "设置": "接口、取词、解释与外观设置",
     "游戏模式：关": "游戏模式：开会暂停取词并把浮窗压下去，全屏游戏时不再打扰",
@@ -1088,10 +1094,14 @@ class MainWindow:
         return " ".join(parts) if parts else "全部词语"
 
     def export_entries(self) -> None:
-        """导出当前列表（CSV + Markdown）到 ``data/exports/``，再问要不要打开文件夹。
+        """导出当前列表：先弹格式选择器，选完再写**一个**文件，最后问要不要开文件夹。
 
         口径（K1，用户本轮确认）：导出**不按勾选筛**，导的是当前列表范围 ——
         勾选只决定「哪些词进参考关系图」。
+
+        口径（M，用户本轮确认）：格式有八种（CSV / Markdown / JSON / JSONL /
+        Anki / PDF / HTML / TXT），由用户在 :class:`app.ui.export_dialog.ExportDialog`
+        里选；存到哪看「设置 → 导出」的保存位置（留空 = ``data/exports/``）。
         """
         try:
             rows = list(self.db.list_entries(
@@ -1100,17 +1110,39 @@ class MainWindow:
                 query=self.search_var.get().strip(), limit=MAX_CARDS,
                 tag=self._tag_filter))
             tags_map = self.db.tags_for_entries([int(r["id"]) for r in rows])
+        except Exception as exc:                      # pragma: no cover - 查询异常兜底
+            log.warning("导出前查词失败: %s", exc)
+            messagebox.showerror("导出失败", f"读取词条失败：{exc}", parent=self.root)
+            return
+        scope_label = self._export_scope_label()
+        directory = export_service.resolve_directory(self.cfg.export_directory)
+        #: 选择器**不阻塞**：按「导出」时才回调这里（选过的格式会记进 export.format）
+        ExportDialog(
+            self.root, cfg=self.cfg, scope_label=scope_label, count=len(rows),
+            directory=directory, default_format=self.cfg.export_format,
+            on_confirm=lambda key: self._write_export(rows, tags_map, scope_label,
+                                                      directory, key))
+
+    def _write_export(self, rows, tags_map, scope_label: str, directory, fmt: str) -> None:
+        """真正写文件（格式选择器按「导出」之后才走到这儿）。"""
+        try:
             result = export_service.export_entries(
-                rows, scope_label=self._export_scope_label(), tags_map=tags_map)
+                rows, scope_label=scope_label, tags_map=tags_map,
+                directory=directory, fmt=fmt)
         except OSError as exc:
             log.warning("导出失败: %s", exc)
             messagebox.showerror("导出失败", f"写文件失败：{exc}", parent=self.root)
             return
+        except Exception as exc:                      # pragma: no cover - 生成异常兜底
+            log.error("导出失败（%s）: %s", fmt, exc)
+            messagebox.showerror("导出失败", f"生成 {fmt} 失败：{exc}", parent=self.root)
+            return
         self.app.set_status(result.summary()[:STATUS_MAX_CHARS])
+        chosen = result.format
         if messagebox.askyesno(
                 "导出完成",
-                f"{result.summary()}\n\nCSV 可以导入 Excel / Anki，Markdown 适合粘贴到笔记。\n"
-                "现在打开文件夹吗？",
+                f"{result.summary()}\n\n格式：{chosen.label}（{chosen.target}）\n"
+                f"存到：{result.directory}\n\n现在打开文件夹吗？",
                 parent=self.root):
             self._open_directory(result.directory)
 

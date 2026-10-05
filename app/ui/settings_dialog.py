@@ -11,7 +11,10 @@
   low / medium / high）/ 超时 / API Key（保存 / 清除），并显示一行
   「当前生效：<模型> · 推理强度 <x>」；
 * **追问**：带上最近几轮 + 追问开关；
-* **取词与游戏**：游戏模式 / 暂停取词。
+* **取词与游戏**：游戏模式 / 暂停取词；
+* **导出**：词条导出存到哪个文件夹（留空 = 默认的 ``<data>\\exports``；填了就先用
+  一下、建不出来当场说清楚，不把坏路径存进去）。导出**格式**不在这里选 ——
+  点主界面「导出」时选，选择器会记住上次用的那个。
 
 两个按钮分工明确，别混：
 
@@ -237,6 +240,24 @@ class SettingsDialog:
                  bg=theme.BG, fg=theme.TEXT_MUTED, font=theme.font(8), justify="left",
                  wraplength=theme.px(520)).pack(anchor="w", padx=theme.px(10))
 
+        # ---------------------------------------------------------- 导出
+        # 用户口径（2026-10-05）：导出的文件要支持多种格式，并且**保存位置能在设置里改**。
+        # 这里只放「存到哪」；格式在点「导出」时选（选择器会记住上次用的那个）。
+        self._section(wrap, "导出")
+        export_grid = tk.Frame(wrap, bg=theme.BG)
+        export_grid.pack(fill="x")
+        export_grid.columnconfigure(1, weight=1)
+        self.var_export_dir = tk.StringVar(value=self.cfg.export_directory)
+        self.export_entry = _entry(export_grid, textvariable=self.var_export_dir, width=46)
+        self._row(export_grid, 0, "保存到", self.export_entry)
+        export_row = tk.Frame(export_grid, bg=theme.BG)
+        widgets.FlatButton(export_row, "恢复默认", self._reset_export_dir, font_size=8,
+                           padx=10, pady=4).pack(side="left")
+        self._row(export_grid, 1, "", export_row)
+        tk.Label(wrap, text=self._export_dir_hint(),
+                 bg=theme.BG, fg=theme.TEXT_MUTED, font=theme.font(8), justify="left",
+                 wraplength=theme.px(520)).pack(anchor="w", padx=theme.px(10))
+
         tk.Label(wrap, text="快捷键：" + self._shortcut_line(),
                  bg=theme.BG, fg=theme.TEXT_MUTED, font=theme.font(8), justify="left",
                  wraplength=theme.px(520)).pack(anchor="w", padx=theme.px(10),
@@ -382,6 +403,23 @@ class SettingsDialog:
             pass
 
     # ------------------------------------------------------------- 动作
+    # ------------------------------------------------------------------ 导出
+    def _export_dir_hint(self) -> str:
+        """「保存到」下面那行小字：不填时到底存哪儿（把真实默认路径写出来）。"""
+        from .. import export_service, paths
+        try:
+            default = paths.exports_dir()
+        except Exception:                                     # pragma: no cover
+            return "不填就用默认目录；格式在点「导出」时选。"
+        return (f"不填就存到默认目录：{default}\n"
+                "也可以填别的文件夹，或用 %USERPROFILE% 这类环境变量；"
+                "格式在点「导出」时选（会记住上次用的那个）。")
+
+    def _reset_export_dir(self) -> None:
+        """「恢复默认」= 把这个框清空（空串 = 用默认目录）。"""
+        self.var_export_dir.set("")
+        self._set_feedback("已恢复默认导出目录（保存后生效）")
+
     def save(self) -> None:
         try:
             timeout = max(3, int(self.var_timeout.get().strip() or "25"))
@@ -415,6 +453,21 @@ class SettingsDialog:
         #: 「追加上下文」只认 "append"，其它都是 "new"（见 Config.duplicate_action）
         self.cfg.set("capture.duplicate_action",
                      "append" if str(self.var_dup_action.get()) == "append" else "new")
+
+        #: 导出保存目录：空串 = 默认；填了就先试着建一下，建不出来（盘符不存在 /
+        #: 不允许写）当场说清楚，不把坏路径存进去（否则用户点导出才发现写不了）。
+        want_dir = self.var_export_dir.get().strip()
+        if want_dir:
+            from .. import export_service
+            try:
+                target = export_service.resolve_directory(want_dir)
+                target.mkdir(parents=True, exist_ok=True)
+            except Exception as exc:
+                self._set_feedback(f"导出目录用不了（{exc}），换个位置或留空用默认")
+                return
+            self.cfg.set("export.directory", str(target))
+        else:
+            self.cfg.set("export.directory", "")
 
         key = self.var_key.get().strip()
         if key:

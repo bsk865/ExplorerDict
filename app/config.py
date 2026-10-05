@@ -67,6 +67,13 @@ DEFAULTS: dict[str, str] = {
         "尚未配置 API Key，参考关系没有被生成。请在「设置」里填写 Base URL / 模型名 / "
         "API Key，然后点「重试」。"
     ),
+    # 导出：保存到哪个文件夹（空 = 用默认的 <data>\exports\）。
+    # 允许写 %USERPROFILE%\Desktop 这类带环境变量的路径；界面上的「导出」按这个目录落盘，
+    # 只在用户点导出时读一次，见 app/export_service.py 的 resolve_directory()。
+    "export.directory": "",
+    # 导出：上次用过的格式（CSV / markdown / json / jsonl / anki / pdf / html / txt）。
+    # 只用来把选择器里上一次的选项记住，默认 CSV（与老行为一致）。
+    "export.format": "csv",
 }
 
 
@@ -244,6 +251,17 @@ class Config:
 
     def set_int(self, key: str, value: int) -> None:
         self.set(key, str(int(value)))
+
+    # ----------------------------------------------------------------- 导出
+    @property
+    def export_directory(self) -> str:
+        """导出保存目录（空串 = 用默认的 ``<data>\\exports``）。"""
+        return self.get("export.directory").strip()
+
+    @property
+    def export_format(self) -> str:
+        """上次用过的导出格式 key；认不出来的值由 export_service 退回 CSV。"""
+        return self.get("export.format").strip().lower() or "csv"
 
     # ------------------------------------------------------------------ API
     @property

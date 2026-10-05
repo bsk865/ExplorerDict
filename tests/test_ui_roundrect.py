@@ -4871,6 +4871,161 @@ class TestConceptMapCheckedFilter(unittest.TestCase):
             self.assertNotIn(first, win._subset_ids)
 
 
+class TestExportFormats(unittest.TestCase):
+    """M：导出格式（八选一）、选择器、以及「设置 → 导出」的保存位置。"""
+
+    KEY = "app.ui.main_window.ExportDialog"
+
+    @staticmethod
+    def _seed(app):
+        bid = int(app.db.create_batch("经济学笔记"))
+        first = int(app.db.add_entry(batch_id=bid, term="边际效用",
+                                     context="多消费一单位带来的满足",
+                                     source_title="经济学原理"))
+        second = int(app.db.add_entry(batch_id=bid, term="供给曲线",
+                                      context="价格与供给量的关系"))
+        app.db.update_entry(first, one_line="额外一单位带来的额外满足")
+        app.db.set_entry_tags(first, ["经济学"])
+        app.db.set_entry_tags(second, ["经济学"])
+        app.main.refresh_batches()
+        app.main.refresh_entries()
+        return bid, first, second
+
+    def test_picking_a_format_writes_exactly_one_file_of_that_kind(self):
+        """每种格式点一遍：只落一个文件、后缀对、内容认得出来。"""
+        from app import paths
+
+        cases = [
+            ("csv", ".csv", "边际效用"),
+            ("markdown", ".md", "| 词语 |"),
+            ("json", ".json", '"term": "边际效用"'),
+            ("jsonl", ".jsonl", '"term": "边际效用"'),
+            ("anki", ".txt", "边际效用\t"),
+            ("html", ".html", "<!DOCTYPE html>"),
+            ("txt", ".txt", "边际效用"),
+            ("pdf", ".pdf", "%PDF-1.4"),
+        ]
+        for key, suffix, needle in cases:
+            with self.subTest(fmt=key):
+                with support.temp_data_dir():
+                    with support.headless_app(main_window="real") as app:
+                        self._seed(app)
+                        with mock.patch(self.KEY) as dialog:
+                            app.main.export_entries()
+                        with mock.patch("app.ui.main_window.os.startfile"):
+                            with mock.patch("app.ui.main_window.messagebox"):
+                                dialog.call_args.kwargs["on_confirm"](key)
+                        files = sorted(p for p in paths.exports_dir().iterdir()
+                                       if p.is_file())
+                        self.assertEqual(len(files), 1,
+                                         f"{key}：一次导出只写一个文件")
+                        self.assertEqual(files[0].suffix, suffix)
+                        if key == "pdf":
+                            raw = files[0].read_bytes()
+                            self.assertTrue(raw.startswith(b"%PDF-1.4"))
+                            self.assertGreater(len(raw), 8000,
+                                               "PDF 里要真的嵌了字体子集")
+                        else:
+                            self.assertIn(needle, files[0].read_text("utf-8-sig"))
+
+    def test_anki_export_is_tab_separated_without_a_header(self):
+        """Anki 认的是「制表符分隔、无表头、末列 #标签」。"""
+        from app import export_service as es
+
+        with support.temp_db() as db:
+            bid = int(db.create_batch("经济学入门"))
+            eid = db.add_entry(batch_id=bid, term="边际效用",
+                               context="多消费一单位带来的满足")
+            db.update_entry(eid, one_line="额外一单位带来的额外满足")
+            db.set_entry_tags(eid, ["经济学"])
+            rows = list(db.list_entries(batch_id=bid))
+            text = es.anki_text(rows, db.tags_for_entries([eid]))
+            self.assertEqual(len(text.strip().splitlines()), 1, "无表头")
+            cells = text.strip().split("\t")
+            self.assertEqual(cells[0], "边际效用", "第一列 = 卡片正面")
+            self.assertEqual(cells[1], "额外一单位带来的额外满足", "第二列 = 背面")
+            self.assertIn("#经济学", cells[-1], "末列是标签")
+
+    def test_json_keeps_tags_and_examples_as_arrays(self):
+        from app import export_service as es
+
+        with support.temp_db() as db:
+            bid = int(db.create_batch("主题"))
+            eid = db.add_entry(batch_id=bid, term="卷积", context="用卷积提取特征")
+            db.update_entry(eid, examples=json.dumps(["例子一", "例子二"],
+                                                     ensure_ascii=False))
+            db.set_entry_tags(eid, ["深度学习"])
+            rows = list(db.list_entries(batch_id=bid))
+            tags = db.tags_for_entries([eid])
+            data = json.loads(es.json_text(rows, tags))
+            self.assertEqual(data["count"], 1)
+            item = data["entries"][0]
+            self.assertEqual(item["term"], "卷积")
+            self.assertEqual(item["tags"], ["深度学习"], "标签是数组，不是拼接串")
+            self.assertEqual(item["examples"], ["例子一", "例子二"])
+            one = json.loads(es.jsonl_text(rows, tags).strip())
+            self.assertEqual(one, item, "JSONL 一行 == JSON 里的一条")
+
+    def test_the_dialog_lists_every_format_and_only_writes_after_confirm(self):
+        from app import export_service as es
+        from app.ui.export_dialog import ExportDialog
+
+        with support.temp_db() as db:
+            cfg = Config(db)
+            cfg.set("export.format", "json")
+            with _FakeTkEnv():
+                calls = []
+                dialog = ExportDialog(FakeWidget(None), cfg=cfg, scope_label="经济学入门",
+                                      count=7, directory=r"D:\data\exports",
+                                      default_format=cfg.export_format,
+                                      on_confirm=calls.append)
+                self.assertEqual(list(dialog.radio_buttons),
+                                 [f.key for f in es.FORMATS],
+                                 "选择器上的格式清单 = export_service 那一份")
+                self.assertEqual(dialog.selected_format(), "json", "记住上次用的格式")
+                self.assertEqual(calls, [], "光打开窗不导出")
+                dialog.var_format.set("anki")
+                dialog.btn_export.invoke()
+                self.assertEqual(calls, ["anki"], "按了「导出」才回调")
+                self.assertEqual(cfg.export_format, "anki", "选完要记住")
+                dialog.btn_export.invoke()
+                self.assertEqual(calls, ["anki"], "连点两下只导一次")
+
+    def test_an_unknown_stored_format_falls_back_to_csv(self):
+        from app import export_service as es
+
+        with support.temp_db() as db:
+            cfg = Config(db)
+            cfg.set("export.format", "docx")
+            self.assertEqual(cfg.export_format, "docx", "存的是原样")
+            self.assertEqual(es.format_for(cfg.export_format).key, "csv",
+                             "认不出来的格式一律当 CSV")
+
+    def test_export_directory_setting_decides_where_files_land(self):
+        from app import paths
+
+        with support.temp_data_dir():
+            with support.headless_app(main_window="real") as app:
+                self._seed(app)
+                with mock.patch("app.ui.main_window.os.startfile"):
+                    with mock.patch("app.ui.main_window.messagebox"):
+                        with mock.patch(self.KEY) as dialog:
+                            app.main.export_entries()
+                            self.assertEqual(dialog.call_args.kwargs["directory"],
+                                             paths.exports_dir())
+                            dialog.call_args.kwargs["on_confirm"]("txt")
+                mine = Path(paths.exports_dir()).parent / "我的导出"
+                app.config.set("export.directory", str(mine))
+                with mock.patch("app.ui.main_window.os.startfile"):
+                    with mock.patch("app.ui.main_window.messagebox"):
+                        with mock.patch(self.KEY) as dialog:
+                            app.main.export_entries()
+                            self.assertEqual(dialog.call_args.kwargs["directory"], mine)
+                            dialog.call_args.kwargs["on_confirm"]("txt")
+                self.assertEqual(len(list(mine.glob("*.txt"))), 1, "文件真的写进了新目录")
+
+
+
 class TestLibraryOrganizationControls(unittest.TestCase):
     """B 批（词库组织）：标签筛选、合并 / 拆分、导出、搜索命中。
 
@@ -5152,24 +5307,40 @@ class TestLibraryOrganizationControls(unittest.TestCase):
             self.assertEqual(int(app.db.get_entry(first)["batch_id"]), bid, "目标主题的词不动")
             self.assertIn("已合并 1 条词语", str(app.main.status_label.cget("text")))
 
-    def test_export_writes_csv_and_markdown_for_the_browsed_batch(self):
+    def test_export_asks_for_a_format_then_writes_that_one_file(self):
+        """M（用户口径）：点「导出」先选格式，选完只写**这一个**文件。"""
         from app import paths
 
         with support.temp_data_dir():
             with support.headless_app(main_window="real") as app:
                 self._seed(app)
-                with mock.patch("app.ui.main_window.os.startfile") as opener:
+                with mock.patch("app.ui.main_window.ExportDialog") as dialog:
                     app.main.export_entries()
+                self.assertTrue(dialog.called, "点导出先弹格式选择器")
+                kwargs = dialog.call_args.kwargs
+                self.assertEqual(kwargs["count"], 2, "选择器上要写清这次导几条")
+                self.assertIn("经济学笔记", kwargs["scope_label"])
+                self.assertEqual(kwargs["directory"], paths.exports_dir(),
+                                 "没改设置 → 落到默认导出目录")
+                self.assertEqual(kwargs["default_format"], "csv", "默认仍是 CSV")
+                on_confirm = kwargs["on_confirm"]
+                self.assertEqual(list(paths.exports_dir().glob("*.csv")), [],
+                                 "光打开选择器不写文件")
+                with mock.patch("app.ui.main_window.os.startfile") as opener:
+                    with mock.patch("app.ui.main_window.messagebox") as box:
+                        box.askyesno.return_value = True
+                        on_confirm("csv")
                 csv_files = sorted(paths.exports_dir().glob("*.csv"))
-                md_files = sorted(paths.exports_dir().glob("*.md"))
-                self.assertEqual(len(csv_files), 1, "一次导出 = 一对同名文件")
-                self.assertEqual(len(md_files), 1)
-                self.assertEqual(csv_files[0].stem, md_files[0].stem)
-                csv_text = csv_files[0].read_text("utf-8-sig")
-                self.assertIn("边际效用", csv_text)
-                self.assertIn("供给曲线", csv_text)
-                self.assertIn("经济学", csv_text, "标签也要进导出")
+                self.assertEqual(len(csv_files), 1, "一次导出 = 一个文件")
+                self.assertEqual(list(paths.exports_dir().glob("*.md")), [],
+                                 "选了 CSV 就不该再顺手写一份 Markdown")
+                text = csv_files[0].read_text("utf-8-sig")
+                self.assertIn("边际效用", text)
+                self.assertIn("供给曲线", text)
+                self.assertIn("经济学", text, "标签也要进导出")
                 self.assertIn("已导出 2 条", str(app.main.status_label.cget("text")))
+                self.assertIn("CSV", box.askyesno.call_args.args[1],
+                              "完成提示要说清这次是什么格式")
                 self.assertTrue(opener.called, "问「打开文件夹吗」答是 → 调系统文件管理器")
 
     def test_export_follows_the_tag_filter_and_names_the_scope(self):
@@ -5183,13 +5354,18 @@ class TestLibraryOrganizationControls(unittest.TestCase):
                 app.main.search_var.set("递减")
                 self.assertIn("经济学", app.main._export_scope_label())
                 self.assertIn("递减", app.main._export_scope_label())
-                with mock.patch("app.ui.main_window.os.startfile"):
+                with mock.patch("app.ui.main_window.ExportDialog") as dialog:
                     app.main.export_entries()
+                self.assertEqual(dialog.call_args.kwargs["count"], 1, "筛选后只有一条")
+                self.assertIn("递减", dialog.call_args.kwargs["scope_label"])
+                with mock.patch("app.ui.main_window.os.startfile"):
+                    with mock.patch("app.ui.main_window.messagebox"):
+                        dialog.call_args.kwargs["on_confirm"]("csv")
                 csv_files = sorted(paths.exports_dir().glob("*.csv"))
                 self.assertEqual(len(csv_files), 1)
-                csv_text = csv_files[0].read_text("utf-8-sig")
-                self.assertIn("边际效用", csv_text)
-                self.assertNotIn("供给曲线", csv_text, "导出跟着当前筛选走")
+                text = csv_files[0].read_text("utf-8-sig")
+                self.assertIn("边际效用", text)
+                self.assertNotIn("供给曲线", text, "导出跟着当前筛选走")
                 self.assertIn("已导出 1 条", str(app.main.status_label.cget("text")))
                 _ = first
 
@@ -5225,6 +5401,70 @@ class TestLibraryOrganizationControls(unittest.TestCase):
             text = app.main.exp_text.get("1.0", tkinter.END)
             self.assertIn("（上下文已补充，建议重新解释）", text)
             self.assertIn("旧解释", text, "旧解释照旧显示，只是加一句提醒")
+
+
+class TestExportDirectorySetting(unittest.TestCase):
+    """M：设置里多了「导出 → 保存到」（留空 = 默认目录）。"""
+
+    @staticmethod
+    def _stub(cfg):
+        return SimpleNamespace(
+            config=cfg,
+            explain_service=SimpleNamespace(is_ready=lambda: (True, "")),
+            on_settings_changed=lambda: None,
+            restore_pending_explain_window=lambda: None,
+        )
+
+    def test_the_setting_field_round_trips_and_can_be_reset(self):
+        from app import paths
+        from app.ui.settings_dialog import SettingsDialog
+
+        with support.temp_data_dir():
+            with support.temp_db() as db:
+                cfg = Config(db)
+                mine = Path(paths.exports_dir()).parent / "我的导出"
+                with _FakeTkEnv():
+                    dialog = SettingsDialog(FakeWidget(None), self._stub(cfg))
+                    self.assertEqual(dialog.var_export_dir.get(), "", "默认留空")
+                    dialog.var_export_dir.set(str(mine))
+                    dialog.save()
+                self.assertEqual(cfg.export_directory, str(mine))
+                self.assertTrue(mine.is_dir(), "保存时就建好目录，不留到导出时才报错")
+
+                with _FakeTkEnv():
+                    again = SettingsDialog(FakeWidget(None), self._stub(cfg))
+                    self.assertEqual(again.var_export_dir.get(), str(mine),
+                                     "再打开要回填已保存的位置")
+                    again._reset_export_dir()
+                    self.assertEqual(again.var_export_dir.get(), "")
+                    again.save()
+                self.assertEqual(cfg.export_directory, "", "恢复默认 = 存空串")
+
+    def test_a_broken_directory_is_refused_instead_of_saved(self):
+        from app.ui.settings_dialog import SettingsDialog
+
+        with support.temp_data_dir():
+            with support.temp_db() as db:
+                cfg = Config(db)
+                with _FakeTkEnv():
+                    dialog = SettingsDialog(FakeWidget(None), self._stub(cfg))
+                    broken = "Z:\\不存在的盘\\导出"
+                    dialog.var_export_dir.set(broken)
+                    dialog.save()
+                    self.assertNotEqual(cfg.export_directory, broken, "坏路径不许落库")
+                    self.assertIn("导出目录", str(dialog.feedback.cget("text")))
+
+    def test_env_vars_in_the_path_are_expanded(self):
+        import os
+
+        from app import export_service as es
+
+        with support.temp_data_dir():
+            resolved = es.resolve_directory("%EXPLORER_DICT_DATA_DIR%\\导出")
+            self.assertIn(os.environ["EXPLORER_DICT_DATA_DIR"].rstrip("\\"),
+                          str(resolved), "%VAR% 要展开成真实路径")
+            self.assertEqual(es.resolve_directory("").name, "exports",
+                             "空串 → 默认导出目录")
 
 
 class TestSettingsDialogDuplicateAction(unittest.TestCase):
