@@ -2904,3 +2904,49 @@ import**。批次 M 的导出功能加了 `import html`，而部署的 exe 是 *
 只要新增了一个当时没冻进去的模块，双击就是「启动失败」—— 而源码模式、19 模块
 白名单、`--diagnose` 全都看不出来（`--diagnose` 是在**新**构建上跑的）。
 现在这个前提由四道静态护栏 + 「标准库整个收进来」一起兜住了。
+
+## 37. 批次 M10：左键拖动标签（思维导图）
+
+### 37.1 用户原话
+
+> 请你进行反思不要再出现应用无法打开的问题。现在集中修改思维导图的交互方式，我一直声明的是
+> 左键拖动标签，你现在的问题还是左键的时候无法拖动/拖动不准确不流畅一卡一卡的，
+> 这是首要的问题。你先修复这个问题。
+
+要求按 **①能拖起来 ②准确（跟手）③流畅** 排序。
+
+### 37.2 真凶：拖动靠的是「只有测试替身才有」的属性
+
+`app/ui/concept_map.py` 里 `_node_items(entry_id)` 原本遍历
+`getattr(self.canvas, "item_options", {})` 找 `_kind in ("node", "node-text")` 的图元。
+`item_options` **只有 `tests/support.py` 的 `FakeCanvas` 有**，真 `tk.Canvas` 没有 ⇒
+`getattr` 给空字典 ⇒ 认不到图元 ⇒ `_drag_items` 空 ⇒ `_move_node_items()` 早退 ⇒
+**拖动期间卡片一动不动，松手才瞬移**。真 Tk 探针实测「框图元位移 0.0 px（期望 100 px）」。
+
+### 37.3 改法
+
+| 改动 | 位置 | 为什么 |
+|---|---|---|
+| `NODE_TAG_PREFIX` + `node_tag()` | `app/ui/concept_map.py` | 用真 Tk 的 tag 认图元，不再自己记一本只有替身有的账 |
+| `_draw()` 给框与文字打同一个 tag | `app/ui/concept_map.py` | `find_withtag` 一次就能取到整张卡 |
+| `_node_items()` → `canvas.find_withtag()` | 同上 | 不留兜底分支：留了会继续替「忘了打 tag」装绿 |
+| `_move_node_items()` → `canvas.move()` | 同上 | 带 tag 一次搬整组；实测搬 2 个图元 0.003 ms |
+| 新增 `_follow_edges()` | 同上 | 拖动期间贴着这张卡的连线端头跟着走，线被拉直；松手 `_draw(force=True)` 恢复正规走线 |
+| `FakeCanvas.find_withtag` / `.move` | `tests/support.py` | 替身补齐真 Tk 语义（`_tagged` 改为 `sorted`，保证「创建顺序」） |
+
+### 37.4 数字
+
+- 整张重画 `_draw(force=True)`：**14.9–17.9 ms**（60 Hz 一帧 16.7 ms ⇒ 边拖边重画走不通）。
+- 修后每个 Motion 事件：**0.079 ms**（比整张重画便宜 **189.8 倍**）。
+- 200 个 Motion 后图元位移 Δ=(200.000, 100.000)，**逐位跟手**。
+
+### 37.5 测试
+
+新增真 Tk 守卫 `tests/test_ui_roundrect.py::TestConceptMapDragPinsAndEdgeBlocks::test_a_real_canvas_drag_actually_moves_the_card`，
+并**用变异证明它在旧实现上会红**（`AssertionError: 0 != 2`，同一轮假 Tk 的 26 条仍全绿）。
+另外新增 `_real_root()` 上下文管理器：真窗口测试用完必须把 `theme` 的字体族 / 缩放**还原**，
+否则后面的像素断言会偏 2 px（`theme.init` 是进程级全局）。
+
+`tests.test_ui_roundrect` = **270 OK**；逐字 19 模块白名单改动后 **959 / failures=7**，
+stash 回 HEAD 也是 **958 / failures=7** 且失败清单相同 ⇒ 无新增失败。
+
