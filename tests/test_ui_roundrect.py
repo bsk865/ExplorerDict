@@ -6997,21 +6997,43 @@ class TestSearchPlaceholder(unittest.TestCase):
     """搜索框的占位提示：空着时显示「能搜什么」，一动键盘就消失。
 
     用户口径 2026-10-05：「搜索框可以加入可以搜索什么内容的提示，用户开始输入后
-    消失。」最要紧的一条是**占位文字绝不能进 search_var** —— 那等于拿一句提示
-    去查库（查不到东西，用户还会以为检索坏了）。
+    消失。」
+
+    最要紧的一条是**占位文字绝不能进 search_var**（P0-5 就是这么炸的）：早先
+    的实现往 ``tk.Entry`` 里 ``insert`` 提示，而那个 Entry 挂着 ``textvariable``，
+    真 Tk 会把这次 insert **同步写进 search_var** ⇒ 界面上写着「选中主题后
+    0 / 10 条、暂无词语」。现在提示是**叠在框上的一个 Label**，输入框自己的
+    内容与变量都碰不到。
     """
 
     def _entry(self, app):
-        """搜索框本身：产品里存成 ``MainWindow.search_entry``。
-
-        占位文字是通过 ``Entry.insert`` 写进**输入缓冲**的，不会出现在
-        ``cget("text")`` 里，所以只能按这个属性找（早先按文案找的写法全军覆没）。
-        """
+        """搜索框本身：产品里存成 ``MainWindow.search_entry``。"""
         return app.main.search_entry
 
+    def _hint(self, app):
+        """占位提示那块 Label：产品在挂载时存成 ``entry.placeholder_label``。"""
+        label = getattr(self._entry(app), "placeholder_label", None)
+        self.assertIsNotNone(label, "搜索框上应该挂着一块占位提示的 Label")
+        return label
+
+    def _hint_visible(self, app) -> bool:
+        """提示此刻有没有显示。
+
+        假 Tk 的控件有 ``placed`` 计数；**真** ``tk.Label`` 没有这个属性
+        （实测 ``AttributeError: 'Label' object has no attribute 'placed'``），
+        它只认 ``place_info()``（没 place 过就是空字典）。
+        """
+        label = self._hint(app)
+        if hasattr(label, "placed"):
+            return bool(label.placed)
+        return bool(label.place_info())
+
+    def _hint_text(self, app) -> str:
+        return str(self._hint(app).cget("text"))
+
     def _shown(self, app) -> str:
-        """搜索框此刻肉眼看到的那一行字。"""
-        return str(self._entry(app).get())
+        """搜索框此刻肉眼看到的那一行字：提示显示时就是提示，否则是框里的内容。"""
+        return self._hint_text(app) if self._hint_visible(app) else str(self._entry(app).get())
 
     def _press_key(self, app, keysym: str = "a") -> None:
         """敲一个键：真 tk 会给回调一个带 ``keysym`` 的事件对象。
@@ -7034,29 +7056,32 @@ class TestSearchPlaceholder(unittest.TestCase):
         with support.headless_app(overlays="panel", main_window="real") as app:
             self.assertEqual(str(app.main.search_var.get()), "",
                              "初始状态的真实值是空的（占位文字不许进变量）")
-            entry = self._entry(app)
             self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
                              "空着的时候要把「能搜什么」写在框里")
-            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT_FAINT,
+            self.assertEqual(str(self._hint(app).cget("fg")), mw.theme.TEXT_FAINT,
                              "提示用浅一号的字色，跟真的输入区分开")
 
-    def test_typing_makes_the_hint_go_away(self):
-        from app.ui import main_window as mw
+    def test_the_hint_is_drawn_over_the_box_instead_of_inside_it(self):
+        """P0-5 的根因守卫：提示**不在**输入框的内容里，是叠上去的另一块。"""
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            entry = self._entry(app)
+            self.assertTrue(self._hint_visible(app), "空框上应该显示提示")
+            self.assertEqual(str(entry.get()), "",
+                             "输入框自己的内容必须是空的 —— 提示写进去的话，"
+                             "挂着 textvariable 的 Entry 会把这段提示同步进搜索变量")
+            self.assertEqual(str(app.main.search_var.get()), "")
 
+    def test_typing_makes_the_hint_go_away(self):
         with support.headless_app(overlays="panel", main_window="real") as app:
             entry = self._entry(app)
             entry.binds["<Button-1>"](None)          # 点进去
-            self.assertEqual(self._shown(app), "",
-                             "点进去（要开始打字了）提示就该从框里消失")
-            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT,
-                             "字色要回到正常色，否则用户真输入的字是灰的")
+            self.assertFalse(self._hint_visible(app),
+                             "点进去（要开始打字了）提示就该消失")
             self._press_key(app)                     # 中文输入法落字也走这条
-            self.assertEqual(self._shown(app), "")
+            self.assertFalse(self._hint_visible(app))
 
     def test_the_search_still_works_after_the_hint_is_gone(self):
         """提示消失之后照常搜：值进变量、按钮回调照旧（真实值从未被提示污染）。"""
-        from app.ui import main_window as mw
-
         with support.headless_app(overlays="panel", main_window="real") as app:
             entry = self._entry(app)
             self._press_key(app)
@@ -7073,11 +7098,12 @@ class TestSearchPlaceholder(unittest.TestCase):
         with support.headless_app(overlays="panel", main_window="real") as app:
             entry = self._entry(app)
             entry.binds["<Button-1>"](None)
-            self.assertEqual(self._shown(app), "")
+            self.assertFalse(self._hint_visible(app))
             entry.binds["<FocusOut>"](None)
-            self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
-                             "空着离开要重新显示提示")
-            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT_FAINT)
+            self.assertTrue(self._hint_visible(app), "空着离开要重新显示提示")
+            self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER)
+            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT,
+                             "输入框自己的字色不因为提示而变（提示在 Label 上）")
 
     def test_what_the_user_typed_is_never_replaced_by_the_hint(self):
         """框里有真内容时，离开焦点**不许**把提示盖上去（会吃掉用户刚打的字）。"""
@@ -7091,11 +7117,11 @@ class TestSearchPlaceholder(unittest.TestCase):
             entry.insert(0, "注意力")
             app.main.search_var.set("注意力")
             entry.binds["<FocusOut>"](None)
+            self.assertFalse(self._hint_visible(app),
+                             "框里有内容时不许显示提示")
             self.assertEqual(str(app.main.search_var.get()), "注意力")
-            self.assertEqual(self._shown(app), "注意力",
-                             "用户打的字必须原样留在框里（提示只在空框时才算数）")
-            self.assertNotEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
-                                "有真实内容时不许显示提示")
+            self.assertEqual(str(entry.get()), "注意力",
+                             "用户打的字必须原样留在框里")
 
     def test_the_hint_never_leaks_into_the_query(self):
         """占位文字**从不**写进 search_var —— 这条是这一整块的地基。"""
@@ -7112,3 +7138,59 @@ class TestSearchPlaceholder(unittest.TestCase):
             self.assertEqual(str(mw.SEARCH_PLACEHOLDER).strip(),
                              mw.SEARCH_PLACEHOLDER,
                              "占位提示首尾别带空白（框里会看着歪）")
+
+    def test_a_topic_with_words_is_not_mistaken_for_an_empty_one(self):
+        """P0-5 现场（2026-10-05）：点主题以后中栏显示「0 / 10 条、暂无词语」。
+
+        病根就是占位提示被写进了 ``search_var``（真 Tk 的 textvariable 同步），
+        于是每次刷新都拿「搜词语 / 上下文 / 来源」当关键词查库。这条用**有词的
+        主题**把那个现场钉住：搜索框空着（只剩提示）时，列表必须照常显示词条。
+        """
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            bid = int(app.db.create_batch("资源受限计算"))
+            for term in ("资源受限环境", "高计算开销", "漂移检测"):
+                app.db.add_entry(batch_id=bid, term=term, context=f"{term}的上下文")
+            app.main._browse_batch_id = bid
+            app.main.refresh_batches()
+            app.main.refresh_entries()
+
+            self.assertEqual(str(app.main.search_var.get()), "",
+                             "搜索框空着就是空的 —— 提示不许变成本次查询的关键词")
+            self.assertEqual(len(app.main._entry_rows), 3,
+                             "主题里有 3 条词，就该列出来 3 条")
+            self.assertEqual(len(app.main._cards), 3, "卡片也要照数画出来")
+            self.assertNotIn("暂无词语", str(mw.SEARCH_PLACEHOLDER))
+            self.assertIn("3 / 3", str(app.main.count_label.cget("text")))
+
+    def test_a_real_entry_keeps_its_textvariable_clean(self):
+        """真 Tk 的事实验证：叠了提示之后，往输入框打字也不会被提示污染。
+
+        P0-5 的病根是**真 Tk 的行为**（挂了 ``textvariable`` 的 Entry，insert
+        会同步写进变量），假环境复现不了它 —— 所以这一条用真 ``tk.Entry`` +
+        真 ``StringVar`` 跑，钉住「挂提示这件事本身不许动变量」。
+        """
+        import tkinter as tk
+
+        from app.ui import theme as th
+
+        from app.ui import widgets as w
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            th.init(root, 96)
+            var = tk.StringVar()
+            entry = tk.Entry(root, textvariable=var, bg=th.PANEL, fg=th.TEXT)
+            w.placeholder(entry, "搜词语 / 上下文 / 来源", variable=var)
+            self.assertEqual(str(var.get()), "",
+                             "挂上占位提示不许把提示写进变量")
+            self.assertEqual(str(entry.get()), "", "输入框自己的内容也必须是空的")
+            entry.insert(0, "卷积")
+            entry.event_generate("<KeyRelease>")
+            root.update()
+            self.assertEqual(str(var.get()), "卷积",
+                             "用户打的字要照常进变量（这正是 P0-5 之前做不到的事）")
+        finally:
+            root.destroy()

@@ -990,12 +990,16 @@ def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
                 fg_normal: str | None = None) -> None:
     """给输入框挂**占位提示**：空着且没聚焦时显示，一输入就消失。
 
-    用户看到的提示文字与输入框的值必须彻底分开
-    ------------------------------------------
-    占位文字**绝不**写进 ``textvariable`` —— 那样搜索框的值会变成
-    「搜索词语…」这样一句提示，程序会真的拿它去查库（还查不到东西）。
-    这里只改控件上的显示文本（``insert`` / ``delete``），真实的值永远留在
-    调用方的变量里。
+    提示文字是**叠在输入框上的一个 Label**，不是输入框里的文字
+    ------------------------------------------------------
+    早先的写法是往输入框里 ``insert`` 一句提示。那样在真 Tk 下**会出事**：
+    ``tk.Entry`` 一旦挂了 ``textvariable``，对控件的 ``insert`` / ``delete``
+    会经 textvariable **同步写进那个变量**。搜索框正好是这种接法，于是变量里
+    装上了「搜词语 / 上下文 / 来源」，``refresh_entries`` 拿它去查库 ⇒ 一条都
+    查不到，界面上就是「选中主题以后中栏空白、写着 0 / 10 条」（P0-5）。
+
+    现在改成叠一个 Label 只负责**显示**：输入框自己的内容与 ``textvariable``
+    完全不受影响，变量里永远只有用户真正输入的东西。
 
     ``variable`` 传进来的话，会在每次状态切换时**核对**一次：变量里有内容
     （例如程序替用户填了搜索词）就绝不显示占位文字。
@@ -1003,7 +1007,15 @@ def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
     state = {"showing": False}
     text = str(text or "")
     color_hint = fg or theme.TEXT_FAINT
-    color_normal = fg_normal or theme.TEXT
+    try:
+        box_bg = entry.cget("bg")
+    except tk.TclError:  # pragma: no cover - 控件已销毁
+        box_bg = None
+    try:
+        hint = tk.Label(entry, text=text, fg=color_hint, bg=box_bg or theme.PANEL,
+                        font=theme.font(9), cursor="xterm")
+    except tk.TclError:  # pragma: no cover - 控件已销毁
+        return
 
     def _current() -> str:
         if variable is None:
@@ -1017,9 +1029,7 @@ def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
         if state["showing"] or _current().strip():
             return
         try:
-            entry.delete(0, "end")
-            entry.insert(0, text)
-            entry.configure(fg=color_hint)
+            hint.place(x=theme.px(3), rely=0.5, anchor="w")
             state["showing"] = True
         except tk.TclError:  # pragma: no cover - 控件已销毁
             pass
@@ -1029,8 +1039,7 @@ def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
             return
         state["showing"] = False
         try:
-            entry.delete(0, "end")
-            entry.configure(fg=color_normal)
+            hint.place_forget()
         except tk.TclError:  # pragma: no cover - 控件已销毁
             pass
 
@@ -1043,6 +1052,8 @@ def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
         entry.bind("<Button-1>", _hide, add="+")
     except tk.TclError:  # pragma: no cover
         return
+    #: 暴露给测试：占位提示这块就是它，看它在不在（``place_info()``）即可
+    entry.placeholder_label = hint
     if not _current().strip():
         _show()
 
