@@ -2626,3 +2626,101 @@ test_no_pdf_line_runs_past_the_right_margin       # 照阅读器方式算，没�
 ### 33.8 回归
 
 `tests.test_export_service` 17 → **Ran 19 OK**；逐字 19 模块白名单 **Ran 952 / failures=6**（`_check\batch_m2_whitelist.log`；6 条仍是 `test_reading_panel` 2 条 + `test_unified_action` 4 条，无新增）。
+
+## 34. 批次 M 补记：PDF 版式照 HTML 骨架重排
+
+> 需求原话（2026-10-05）：**「优化一下排版好吗？我看着很不舒服。」**
+> 追问后确认口径：**「HTML 的排版很好，主要问题是 PDF」** —— 不再自己发明版式，照 HTML 单页那版来。
+
+### 34.1 从 CSS 到 PDF：0.66 比例映射
+
+| HTML 单页那版 | PDF | 换算 |
+| --- | --- | --- |
+| `h1 { font-size: 22px }` | 标题 17.0pt / 行高 24.0 | 页面 900px 宽 → 503pt（可用正文宽） |
+| `article h2 { font-size: 16px }` | 词条标题 12.5pt / 行高 17.5 | 16 × 0.66 ≈ 10.6，取 12.5 更精神 |
+| `.meta { 13px #6E6C67 }` | 元信息 8.2pt 灰 | |
+| `dl dt { 12px #6E6C67 }` | 字段名 8.2pt 灰 | |
+| `dd { font-size: 默认 }` | 字段值 9.0pt | |
+| `.tag { 12px, 圆角药丸 #EDEBE6 }` | 标签药丸 8.2pt（矩形 + 两端贝塞尔圆头） | |
+| `article { border: 1px #E3E1DC }` | 词条之间一条 `#E3E1DC` 细横线 + 标题左侧 2.4pt 小色块 | PDF 里没有卡片底色和圆角 |
+
+结构完全照搬：`标题` → `灰字元信息（范围｜条数｜导出时间）` → `一行说明` → `细横线` →
+每条词条一个块（`编号 + 词` 的标题、标签药丸行、`字段名小灰字` + `值缩进挂在下面`）。
+
+**试过又弃用的**：同一行画两遍、错开 0.28pt 冒充粗体。真 Tk 里看着还行，PDF 里**糊成重影**。
+现在层级只靠**字号 + 颜色**（`app\pdf_writer.py` 的 `FAUX_BOLD_SHIFT = 0.0` 留着当标记）。
+
+### 34.2 词条不被页码劈开（对应 HTML 的 `break-inside: avoid`）
+
+`PdfDoc` 多了一个**量高模式**：`dry_run = True` 时不真分页、不往页上落指令，只把游标拉回页顶并记账；
+`PdfDoc.measure(render)` 返回 `(used, pages)`。导出前**先量整条多高**：
+
+```python
+start_y = doc.y() - MARGIN_BOTTOM
+used, pages = PdfDoc.measure(render_card)
+if used <= start_y:      moved = False          # 本页装得下
+elif used <= one_page:   moved = start_y < used * SPLIT_IF_ROOM_RATIO   # 52%
+else:                    moved = False          # 自己就超过一页，只能顺着排
+```
+
+即：本页剩下的空间**不足整条高度的 52%** 就整条挪下一页；剩得多就让正文接着流
+（页底空一大块比断一下更难看）。超过一页的长词条没办法，顺着排。
+
+**量高必须与当前位置无关**（这两个坑都踩过、都写进注释了）：
+
+1. 拿 `start_y - 量完的 y` 当高度 —— 中途翻页后游标已经回到页顶，量出 **-466.99**，「放不下」判断全失灵；
+2. 把中途累计的用量再加一遍 —— 同一条词条量出 **297.7 / 365.9 / 672.6** 三个数（折行随剩余高度变）。
+
+### 34.3 空白页：翻页只能翻一次
+
+`rule(keep_with_next=...)` 自己会「先翻页再画线」，外面那句 `if moved: doc.new_page()` 又翻一页 ——
+**中间那页就空了**。真实数据下 10 条词排出 **9 页**，其中 **4 页只有页脚**。
+修法：**翻页只交给 `rule()` 做**，外面不许再翻。
+
+顺带治了「线孤零零留在上一页页底」：`rule()` 的判断必须在**画线之前**做：
+
+```python
+if keep_with_next and self._y - keep_with_next - 8.0 < MARGIN_BOTTOM:
+    self.new_page()
+```
+
+### 34.4 两条守卫（都能被旧写法打红）
+
+```python
+test_pdf_does_not_leave_blank_pages_between_entries   # 每页都得有相当多的正文
+test_pdf_measures_a_card_from_the_top_of_a_page       # 量高不为负、超页卡片页数跟着涨
+```
+
+第一条的判据**不是「页数少」** —— 字体不同折行就不同、页数会飘；而是
+「**每一页的文字段数都不少于平均值的 25%**」：空白页的文字段数是 0，怎么飘也躲不过。
+`.tmp\prove_pagination_guard.py` 把旧写法放回去 ⇒ 打红：
+
+```
+AssertionError: 1 not greater than or equal to 7.1875 : 有页面几乎是空的（每页文字段数 [40, 1, 49, 25]）
+```
+
+### 34.5 验收
+
+真库 10 条词导出 → **5 页**，`PDF 98122 B`、子集字体 164084 B：
+
+| 页 | 词条 | 文字段数 |
+| --- | --- | --- |
+| 1 | `[1, 2]` | 44 |
+| 2 | `[3, 4]` | 42 |
+| 3 | `[5, 6]` | 42 |
+| 4 | `[7, 8]` | 43 |
+| 5 | `[9, 10]` | 42 |
+
+每页都是**完整词条、无空白页**。一条词条约 300pt、一页可用 735.89pt ⇒ 一页正好两条，
+**页底留白是几何必然**（三条要 900pt，装不下）。逐字渲染成 5 张图复看过。
+
+### 34.6 回归
+
+`tests.test_export_service` 19 → **Ran 21 OK**（新加 2 条）；
+逐字 19 模块白名单 **Ran 954 / failures=6**（`_check\batch_m3_whitelist.log`；
+6 条仍是 `test_reading_panel` 2 条 + `test_unified_action` 4 条，无新增）。
+
+### 34.7 仍然没动的
+
+「词条本身是断字」（`assur-ances` / `resource-con-strained` / `high computationa`）**来自库里的原文**，
+八种格式都照原文导，§33.7 记着这件事 —— 要修得么在**导出时清理**、要么在**划词时**就别抓半截词，等你定。
