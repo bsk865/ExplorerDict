@@ -115,6 +115,12 @@ class TemplateSpec:
     summary: str
     fit: str
     placer: Callable[..., Placement] | None = None
+    #: 这段骨架的**走线主轴**：``"y"`` = 同一层的词左右排成一条**横带**
+    #: （车道横着走，直接复用默认规则）；``"x"`` = 同一层的词上下排成一**列**
+    #: （把整张图转置 90° 再复用同一套规则，车道就变成竖着走）。
+    #: 排线规则跟着骨架朝向走，用户要求的「不同模板各自的关系线排布规则」
+    #: 就是这一格 —— 见 ``concept_map._orthogonal_routes``。
+    route_axis: str = "y"
     #: 骨架和数据不搭时的退路（永远是自动布局）
     fallback: str = TEMPLATE_AUTO
 
@@ -663,7 +669,7 @@ TEMPLATES: tuple[TemplateSpec, ...] = (
                  "层级整齐、同一层有好几个词的图", placer=_org),
     TemplateSpec("oneway", "单向导图（向右）",
                  "关系一律向右长，子树上下排开",
-                 "有明确起点、想看「一圈圈扩散」的图", placer=_oneway),
+                 "有明确起点、想看「一圈圈扩散」的图", placer=_oneway, route_axis="x"),
     TemplateSpec("fishbone", "鱼骨图",
                  "水平主脊 = 因果链，其余词斜挂在两侧",
                  f"因果边不少于 {FISHBONE_MIN_CAUSAL} 条的图", placer=_place_fishbone),
@@ -680,6 +686,18 @@ TEMPLATES: tuple[TemplateSpec, ...] = (
 #: 供下拉直接用的顺序（与 ``TEMPLATES`` 一致）
 TEMPLATE_KEYS: tuple[str, ...] = tuple(spec.key for spec in TEMPLATES)
 _BY_KEY: dict[str, TemplateSpec] = {spec.key: spec for spec in TEMPLATES}
+
+
+def route_axis_of(key: str) -> str:
+    """这个模板的**走线主轴**（未知 key 按上下流处理）。
+
+    ``"y"`` = 上下流（行是横带，车道横着走）；``"x"`` = 左右流（整张图转置
+    90° 后用同一套规则算，车道竖着走）。左右长的模板不转置的话，「行」会
+    退化成一整条 —— 实测 ``flow-h`` 里四种 row 挤在同一条 y 上，排线规则
+    于是时灵时不灵。
+    """
+    spec = spec_of(key)
+    return spec.route_axis if spec is not None else "y"
 
 
 def spec_of(key: str) -> TemplateSpec | None:

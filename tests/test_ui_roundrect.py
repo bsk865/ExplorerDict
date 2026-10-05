@@ -2122,6 +2122,7 @@ class TestMapLayoutStructure(unittest.TestCase):
                          {"feedback", "direction"})
 
     def test_cross_edges_keep_type_label_and_do_not_change_layers(self):
+        from app.ui import concept_map as cm
         from app.ui.concept_map import layout_graph
 
         labels = {1: "卷积", 2: "池化"}
@@ -2132,7 +2133,14 @@ class TestMapLayoutStructure(unittest.TestCase):
         self.assertEqual(edge.label, "对照", "跨边保留具体标签")
         self.assertEqual(layout.find(1).level, layout.find(2).level,
                          "对照不改变层级（同层跨边）")
-        self.assertGreater(len(edge.points), 2, "跨边画成弧线，和层级直连区分开")
+        # 批次 M12-B：同层两卡之间**没有别的卡挡着**时，跨边也走「一条直线」
+        # —— 弧线绕行正是用户说「关系线看着很乱」的来源。跨边与层级边
+        # 一眼看得出区别这件事，改由**线型 + 线上标签**承担（见 EDGE_STYLES）。
+        self.assertEqual(len(edge.points), 2,
+                         "同层跨边中间没东西挡，就该是一条干净的直线")
+        self.assertNotEqual(cm.EDGE_STYLES["cross"],
+                            cm.EDGE_STYLES["hierarchy"],
+                            "跨边仍要和层级边一眼分得开（线型不同）")
 
     def test_crossing_edge_goes_around_the_node_in_between(self):
         """被中间词挡住的对照跨边（同层左 → 右）**不得穿过**那个词的矩形。
@@ -6336,6 +6344,47 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                 self.assertEqual(win._drag_items, [], "松手要清掉拖动登记")
                 self.assertIsNone(win._drag_last)
 
+    def test_a_pin_is_stored_in_world_coordinates_not_canvas_ones(self):
+        """**真 bug 回归**：缩放不是 1 时，松手后卡片要停在鼠标松开的地方。
+
+        病根：`_layout_core` 在**世界坐标**（zoom = 1）下应用 pin，
+        `_scaled_layout` 最后又把整体乘一次缩放；而松手时算出来的
+        `want_x / want_y` 是**画布坐标**。旧实现把画布坐标直接写进库，重画后卡片
+        就落到 `pin × 缩放` 上 —— 缩放 0.75 时整整少走四分之一，用户
+        2026-10-06 报的「鼠标拖拽松开后，标签不会停留在鼠标松开的位置」就是这个。
+        真机探针量的现场：松手在画布 (224.57, 213.00)，卡片中心落到 (168.50, 160.00)。
+        """
+        with support.temp_db() as db:
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win, ids, bid = self._window(db)
+                zoom = 0.75
+                win._fit_pending = False          # 别让首开自适应改掉这里设的缩放
+                win._zoom = zoom
+                win._draw(force=True)
+                node = win._layout.find(ids["池化"])
+                target = (node.x + 60.0, node.y + 25.0)
+                win._on_canvas_press(_screen(win, node.x, node.y))
+                win._on_canvas_motion(_screen(win, target[0], target[1]))
+                win._on_canvas_release(_screen(win, target[0], target[1]))
+                pin = db.list_node_pins(bid)[ids["池化"]]
+                self.assertAlmostEqual(pin[0], target[0] / zoom, places=3,
+                                       msg="库里存的是世界坐标（画布坐标 ÷ 缩放）")
+                self.assertAlmostEqual(pin[1], target[1] / zoom, places=3)
+                landed = win._layout.find(ids["池化"])
+                self.assertAlmostEqual(landed.x, target[0], places=3,
+                                       msg="重画后卡片停在鼠标松开的地方（横向）")
+                self.assertAlmostEqual(landed.y, target[1], places=3,
+                                       msg="重画后卡片停在鼠标松开的地方（纵向）")
+                # 再换一个缩放：世界坐标不动，画布坐标整体跟着缩 —— 被固定过的
+                # 卡片不能跟其余卡片脱节（存画布坐标就会脱节）。
+                win._zoom = 0.5
+                win._draw(force=True)
+                again = win._layout.find(ids["池化"])
+                self.assertAlmostEqual(again.x, pin[0] * 0.5, places=3,
+                                       msg="滚轮缩放时固定过的卡片跟着整张图一起缩")
+                self.assertAlmostEqual(again.y, pin[1] * 0.5, places=3)
+
     def test_a_real_canvas_drag_actually_moves_the_card(self):
         """★ 真 Tk 的事实验证：左键拖卡片**必须真的搬走图元**。
 
@@ -7652,3 +7701,137 @@ class TestSearchPlaceholder(unittest.TestCase):
             root.update()
             self.assertEqual(str(var.get()), "卷积",
                              "用户打的字要照常进变量（这正是 P0-5 之前做不到的事）")
+
+
+class TestMapRouteOrdering(unittest.TestCase):
+    """批次 M12-B：关系线要**排得整齐** —— 不许交叉、不许穿过别的词卡。
+
+    用户原话（2026-10-05）：「关系线不是很整齐，看着很乱……不要出现关系线
+    交叉的情况。」这一组拿**真主题 12 的那 5 条关系**当 fixture：一个枢纽词
+    往右连、另一个枢纽词再往左连回最左边，最容易被排乱（当时 flow-h 就是这么
+    交叉了 4 处的）。
+    """
+
+    #: 真主题 12「资源受限计算」的 10 个词（用户拍屏里那张图的原文，
+    #: 词条 id 原样照抄：孤立词也必须在场，它们同样会把线挤开）。
+    LABELS = {
+        23: "Machine learning (ML) algorithms",
+        24: "real-world environments",
+        25: "data distribution",
+        26: "shiftin",
+        27: "model performanc",
+        28: "adherenc",
+        29: "resource constraint",
+        30: "drift-detectio",
+        31: "high computationa",
+        32: "resource-con-strained environmen",
+    }
+    RELS = ((23, 24, "属于"), (23, 25, "依赖"), (27, 23, "对照"),
+            (27, 25, "因果"), (27, 30, "对照"))
+    KEYS = ("auto", "mindmap", "tree", "org", "oneway", "fishbone",
+            "flow-h", "flow-v", "flow-s")
+
+    @staticmethod
+    def _orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def _crossings(self, layout):
+        """两条边**真交叉**了几处。
+
+        共一张卡的两条边不算 —— 它们本来就得从同一张卡上出发 / 汇入，
+        在卡旁边「碰头」是必然的（渲染勘察脚本用的也是这个口径）。
+        """
+        from app.ui import concept_map as cm
+
+        def hit(p1, p2, p3, p4):
+            """两条线段是不是**真穿过**对方。
+
+            端点搭在对方身上（T 形接头）、或干脆共线重叠，都不算 ——
+            正交排线里「一条线的端头正好落在另一条线上」是常态，
+            渲染勘察脚本用的也是这个判据。
+            """
+            signs = []
+            for value in (self._orient(p1, p2, p3), self._orient(p1, p2, p4),
+                          self._orient(p3, p4, p1), self._orient(p3, p4, p2)):
+                signs.append(0 if abs(value) < 1e-9 else (1 if value > 0 else -1))
+            o1, o2, o3, o4 = signs
+            return o1 * o2 < 0 and o3 * o4 < 0
+
+        def pair_of(edge):
+            parts = cm._relation_parts(edge.rel)
+            return {int(parts[0]), int(parts[1])}
+
+        count = 0
+        edges = layout.edges
+        for i in range(len(edges)):
+            for j in range(i + 1, len(edges)):
+                first, second = edges[i], edges[j]
+                if pair_of(first) & pair_of(second):
+                    continue
+                cross = False
+                for x1, y1, x2, y2 in first.segments():
+                    for x3, y3, x4, y4 in second.segments():
+                        if hit((x1, y1), (x2, y2), (x3, y3), (x4, y4)):
+                            cross = True
+                            break
+                    if cross:
+                        break
+                if cross:
+                    count += 1
+        return count
+
+    def _layout(self, key):
+        from app.map_service import MapRelation
+        from app.ui.concept_map import layout_graph
+
+        relations = [MapRelation(src, dst, rel_type, "依据", "片段")
+                     for src, dst, rel_type in self.RELS]
+        return layout_graph(dict(self.LABELS), relations,
+                            width=1180, height=760, topic_label="资源受限计算",
+                            zoom=1.0, top_pad=6.0, template=key)
+
+    def test_no_two_relation_lines_cross_in_any_template(self):
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._layout(key)
+                self.assertEqual(len(layout.edges), 5, "fixture 必须画出 5 条关系线")
+                self.assertEqual(self._crossings(layout), 0,
+                                 f"模板「{key}」上出现了交叉的关系线")
+
+    def test_no_relation_line_passes_through_a_third_card(self):
+        """排线再好看也不许穿过**非端点**的词卡（含 route_margin 净空）。"""
+        from app.ui import concept_map as cm
+
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._layout(key)
+                rects = [(node.x - node.w / 2.0, node.y - node.h / 2.0,
+                          node.x + node.w / 2.0, node.y + node.h / 2.0)
+                         for node in layout.nodes]
+                for edge in layout.edges:
+                    pair = {int(cm._relation_parts(edge.rel)[index])
+                            for index in (0, 1)}
+                    for index, node in enumerate(layout.nodes):
+                        if int(node.entry_id) in pair:
+                            continue
+                        x0, y0, x1, y1 = rects[index]
+                        for sx1, sy1, sx2, sy2 in edge.segments():
+                            self.assertFalse(
+                                cm._segment_hits_rect(sx1, sy1, sx2, sy2,
+                                                      (x0, y0, x1, y1)),
+                                f"模板「{key}」有条关系线穿过了「{node.label}」这张卡")
+
+    def test_each_template_declares_its_own_wire_axis(self):
+        """用户要的「不同模板各自的关系线排布规则」= 每个模板声明自己的走线主轴。"""
+        from app.ui import map_templates as templates
+
+        self.assertEqual(templates.route_axis_of("oneway"), "x",
+                         "环状扩散是**上下排成一列**，车道得竖着走")
+        self.assertEqual(templates.route_axis_of("flow-h"), "y",
+                         "水平流程线的词都排在一条横带上，车道横着走")
+        self.assertEqual(templates.route_axis_of("mindmap"), "y")
+        self.assertEqual(templates.route_axis_of("不存在的模板"), "y",
+                         "不认识的模板退回默认主轴，不许炸")
+        for spec in templates.TEMPLATES:
+            self.assertIn(spec.route_axis, ("x", "y"),
+                          f"模板「{spec.key}」的主轴只能是 x / y")

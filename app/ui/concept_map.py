@@ -197,6 +197,9 @@ CURVE_SEGMENTS = 12
 ORTHO_PORT_INSET = 0.22
 ORTHO_LANE_MIN = 2.5
 ORTHO_LANE_CLEAR = 1.0
+#: 单行布局（所有词排在**同一条带**上，如「流程线（水平）」）没有相邻行可用：
+#: 同层连线绕行时走**行外**这么宽的一条虚拟车道（行顶之上 / 行底之下）。
+ORTHO_VIRTUAL_GAP = 20.0
 #: 连线的**统一颜色与线宽**（用户口径：以前层级 / 方向 / 交叉 / 人工四种线各自
 #: 一个灰度、人工还更粗，图上一眼看去「粗细颜色都不同」，很乱）——
 #: 现在所有连线只有**一种颜色、一种线宽**，类型只靠**虚线**与线上的短标签区分。
@@ -1274,6 +1277,63 @@ def _routing_obstacles(nodes, exclude, m: MapMetrics):
                  if int(node.entry_id) not in exclude)
 
 
+def _route_segments(points):
+    """折线的逐段坐标 ``(x1, y1, x2, y2)``（纯函数）。"""
+    for index in range(len(points) - 1):
+        (x1, y1), (x2, y2) = points[index], points[index + 1]
+        yield float(x1), float(y1), float(x2), float(y2)
+
+
+def _segments_intersect(first, second) -> bool:
+    """两段是否**真穿过**对方（纯函数）。端头搭在对方身上、共线重叠，都不算。
+
+    判据：四个叉积**都非零**、且各自跨过对方所在直线。只写
+    ``(o1 > 0) != (o2 > 0)`` 会把「一条线的端头正好落在另一条线上」（T 形接头）
+    也算成交叉 —— 正交排线里那是常态（`.tmp\probe_m12_why.py` 因此虚报过
+    flow-v 4 处交叉）。叉积是**面积量纲**，浮点零判别用 ``1e-9``；
+    :data:`LAYOUT_EPS`（0.5）是长度量纲，在这里不合适。
+    """
+    ax1, ay1, ax2, ay2 = first
+    bx1, by1, bx2, by2 = second
+
+    def side(px, py, qx, qy, rx, ry):
+        value = (qx - px) * (ry - py) - (qy - py) * (rx - px)
+        if abs(value) < 1e-9:
+            return 0
+        return 1 if value > 0 else -1
+
+    o1 = side(ax1, ay1, ax2, ay2, bx1, by1)
+    o2 = side(ax1, ay1, ax2, ay2, bx2, by2)
+    o3 = side(bx1, by1, bx2, by2, ax1, ay1)
+    o4 = side(bx1, by1, bx2, by2, ax2, ay2)
+    if 0 in (o1, o2, o3, o4):
+        return False
+    return o1 * o2 < 0 and o3 * o4 < 0
+
+
+def _route_crossings(first, second) -> int:
+    """两条折线**真交叉**的处数（纯函数）。
+
+    端点重合的段直接跳过：正交排线里两条线共用一个端口是常态，
+    那只是「碰了一下」，不是用户说的「交叉」。
+    """
+    count = 0
+    for ax1, ay1, ax2, ay2 in _route_segments(first):
+        for bx1, by1, bx2, by2 in _route_segments(second):
+            if ((abs(ax1 - bx1) < LAYOUT_EPS and abs(ay1 - by1) < LAYOUT_EPS)
+                    or (abs(ax1 - bx2) < LAYOUT_EPS
+                        and abs(ay1 - by2) < LAYOUT_EPS)
+                    or (abs(ax2 - bx1) < LAYOUT_EPS
+                        and abs(ay2 - by1) < LAYOUT_EPS)
+                    or (abs(ax2 - bx2) < LAYOUT_EPS
+                        and abs(ay2 - by2) < LAYOUT_EPS)):
+                continue
+            if _segments_intersect((ax1, ay1, ax2, ay2),
+                                   (bx1, by1, bx2, by2)):
+                count += 1
+    return count
+
+
 def _same_path(first, second) -> bool:
     """两条线是不是**同一串点**（容差 :data:`LAYOUT_EPS`；纯函数）。
 
@@ -1286,136 +1346,325 @@ def _same_path(first, second) -> bool:
                for a, b in zip(first, second))
 
 
-def _orthogonal_routes(base_edges, nodes, m: MapMetrics):
-    """跨层连线统一排成**正交三段线**（上层卡片底边 → 车道 → 下层卡片顶边）。
+def _visual_rows(nodes, m: MapMetrics):
+    """按**几何位置**把卡片分行 —— 不再信 ``node.row``（纯函数）。
+
+    为什么要现算：模板（树 / 组织架构 / 流程线 / 鱼骨…）只换卡片的 ``x`` / ``y``，
+    ``node.row`` 仍旧是默认分层布局留下的值。过去排线拿它去查「哪两行相邻、空档
+    在哪」，模板下与真实几何对不上 —— 实测 ``tree`` 模板里 ``row=0`` 的三个节点
+    y 相差 318px、``flow-h`` 模板里四种 row 挤在同一条 y 上，于是同一张图里有的边
+    排成整齐的正交线、有的整条退回折线绕行（用户报的「有的线很顺、有的线绕来绕
+    去」）。现在只认几何：**竖直投影重叠过半的卡片算同一行**。
+
+    返回 ``(row_of, band, members)``：行号从 0 起（0 = 最上面一行）、每行的上下
+    边界、每行的卡片（按 x 排序）。孤立词不参与（它们没有任何关系边）。
+    """
+    items = [node for node in nodes if not node.isolated]
+    items.sort(key=lambda node: (float(node.y), float(node.x)))
+    rows: list[list] = []                       # [top, bottom, [node, ...]]
+    for node in items:
+        top = float(node.y) - float(node.h) / 2.0
+        bottom = float(node.y) + float(node.h) / 2.0
+        if rows:
+            last = rows[-1]
+            overlap = min(bottom, last[1]) - max(top, last[0])
+            if overlap > 0.45 * min(float(node.h), last[1] - last[0]):
+                last[0] = min(last[0], top)
+                last[1] = max(last[1], bottom)
+                last[2].append(node)
+                continue
+        rows.append([top, bottom, [node]])
+    row_of: dict[int, int] = {}
+    band: dict[int, tuple[float, float]] = {}
+    members: dict[int, list] = {}
+    for index, (top, bottom, group) in enumerate(rows):
+        band[index] = (float(top), float(bottom))
+        members[index] = sorted(group, key=lambda node: float(node.x))
+        for node in group:
+            row_of[int(node.entry_id)] = index
+    return row_of, band, members
+
+
+def _orthogonal_routes(base_edges, nodes, m: MapMetrics, *, axis: str = "y"):
+    """把连线排成**整数拐点的正交线**，每条边挑第一条真正干净的走法（纯函数）。
 
     返回与 ``base_edges`` 等长的列表（``None`` = 这条边仍交给 :func:`route_edges`
     的候选搜索）。规范：
 
-    * 只管 ``hierarchy`` / ``direction`` 边（它们表达「上下层级」）：相邻**两行**走两行
-      之间的空档，**跨行**的边走目标行上方那条空档（垂直段从源卡片底边直下，
-      中间隔着别的行时由净空检查兜底退回候选搜索）；``cross`` / ``feedback`` 保持
-      弧线 —— 它们是「横跨 / 反馈」的视觉语言，必须和层级直连一眼分得开；
-      键是**行号**而不是层号：一层太宽时会被均匀分带（见 ``_layout_core``），
-      带与带互为相邻行，同层跨带的边因此**不**走这条规则（竖线会穿过中间的带）；
-    * **端口分散**：同一张卡片同一侧的多条边按对端 x 排序后等距分端口，不再挤在
+    * **行由几何现算**（见 :func:`_visual_rows`）：``node.row`` 在模板下是旧值，
+      不能再拿它算「哪两行相邻、空档在哪」；
+    * **按模板定主轴**（``map_templates.route_axis_of``）：左右长的模板（流程线
+      水平 / S 型 / 单向导图）把整张图转置 90° 后用同一套规则算，点序再转回来 ——
+      一套规则管两种朝向，水平模板的车道因此变成竖车道；
+    * **同层两张卡**：中间没有别的卡就直接连一条水平直线（虚线本身已经说明它是
+      「对照」这类横跨关系），隔着别的卡就**从本行上方（或下方）绕过去**，走成
+      ∩ / ∪ 形，不再丢给折线绕行；
+    * **相邻两行**：走它们之间的空档（``上卡底边 → 车道 → 下卡顶边``）；
+    * **跨行**：依次试「目标行上方那条空档」「源行下方那条空档」，都不干净就
+      **贴着一侧的走廊绕**（``源卡底边 → 车道 → 走廊 → 车道 → 目标卡顶边``）——
+      走廊取中间各行卡片整体轮廓之外，竖段因此绝不穿过卡片；
+    * **端口分散**：同一张卡同一侧的多条边按对端 x 排序后等距分端口，不再挤在
       同一个点上；
-    * **车道分道**：同一层间空档里的水平段按中点 x 排序排进不同车道，同层的线互不
-      压住；车道全部落在 ``v_gap`` 空档里（那里没有任何卡片）；
+    * **车道分道**：同一个空档里的水平段分进不同车道，同层的线互不压住；
     * 生成的点仍要过 :func:`route_is_clear` 才会被采用（拿不准就退回候选搜索）；
     * 点序**从源卡片到目标卡片**（反向依赖也在翻回来），箭头才会落在目标上。
     """
-    by_id = {int(node.entry_id): node for node in nodes}
-    row_of: dict[int, int] = {}
-    band: dict[int, list[float]] = {}
-    for node in nodes:
-        if node.isolated:
-            continue                      # 孤立词没有任何关系边
-        entry_id = int(node.entry_id)
-        row_of[entry_id] = int(node.row)
-        row = band.setdefault(int(node.row), [node.y - node.h / 2.0,
-                                              node.y + node.h / 2.0])
-        row[0] = min(row[0], node.y - node.h / 2.0)
-        row[1] = max(row[1], node.y + node.h / 2.0)
+    if str(axis or "y").strip().lower() == "x":
+        # 左右长的模板：把 x / y 换个个儿，用同一套「行 → 车道」规则算完再换回来。
+        # 卡片的宽高一起换，端口分散与空档判定才仍然按真实几何走。
+        transposed = [replace(node, x=node.y, y=node.x, w=node.h, h=node.w)
+                      for node in nodes]
+        routes = _orthogonal_plans(base_edges, transposed, m)
+        return [None if points is None
+                else [(float(y), float(x)) for (x, y) in points]
+                for points in routes]
+    return _orthogonal_plans(base_edges, nodes, m)
 
+
+def _corridor_routes(index, plan, port, lanes, by_id, m, clear, members):
+    """跨行边的「贴着走廊绕」候选（坐标系里行 = 横带）。"""
+    a, b = int(plan["a"]), int(plan["b"])
+    lane_a = lanes.get((index, (a, a + 1)))
+    lane_b = lanes.get((index, (b - 1, b)))
+    if lane_a is None or lane_b is None:
+        return []
+    inner = [node for row in range(a + 1, b) for node in members.get(row, ())]
+    if not inner:
+        return []
+    left = min(node.x - node.w / 2.0 for node in inner) - clear
+    right = max(node.x + node.w / 2.0 for node in inner) + clear
+    start_node = by_id[plan["start_id"]]
+    end_node = by_id[plan["end_id"]]
+    start_x, end_x = float(port[0]), float(port[1])
+    y0 = start_node.y + start_node.h / 2.0
+    y1 = end_node.y - end_node.h / 2.0
+    choices = [left - ORTHO_LANE_MIN * step for step in (1.0, 2.0, 3.0)]
+    choices += [right + ORTHO_LANE_MIN * step for step in (1.0, 2.0, 3.0)]
+    choices.sort(key=lambda cx: (abs(cx - start_x) + abs(cx - end_x), cx))
+    return [[(start_x, y0), (start_x, lane_a), (cx, lane_a),
+             (cx, lane_b), (end_x, lane_b), (end_x, y1)] for cx in choices]
+
+
+def _plan_routes(index, plan, port, lanes, by_id, m, clear, members):
+    """一条边的候选走法，**越整齐越靠前**（坐标系里行 = 横带，点序 = 几何序）。"""
+    start_node = by_id[plan["start_id"]]
+    end_node = by_id[plan["end_id"]]
+    start_x, end_x = float(port[0]), float(port[1])
+    out: list[list[tuple[float, float]]] = []
+    if plan["kind"] == "same":
+        # ① 两张卡挨着、中间没有别的卡挡住：一条水平直线最整齐
+        left, right = ((start_node, end_node) if start_node.x <= end_node.x
+                       else (end_node, start_node))
+        mid_y = (float(left.y) + float(right.y)) / 2.0
+        x0 = float(left.x) + float(left.w) / 2.0
+        x1 = float(right.x) - float(right.w) / 2.0
+        if x1 - x0 > LAYOUT_EPS:
+            straight = [(x0, mid_y), (x1, mid_y)]
+            out.append(straight if start_node.x <= end_node.x
+                       else list(reversed(straight)))
+        # ② 挡着就绕本行的上方 / 下方，走成 ∩ / ∪ 形
+        for key, side in zip(plan["gaps"], plan["sides"]):
+            lane = lanes.get((index, key))
+            if lane is None:
+                continue
+            if side == "top":
+                y0 = start_node.y - start_node.h / 2.0
+                y1 = end_node.y - end_node.h / 2.0
+            else:
+                y0 = start_node.y + start_node.h / 2.0
+                y1 = end_node.y + end_node.h / 2.0
+            out.append([(start_x, y0), (start_x, lane), (end_x, lane), (end_x, y1)])
+        return out
+    y0 = start_node.y + start_node.h / 2.0
+    y1 = end_node.y - end_node.h / 2.0
+    if abs(start_x - end_x) < LAYOUT_EPS and abs(y1 - y0) > LAYOUT_EPS:
+        # 两张卡正对着（转置 90° 的链式模板里就是「挨着」）：一条直线最整齐；
+        # 中间隔着别的卡时这条会被 ``route_is_clear`` 否掉，自然退回绕行
+        out.append([(start_x, y0), (start_x, y1)])
+    for key in plan["gaps"]:
+        lane = lanes.get((index, key))
+        if lane is None:
+            continue
+        out.append([(start_x, y0), (start_x, lane), (end_x, lane), (end_x, y1)])
+    if int(plan["b"]) - int(plan["a"]) > 1:
+        out.extend(_corridor_routes(index, plan, port, lanes, by_id, m, clear,
+                                    members))
+    return out
+
+
+def _orthogonal_plans(base_edges, nodes, m: MapMetrics):
+    """正交排线的实现（坐标系已按主轴转置好，这里只认「行 = 上下」）。"""
+    by_id = {int(node.entry_id): node for node in nodes}
+    row_of, band, members = _visual_rows(nodes, m)
+    last_row = len(band) - 1
     clear = float(m.route_margin) + ORTHO_LANE_CLEAR
+    kinds = ("hierarchy", "direction", "cross")
+
+    def gap_of(near: int, far: int):
+        """两行之间的空档 ``(top, bottom)``；太窄就返回 None（塞不下车道）。
+
+        ``near < 0`` / ``far > last_row`` 是**行外**的虚拟空档：单行布局只有
+        一条带，同层连线没地方绕，就贴着「行顶之上 / 行底之下」这一条走。
+        """
+        if near < 0:
+            bottom = float(band[0][0])
+            return bottom - ORTHO_VIRTUAL_GAP, bottom
+        if far > last_row:
+            top = float(band[last_row][1])
+            return top, top + ORTHO_VIRTUAL_GAP
+        if near not in band or far not in band:
+            return None
+        top = float(band[near][1])
+        bottom = float(band[far][0])
+        if bottom - top <= 2.0 * clear + ORTHO_LANE_MIN:
+            return None
+        return top, bottom
+
+    # ---- ① 归类：每条边算成「同层 / 相邻行 / 跨行」 ----
     plans: list[dict | None] = []
     for base in base_edges:
         src, dst, _type = _relation_parts(base.rel)
-        upper, lower = by_id.get(src), by_id.get(dst)
+        src_node, dst_node = by_id.get(int(src)), by_id.get(int(dst))
         plan = None
-        if (upper is not None and lower is not None
-                and base.kind in ("hierarchy", "direction")):
+        if (src_node is not None and dst_node is not None
+                and base.kind in kinds):
             a, b = row_of.get(int(src)), row_of.get(int(dst))
-            flipped = False
-            if a is not None and b is not None and a != b:
-                if a > b:
-                    # 源卡片在目标卡片**下面**（例如「降采样 依赖 算子」这种反向依赖）：
-                    # 几何排布仍然按「上面的卡片 → 下面的卡片」算，但点序必须
-                    # 从**源**到**目标**，否则 ``arrow="last"`` 的箭头会画在源卡片上。
-                    upper, lower, a, b = lower, upper, b, a
-                    flipped = True
-                # 相邻两行用它们之间的空档；**跨行**的边退而使用「目标行上方」那条
-                # 空档（垂直段照旧从源卡片底边直下 —— 中间隔着别的行时，只要那条
-                # 竖线撞到卡片，下面 ``route_edges`` 的净空检查就会把它退回候选搜索）。
-                near, far = (a, b) if b - a == 1 else (b - 1, b)
-                gap_top = band.get(near, [0.0, 0.0])[1]
-                gap_bottom = band.get(far, [0.0, 0.0])[0]
-                if gap_bottom - gap_top > 2.0 * clear + ORTHO_LANE_MIN:
-                    plan = {"upper": int(upper.entry_id), "lower": int(lower.entry_id),
-                            "key": (near, far), "top": gap_top, "bottom": gap_bottom,
-                            "y0": upper.y + upper.h / 2.0,
-                            "y1": lower.y - lower.h / 2.0,
-                            "src_x": upper.x, "dst_x": lower.x,
-                            "flipped": flipped}
+            if a is not None and b is not None:
+                common = {"src": int(src), "dst": int(dst)}
+                if a == b:
+                    gaps, sides = [], []
+                    if a == 0 and last_row == 0:
+                        # 单行布局：上下都没有别的行，只能走行外的虚拟车道；
+                        # 优先走**行下方**（主题母线都在上面，别去挤）
+                        gaps.append((a, a + 1))
+                        sides.append("bottom")
+                    else:
+                        if a > 0 and gap_of(a - 1, a) is not None:
+                            gaps.append((a - 1, a))
+                            sides.append("top")
+                        elif a == 0:
+                            gaps.append((-1, 0))
+                            sides.append("top")
+                        if a < last_row and gap_of(a, a + 1) is not None:
+                            gaps.append((a, a + 1))
+                            sides.append("bottom")
+                        elif a == last_row:
+                            gaps.append((last_row, last_row + 1))
+                            sides.append("bottom")
+                    if gaps:
+                        plan = dict(common, kind="same", gaps=gaps, sides=sides,
+                                    start_id=int(src), end_id=int(dst),
+                                    start_side=sides[0], end_side=sides[0],
+                                    start_x=float(src_node.x),
+                                    end_x=float(dst_node.x), flipped=False)
+                else:
+                    flipped = a > b
+                    if flipped:
+                        a, b = b, a
+                        start_node, end_node = dst_node, src_node
+                    else:
+                        start_node, end_node = src_node, dst_node
+                    keys = [(a, b)] if b - a == 1 else [(b - 1, b), (a, a + 1)]
+                    keys = [key for key in keys if gap_of(*key) is not None]
+                    if keys:
+                        plan = dict(common, kind="move", a=a, b=b, gaps=keys,
+                                    start_id=int(start_node.entry_id),
+                                    end_id=int(end_node.entry_id),
+                                    start_side="bottom", end_side="top",
+                                    start_x=float(start_node.x),
+                                    end_x=float(end_node.x), flipped=flipped)
         plans.append(plan)
 
+    # ---- ② 端口分散：同一张卡同一侧的多条边按对端 x 排序后等距分端口 ----
     def far_x(plan: dict, entry_id: int) -> float:
-        """这条边**另一端**的默认 x（端口排序用，与最终端口无关）。"""
-        return plan["dst_x"] if plan["upper"] == entry_id else plan["src_x"]
+        return plan["end_x"] if plan["start_id"] == entry_id else plan["start_x"]
 
-    # 端口分散：同一张卡片同一侧的多条边按对端 x 排序，在边宽内等距分开
     ends: dict[tuple[int, str], list[int]] = {}
     for index, plan in enumerate(plans):
         if plan is None:
             continue
-        ends.setdefault((plan["upper"], "bottom"), []).append(index)
-        ends.setdefault((plan["lower"], "top"), []).append(index)
+        ends.setdefault((plan["start_id"], plan["start_side"]), []).append(index)
+        ends.setdefault((plan["end_id"], plan["end_side"]), []).append(index)
     ports: dict[int, list[float]] = {}
-    for (entry_id, side), members in ends.items():
+    for (entry_id, side), group in ends.items():
         node = by_id[entry_id]
-        inset = max(2.0, min(float(m.pad_x), node.w * ORTHO_PORT_INSET))
-        half = max(0.0, node.w / 2.0 - inset)
-        ordered = sorted(members, key=lambda index: (far_x(plans[index], entry_id),
-                                                     index))
+        inset = max(2.0, min(float(m.pad_x), float(node.w) * ORTHO_PORT_INSET))
+        half = max(0.0, float(node.w) / 2.0 - inset)
+        ordered = sorted(group, key=lambda index: (far_x(plans[index], entry_id),
+                                                   index))
         step = (2.0 * half) / float(len(ordered) - 1) if len(ordered) > 1 else 0.0
         for position, index in enumerate(ordered):
-            x = node.x - half + step * position if len(ordered) > 1 else node.x
-            ports.setdefault(index, [node.x, node.x])[0 if side == "bottom" else 1] = x
+            plan = plans[index]
+            slot = 0 if (plan["start_id"] == entry_id
+                         and plan["start_side"] == side) else 1
+            x = float(node.x) - half + step * position if len(ordered) > 1 \
+                else float(node.x)
+            ports.setdefault(index, [float(node.x), float(node.x)])[slot] = x
 
-    def source_x(index: int) -> float:
-        plan = plans[index]
-        return ports.get(index, [plan["src_x"], plan["dst_x"]])[0]
-
-    # 车道：同一层间空档里的水平段分道，在空档正中居中。
-    # **车道的上下次序按「起点 x 从右到左」排**：两条不交叉的线（起点与终点同序）里，
-    # 起点偏左的那条放到**下面的车道** ⇒ 它的垂直短段不会穿过另一条的水平段。
-    # （反过来排会让每条线的垂直段都从别的车道上穿过去，凭空多出一批交叉。）
-    lanes: dict[int, float] = {}
-    groups: dict[tuple[int, int], list[int]] = {}
+    # ---- ③ 车道分道：同一个空档里的水平段分进不同车道 ----
+    need: dict[tuple[int, int], list[int]] = {}
     for index, plan in enumerate(plans):
-        if plan is not None:
-            groups.setdefault(plan["key"], []).append(index)
-    for members in groups.values():
-        plan = plans[members[0]]
-        top, bottom = plan["top"], plan["bottom"]
+        if plan is None:
+            continue
+        for key in plan["gaps"]:
+            need.setdefault(key, []).append(index)
+    lanes: dict[tuple[int, tuple[int, int]], float] = {}
+    for key, group in need.items():
+        top, bottom = gap_of(*key)
         span = max(0.0, (bottom - clear) - (top + clear))
         center = (top + bottom) / 2.0
-        ordered = sorted(members, key=lambda index: (-source_x(index), index))
+        # 车道从「靠行的一侧」往外排：**短跨度的线走内圈、长跨度的线走外圈**。
+        # 这样一条长线的横段不会被人家的竖直小段穿过去（交叉就少了）。
+        from_below = False
+        for index in set(group):
+            plan = plans[index]
+            if plan["kind"] == "same":
+                from_below = from_below or plan["start_side"] == "top"
+            elif (int(plan["b"]) == int(key[1])
+                  and int(plan["b"]) - int(plan["a"]) > 1):
+                from_below = True
+        ordered = sorted(
+            set(group),
+            key=lambda index: (abs(float(plans[index]["end_x"])
+                                   - float(plans[index]["start_x"])),
+                               index))
+        if from_below:
+            ordered.reverse()
         count = len(ordered)
         spacing = 0.0
         if count > 1:
             spacing = max(ORTHO_LANE_MIN,
                           min(float(m.line_h) * 0.6, span / float(count - 1)))
         for position, index in enumerate(ordered):
-            lanes[index] = center + (position - (count - 1) / 2.0) * spacing
+            lanes[(index, key)] = center + (position - (count - 1) / 2.0) * spacing
 
+    # ---- ④ 逐条挑走法：第一条真正干净的才算数 ----
     routes: list[list[tuple[float, float]] | None] = [None] * len(base_edges)
+    settled: list[list[tuple[float, float]]] = []
     for index, plan in enumerate(plans):
-        if plan is None or index not in lanes:
+        port = ports.get(index) if plan is not None else None
+        if plan is None or port is None:
             continue
-        port = ports.get(index, [plan["src_x"], plan["dst_x"]])
-        start_x, end_x = port[0], port[1]
-        if abs(start_x - end_x) < LAYOUT_EPS:
-            points = [(start_x, plan["y0"]), (start_x, plan["y1"])]
-        else:
-            lane = lanes[index]
-            points = [(start_x, plan["y0"]), (start_x, lane),
-                      (end_x, lane), (end_x, plan["y1"])]
-        if plan["flipped"]:
-            # 反向依赖（源在下面）：翻回「源 → 目标」的点序，箭头才落在目标上。
-            points.reverse()
-        routes[index] = points
+        obstacles = _routing_obstacles(nodes, {int(plan["src"]), int(plan["dst"])}, m)
+        best: tuple[int, int, list[tuple[float, float]]] | None = None
+        for order, points in enumerate(_plan_routes(index, plan, port, lanes,
+                                                    by_id, m, clear, members)):
+            if len(points) < 2:
+                continue
+            if plan["flipped"]:
+                points = list(reversed(points))
+            if not route_is_clear(points, obstacles):
+                continue
+            # 用户口径「不要出现关系线交叉」：先把「跟已经定下来的线交叉几处」
+            # 当第一判据，同样干净才比「先后顺序」（顺序 = 越整齐越靠前）。
+            clashes = sum(_route_crossings(points, other) for other in settled)
+            if best is None or clashes < best[0]:
+                best = (clashes, order, points)
+            if clashes == 0:
+                break
+        if best is not None:
+            routes[index] = best[2]
+            settled.append(best[2])
     return routes
 
 
@@ -1423,10 +1672,11 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
     """给每条关系**选一条真实画得出来的线**，并放好它的类型标签（纯函数）。
 
     * 一条边绝不穿过**非端点**节点的矩形（含小间距：障碍按 ``route_margin`` 外扩）；
-    * 相邻两层的层级 / 方向边走**正交三段线**（``ortho`` 参数给出，见
-      :func:`_orthogonal_routes`）：这是排版规范，只要它本身干净就一定采用 ——
-      脏了就退回候选搜索，**绝不硬穿**；
-    * 跨边 / 反馈先试弧线（正反两个方向 + 多档弯曲），不行再折线绕行；
+    * 层级 / 方向 / 跨边走**正交线**（``ortho`` 参数给出，见
+      :func:`_orthogonal_routes`）：这是排版规范 —— 同层直连或绕行、相邻行走车道、
+      跨行走走廊；只要它本身干净就一定采用，脏了就退回候选搜索，**绝不硬穿**；
+    * 反馈先试弧线（正反两个方向 + 多档弯曲），不行再折线绕行；
+    * 兜底候选里跨边仍优先弧线（那是「横跨」的视觉语言）；
     * 关系标签避开所有节点矩形与已放好的标签，同时仍然贴着它自己的那条边；
     * 同一对词之间的第二条线**不许和第一条重合**（重合会被读成一条粗线）；
     * ``对照`` 是对称关系：``symmetric=True``（两端都不画箭头）。
@@ -1567,7 +1817,9 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
     * 内容外框把节点、连线、标签、孤立词标题全部包住（加左右 / 上下留白），
       ``scrollregion`` 与「节点不出界」都用它；
     * ``pins``（F2）：用户把某几张卡拖到过的地方 —— 这几张卡直接落在他摆的位置
-      （画布坐标里的卡片中心，只夹左上留白的下限），其余卡片照上面的规则自动排。
+      （**世界坐标**里的卡片中心，即 ``zoom = 1`` 的逻辑坐标；缩放由
+      :func:`_scaled_layout` 统一乘，所以传画布坐标会让卡片落到 ``pin × zoom``
+      上）。只夹左上留白的下限，其余卡片照上面的规则自动排。
     * ``template``（G1）：布局骨架（思维导图 / 树状图 / 组织架构图 / 单向导图 /
       鱼骨图 / 流程线，见 :mod:`app.ui.map_templates`）。**只替换「卡片摆在哪」这一步**，
       布线 / 标签 / 分组底衬 / 内容外框照旧；骨架和数据不搭时坐标保持默认，并留下
@@ -1750,8 +2002,10 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
     by_id = {int(node.entry_id): node for node in nodes}
     if pins:
         # ---- 用户固定过位置的卡片（F2）：把这几张卡搬到他摆的地方，剩下的仍然
-        #      自动排。位置是**画布坐标里的卡片中心**；只夹一个下限（别越出左上角
-        #      的留白），不夹上限 —— 他想摆多远就摆多远，内容外框会跟着长。
+        #      自动排。位置是**世界坐标里的卡片中心**（``zoom = 1``；:meth:`pin_node`
+        #      已经替我们把画布坐标除过缩放了 —— 这里在世界坐标下摆，缩放由
+        #      `_scaled_layout` 最后统一乘）。只夹一个下限（别越出左上角的留白），
+        #      不夹上限 —— 他想摆多远就摆多远，内容外框会跟着长。
         #      连线、分组底衬、内容外框都在下面才计算，所以全都跟着新位置走。
         wanted = {int(key): (float(value[0]), float(value[1]))
                   for key, value in pins.items()}
@@ -1799,10 +2053,14 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
                 kind = "feedback"         # 同一条强连通分量内部：反馈弧，不是前后层
         base_edges.append(LayoutEdge(rel, kind, (), rel_type, (0.0, 0.0),
                                      rel_type in SYMMETRIC_TYPES))
-    # 布线规范都在 ``_orthogonal_routes`` 里：相邻两层的层级 / 方向边走正交三段线
-    # （端口分散 + 车道分道），跨层 / 跨边 / 反馈仍走候选搜索。节点位置一个字不动。
-    edges = route_edges(base_edges, nodes, m,
-                        ortho=_orthogonal_routes(base_edges, nodes, m))
+    # 布线规范都在 ``_orthogonal_routes`` 里：先把卡片按几何分行（模板只换坐标，
+    # ``node.row`` 是旧值，不能再信），再按模板主轴决定车道朝向 —— 同层走直连 /
+    # ∩∪ 绕行、相邻行走车道、跨行走走廊；只有反馈边仍走弧线。节点位置一个字不动。
+    edges = route_edges(
+        base_edges, nodes, m,
+        ortho=_orthogonal_routes(
+            base_edges, nodes, m,
+            axis=map_templates.route_axis_of(template_used)))
 
     # ---- 内容外框：节点 / 连线 / 标签 / 孤立词标题全部包住，再加一圈留白 ----
     right = content_left + inner_w
@@ -3474,7 +3732,9 @@ class ConceptMapWindow:
         node = self._node_by_id(int(entry_id))
         if node is None:  # pragma: no cover - 卡片已经被删掉了
             return
-        # 拖到哪儿就固定在哪儿（相对抓取点的偏移保持住，手指下的位置不跳）
+        # 拖到哪儿就固定在哪儿（相对抓取点的偏移保持住，手指下的位置不跳）。
+        # `off` 与 `x/y` 都是画布坐标，减出来仍是画布坐标；转换成世界坐标
+        # 是 `pin_node` 内部的事（见 `_to_world`）。
         want_x = x - off_x
         want_y = y - off_y
         ok, message = self.pin_node(int(entry_id), want_x, want_y)
@@ -3653,7 +3913,7 @@ class ConceptMapWindow:
 
     # ------------------------------------ 卡片位置固定（F2）/ AI 边黑名单（F3）
     def _reload_pins(self) -> bool:
-        """从本地库重读「被拖过的卡片位置」（零网络）。
+        """从本地库重读「被拖过的卡片位置」（世界坐标，零网络）。
 
         位置只在**本主题**下有意义；读库失败当「一张都没固定过」——
         自动布局照常画，绝不因为读不到位置就把整张图弄崩。
@@ -3685,26 +3945,53 @@ class ConceptMapWindow:
         return changed
 
     def pinned_positions(self) -> dict[int, tuple[float, float]]:
-        """交给布局的固定位置（一份拷贝）。布局只认自己有的词条，多余的自然被忽略。"""
+        """交给布局的固定位置（一份拷贝，**世界坐标** / ``zoom = 1``）。
+
+        布局只认自己有的词条，多余的自然被忽略。传给
+        :func:`layout_graph` / :func:`layout_extent` 的都是这一份 —— 两处必须同
+        口径，否则首开自适应会按错误的外框算缩放。
+        """
         return dict(getattr(self, "_pins", {}) or {})
 
+    def _to_world(self, x, y) -> tuple[float, float]:
+        """画布坐标 → **世界坐标**（``zoom = 1`` 的逻辑坐标）：除以当前缩放。
+
+        :func:`_layout_core` 在世界坐标下摆卡片，:func:`_scaled_layout` 最后统一
+        乘缩放 —— 所以只有「世界坐标」这一种口径是自洽的：滚轮缩放时整张图
+        （含被固定过的卡片）一起缩，卡片不会跟其余卡片脱节。
+        """
+        try:
+            factor = float(getattr(self, "_zoom", 1.0) or 1.0)
+        except (TypeError, ValueError):  # pragma: no cover - 缩放一定是数字
+            factor = 1.0
+        if factor <= 0.0 or abs(factor - 1.0) < 1e-9:
+            return float(x), float(y)
+        return float(x) / factor, float(y) / factor
+
     def pin_node(self, entry_id, x, y) -> tuple[bool, str]:
-        """把一张词卡固定到 ``(x, y)``（画布坐标里的**卡片中心**）。
+        """把一张词卡固定到 ``(x, y)``（传进来的是**画布坐标**里的卡片中心）。
 
         拖动松手时调用：写库 + 记住新位置；下一次绘制（以及下次打开这张图）
         这张卡就落在这里，重新生成只换 AI 关系、不动它。
+
+        **画布坐标进来、世界坐标出去**（见 :meth:`_to_world`）。多用户一格缩放
+        就会差一截：缩放 0.75 时把画布坐标直接当世界坐标存，重画后卡片会落到
+        ``pin × 0.75`` 上 —— 用户 2026-10-06 报的「鼠标拖拽松开后，标签不会停留
+        在鼠标松开的位置」就是这个。真机探针量的现场：松手在画布 (224.57, 213.00)，
+        落库也是它，重画后卡片中心却是 (168.50, 160.00)。
         """
         if self._topic_id is None:
             return False, "还没有选中主题"
+        world_x, world_y = self._to_world(x, y)
         try:
             eid = int(entry_id)
-            self.db.set_node_pin(int(self._topic_id), eid, float(x), float(y))
+            self.db.set_node_pin(int(self._topic_id), eid, world_x, world_y)
         except ValueError as exc:
             return False, str(exc)
         except Exception:
             log.exception("固定卡片位置失败")
             return False, "固定卡片位置失败，详见日志"
-        self._pins[eid] = (float(x), float(y))
+        self._pins[eid] = (world_x, world_y)
         return True, ""
 
     def reset_node_pins(self) -> None:
