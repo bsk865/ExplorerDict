@@ -207,24 +207,12 @@ class SettingsDialog:
                            activeforeground=theme.TEXT, selectcolor=theme.BG,
                            highlightthickness=0, bd=0, anchor="w").pack(fill="x")
 
-        # ---------------------------------------------------------- 关系图（G3）
-        self._section(wrap, "关系图")
-        self.var_ask_template = tk.BooleanVar(
-            value=bool(self.cfg.get_bool("map.template_ask_model", False)))
-        tk.Checkbutton(wrap, text="打开模板对话框时，也让模型看一眼该用哪种排法",
-                       variable=self.var_ask_template, bg=theme.BG, fg=theme.TEXT,
-                       font=theme.font(9), activebackground=theme.BG,
-                       activeforeground=theme.TEXT, selectcolor=theme.BG,
-                       highlightthickness=0, bd=0, anchor="w").pack(
-            anchor="w", padx=theme.px(10), pady=(theme.px(6), 0))
-        tk.Label(wrap, text="默认关。勾上后，只有你按「让模型也看一眼」时才会发一次请求 ——"
-                            "发出去的是这张图的关系类型与起止词名（例如"
-                            "「卷积 包含 池化」），不含上下文、释义、依据与证据，"
-                            "也不含其它主题；模型只回一个排法名字与一句理由，"
-                            "不会改动任何关系。关着时一直用本地规则，零额外花费。",
-                 bg=theme.BG, fg=theme.TEXT_FAINT, font=theme.font(8), anchor="w",
-                 justify="left", wraplength=theme.px(520)).pack(
-            anchor="w", padx=theme.px(10), pady=(theme.px(2), 0))
+        # ---------------------------------------------------------- 关系图（搬走了）
+        # 本轮（用户口径 2026-10-04）：「思维导图的导出和相关设置都需要在导图界面中，
+        # 主界面不应该显示导图的相关设置」—— 原来这里的「关系图」一节（模板是否让模型
+        # 也看一眼）已搬进导图窗口的「导图设置…」，主界面不再显示，也不在这里保存。
+        # 设置键仍是 ``map.template_ask_model``（默认关），代码见
+        # :mod:`app.ui.map_settings_dialog`。
 
         # ---- 同一个概念再次被划到（B4）：建新词条 / 追加上下文 ----
         tk.Label(wrap, text="同一个概念再次被划到（上下文不同）：", bg=theme.BG,
@@ -422,8 +410,8 @@ class SettingsDialog:
         self.cfg.set_bool("chat.enabled", self.var_chat_enabled.get())
         self.cfg.set_bool("gate.game_mode", self.var_game.get())
         self.cfg.set_bool("capture.enabled", not self.var_paused.get())
-        #: 关系图（G3）：勾了才允许「让模型也看一眼」发请求（默认关）
-        self.cfg.set_bool("map.template_ask_model", self.var_ask_template.get())
+        #: 关系图那一节（``map.template_ask_model``）本轮搬进「导图设置…」——
+        #: 主界面不再显示、也不再写这个键（见 app\ui\map_settings_dialog.py）
         #: 「追加上下文」只认 "append"，其它都是 "new"（见 Config.duplicate_action）
         self.cfg.set("capture.duplicate_action",
                      "append" if str(self.var_dup_action.get()) == "append" else "new")

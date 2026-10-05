@@ -58,17 +58,31 @@ AUTO_FIT_MIN = 0.75
 #: 压在图左上角、挡住内容，用户明确要求删掉，操作提示改放画布**右下角**。
 MAP_TAG = "AI 参考"
 #: 画布右下角的操作提示（**一行一条**，行与行之间留空档）。用户原来给的三行
-#: （右键平移 / 滚轮缩放 / 点连线看依据）仍在，前三行改成把 F1–F3 的新操作
-#: 也写进去 —— 拖拽连线与拖动卡片完全靠手感发现不了，必须写在提示里。
-#: **建关系用 Alt + 左键**（用户口径）：卡片上不再放小圆点状的连接点，
-#: 免得抓卡片时被它抢走手势。
-HINT_LINES = ("左键拖卡片 = 摆位置（拖过就固定）· 按住 Alt + 左键拖到别的卡 = 建关系",
-              "点连线 = 看依据 · 双击连线 = 改类型 / 删掉 · 双击词卡 = 打开词条",
-              "鼠标右键 = 平移 · 鼠标滚轮 = 缩放")
+#: （右键平移 / 滚轮缩放 / 点连线看依据）仍在，前三行改成把 F1–F3 与本轮的新
+#: 操作也写进去 —— 拖拽连线、拖动卡片、左键拖空白平移，全靠手感发现不了，
+#: 必须写在提示里（用户口径：「只需要简单说明和操作提示」）。
+#: **左键 = 拖；Alt + 左键 = 建关系**（用户口径 2026-10-04）：卡片上不再放小圆点
+#: 状的连接点，免得抓卡片时被它抢走手势；左键拖**空白处**也参与平移
+#: （ProjectGraph 式：抓边框就能挪整张图，按住 Alt 才切到建关系）。
+HINT_LINES = ("按住 Alt + 左键从一张卡拖到另一张 = 建关系 · 左键拖空白处 = 平移整张图",
+              "左键拖卡片 = 摆位置（拖过就固定）· 鼠标滚轮 = 缩放 · 点连线 = 看依据",
+              "双击连线 = 改类型 / 删掉 · 双击词卡 = 打开词条 · 鼠标右键拖动 = 平移")
 #: 提示行之间的空档（设备像素，随 DPI 换算）
 HINT_ROW_GAP = 6
 #: 提示块离画布右下角的距离（设备像素）
 HINT_INSET = 10
+#: 展开后多久自动淡出折叠（毫秒）——用户口径：「用户刚刚打开时展开进行提示，
+#: 过 20 秒之后淡出折叠」。**这是提示的存在时长，不是可配项**：不写进 settings。
+HINT_EXPAND_MS = 20000
+#: 淡出分成几步、每步多少毫秒（``steps × step_ms`` = 淡出总时长）。
+#: tk 没有真正的透明度（``-alpha`` 是整窗属性，套在 ``Toplevel`` 上会把整个导图窗
+#: 一起变半透明），所以「淡出」只能这样模拟：把文字色从 ``TEXT_MUTED`` 一格一格
+#: 混向画布底色，最后收成一行小字。
+HINT_FADE_STEPS = 6
+HINT_FADE_STEP_MS = 90
+#: 折叠后那一行的文案（可点，点开重新展开）——「操作说明」与工具条上那个按钮同名，
+#: 用户一眼知道点它会看到什么。
+HINT_COLLAPSED_TEXT = "操作说明"
 #: 点选连线的命中半径（逻辑像素）
 HIT_TOL = 10
 #: 点选词卡的**外扩**半径（逻辑像素）：贴着卡片边缘点一下也算点中这个词
@@ -90,9 +104,11 @@ INTERACTIONS: tuple[tuple[str, str], ...] = (
     ("左键单击连线", "选中这条线：右栏写它的依据与证据片段"),
     ("左键单击空白", "取消选中"),
     ("左键拖动词卡", "摆位置（拖过就固定；「恢复自动布局」一键放回去）"),
+    ("左键拖动空白处", "平移整张图（project-graph 式：抓空白就能挪；右键拖动同样平移）"),
     ("Alt + 左键：从一张词卡拖到另一张", "建立一条人工关系（松开在空白处 = 取消）"),
     ("左键双击词卡", "回主界面打开这条词条"),
     ("左键双击连线", "人工关系 = 改类型 / 改依据 / 删掉；AI 关系 = 标为不对（以后不再画）"),
+    ("左键双击「孤立词…」那一行", "展开 / 收起孤立词诊断（展开后双击某行跳到那个词）"),
     ("鼠标右键拖动 / 中键拖动", "平移画布"),
     ("鼠标滚轮", "以指针为锚缩放"),
 )
@@ -115,8 +131,11 @@ BASIS_FROM_CONTEXT = "来源：阅读页上下文"
 BASIS_FROM_EXPLANATION = "来源：本工具已存释义"
 BASIS_FROM_UNKNOWN = "来源：端点材料"
 #: 孤立词那一行的短标题（**必须说准**：不是「AI 没给关系」，而是「模型给的候选
-#: 一条都没通过独立核对」—— 点这个词能看到每条候选被判定为不成立的理由）
-ISOLATED_TEXT = "孤立词（候选关系都没通过核对，点词看原因）"
+#: 一条都没通过独立核对」—— 点这一行能看到每条候选被判定为不成立的理由）。
+#: 本轮（用户口径：功能要内化进实际操作、不要一排单独的功能按钮）：工具条上原来
+#: 那个「孤立词诊断」按钮删掉了，改成**点画布上这一行**展开 / 收起诊断 ——
+#: 所以文案必须把「点这里」说出来（「点词看原因」会被读成点**词卡**）。
+ISOLATED_TEXT = "孤立词（候选关系都没通过核对 —— 点这一行看原因）"
 #: 孤立词说明里的一句话（点词之后的依据区抬头）
 ISOLATED_WHY = "这个词没有画出关系：模型提过下面这些候选，但没有一条通过独立核对"
 #: 孤立词**没有留下候选记录**时的说明（说准但不编：模型可能没提，也可能是被本地
@@ -1899,7 +1918,7 @@ def layout_extent(labels, relations, *, width: int, height: int, topic_label: st
 class ConceptMapWindow:
     """参考关系图窗口（单例由 ``App`` 保证；本类只管自己这一扇窗）。"""
 
-    def __init__(self, master: tk.Misc, app):
+    def __init__(self, master: tk.Misc, app, only_ids=None, full_ids=None):
         self.app = app
         self.db = app.db
         self.service = getattr(app, "map_service", None)
@@ -1937,6 +1956,16 @@ class ConceptMapWindow:
         #: 只分析选中的这些词条（空集合 = 分析全部）。改它必须重算指纹并重新生成 ——
         #: 子集与全部是**两份不同的分析结果**，指纹不同、缓存行也不同（改进清单 C3）。
         self._subset_ids: set[int] = set()
+        #: 主界面勾选进来的范围（K1）：非空 = 这张图只画/只分析这些词。与窗口内
+        #: 自己挑的子集共用 ``_subset_ids``（同一套裁剪、指纹与缓存口径），只是
+        #: 入口不同 —— 一个是主界面卡片上的勾选框，一个是图窗左边那张列表。
+        #: ``_only_topic_id`` 记「这个子集是为哪个主题设的」：:meth:`_load_topic`
+        #: 只放行那一次，之后用户自己换主题照旧清空（子集不跨主题沿用）。
+        self._only_topic_id: int | None = None
+        #: 构造期还没定主题时，:meth:`apply_only_ids` 把范围寄存在这里
+        #: （``(勾选的 id 集合, 那一组的全部 id 集合)``），:meth:`_load_topic` 取用。
+        self._pending_only_ids: tuple[set[int], set[int]] | None = None
+        self.apply_only_ids(only_ids, full_ids=full_ids)
         #: 用户人工添加的关系（:class:`app.map_service.ManualRelation`）。每次读库都
         #: 重新算一遍：人工关系是**用户自己的判断**，AI 重新生成绝不覆盖它（C5）。
         self._manual_rels: tuple = ()
@@ -1966,6 +1995,10 @@ class ConceptMapWindow:
         #: 见 :data:`DRAG_SLOP`：不算够位移就当单击，**既不固定卡片也不建关系**。
         self._press_xy: tuple[float, float] | None = None
         self._drag_started: bool = False
+        #: 左键拖**空白处** = 平移整张图（本轮，ProjectGraph 式）：按下点在空白上时
+        #: 记这里，之后每次 ``<B1-Motion>`` 按它算增量。不用 ``_pan_last``（那是右键
+        #: 平移的状态，``_pan_guard`` 拿它判「正在平移」，混用会吃掉松手那一下）。
+        self._bg_pan_last: tuple[float, float] | None = None
         #: 布局骨架（G1）：``"auto"`` = 一层一行的老布局；其余见
         #: :mod:`app.ui.map_templates`。存在设置里（``map.template``），换主题不变。
         self._template: str = self._read_template()
@@ -1973,6 +2006,22 @@ class ConceptMapWindow:
         self._template_note: str = ""
         #: 模板对话框（同一时间只开一个）
         self._template_dialog = None
+        #: 「导图设置…」窗口（同一时间只开一个）：模板 / 让模型参与 / 恢复自动布局 ——
+        #: 本轮从主界面「设置」搬进导图界面（用户口径）。
+        self._map_settings_dialog = None
+        #: 右下角操作提示（用户口径 2026-10-04）：**展开 20 秒后自动淡出折叠**。
+        #: ``_hint_expanded`` = 现在是不是三行全展开；``_hint_user_collapsed`` =
+        #: 这一次折叠是用户自己点掉的（点掉的就**不再自动展开**，否则手一快想收起来、
+        #: 又被定时器弹回来，等于这个折叠键坏了）；``_hint_fade_id`` = 待执行的定时器
+        #: id（关窗 / 重新展开时必须 ``after_cancel``，否则回调会打到已销毁的窗口上）。
+        self._hint_expanded: bool = True
+        self._hint_user_collapsed: bool = False
+        self._hint_fade_id = None
+        self._hint_fade_base: str | None = None
+        #: 淡出时的「起点色」怎么取（见 :meth:`_hint_fade_color`）：真实 Tk 的
+        #: ``Canvas`` 有 ``-bg``，画布就是它上面那块底色；取到了就按「画布底色」
+        #: 精确混色，取不到再用窗口底色兜底（本主题两者同色，肉眼无差）。
+        self._hint_tint_override: str | None = None
 
         self.win = tk.Toplevel(master)
         self.win.title("参考关系图 — 探索词典")
@@ -2070,26 +2119,29 @@ class ConceptMapWindow:
             except (tk.TclError, TypeError):  # pragma: no cover - 极简替身
                 continue
 
-        # ---- 右下角固定操作提示：三行，行间留空档（用户要求）----
-        # 它是**画布上的浮层**（``place``，不是画布图元）：右键平移 / 滚轮缩放时
-        # 视图在动，提示必须钉在窗口右下角不动。三行分开成三个 Label（Tk 的
-        # 多行文本没有行距参数），用 ``pady`` 制造行间空档。
-        # **不透明底板**（用户反馈：以前底色与画布同色（都是 PANEL），压在卡片与
-        # 连线上时看着像透明的、字也读不清）—— 换成卡片色 + 1px 边框 + 内边距，
-        # 像一张钉在右下角的小卡片。
-        self.hint_box = tk.Frame(self.canvas, bg=theme.CARD_BG,
-                                 highlightthickness=1,
-                                 highlightbackground=theme.BORDER)
-        self.hint_inner = tk.Frame(self.hint_box, bg=theme.CARD_BG)
+        # ---- 右下角操作提示：**可折叠**（用户口径 2026-10-04）----
+        # 原话：「右下角的提示你改成可折叠起来的，用户刚刚打开时展开进行提示，过 20 秒
+        # 之后淡出折叠。这个背景要是透明的，不要给提示背景板设置颜色。」
+        # 三件事对应三处：
+        # ① 刚打开 = 三行全展开，右对齐排在画布右下角（``place`` 的浮层，不是画布
+        #    图元 —— 平移 / 缩放时视图在动，提示必须钉在窗口角上不动）；
+        # ② 20 秒后**淡出**收成一行 :data:`HINT_COLLAPSED_TEXT`（见
+        #    :meth:`_schedule_hint_fade` / :meth:`_show_hint`，点那一行可再展开）；
+        # ③ 背景**透明**：底板与文字都用画布自己的底色（``self.hint_tint()``），
+        #    不加 ``highlightthickness``、不设 ``highlightbackground``，皮上就只剩
+        #    文字，没有「提示背景板」。
+        # **与 F7 那次反馈的出入**：早先用户说过提示「压在卡片上看着像透明的、字读
+        # 不清」，当时才加上 CARD_BG 底板 + 1px 边框（``改进清单.md`` / ``README.md``
+        # 有记）。这次口径明确要求去掉背景板，按**新口径**实现；压在卡片上时略挤是
+        # 可接受的代价，折叠后只剩一行小字，影响也小。
+        self.hint_box = tk.Frame(self.canvas, bg=self.hint_tint())
+        self.hint_inner = tk.Frame(self.hint_box, bg=self.hint_tint())
         self.hint_inner.pack(padx=theme.px(9), pady=theme.px(7))
-        for index, line in enumerate(HINT_LINES):
-            last = index == len(HINT_LINES) - 1
-            tk.Label(self.hint_inner, text=line, bg=theme.CARD_BG, fg=theme.TEXT_MUTED,
-                     font=theme.font(8), anchor="e", justify="right").pack(
-                side="top", anchor="e",
-                pady=(0, 0 if last else theme.px(HINT_ROW_GAP)))
+        self._build_hint_rows(expanded=self._hint_expanded)
         self.hint_box.place(relx=1.0, rely=1.0, anchor="se",
                             x=-theme.px(HINT_INSET), y=-theme.px(HINT_INSET))
+        # 刚打开就开始计时：20 秒后自动淡出折叠（用户口径「刚刚打开时展开」）。
+        self._schedule_hint_fade(expanded=self._hint_expanded)
 
         # ---- 底：唯一生成入口 + 依据区（没有起点 / 终点 / 关系名输入框）----
         bar = tk.Frame(self.win, bg=theme.BG)
@@ -2105,22 +2157,19 @@ class ConceptMapWindow:
                  bg=theme.BG, fg=theme.TEXT_FAINT,
                  font=theme.font(8)).pack(side="right")
 
-        # ---- 底：人工关系 / 孤立词诊断 / 导出 / 打开词条（改进清单 C1·C2·C4·C5）----
+        # ---- 底：导出 / 模板 / 恢复布局 / 操作说明 / 导图设置 ----
+        # 本轮（用户口径）：原来那排功能按钮里的「人工关系…」「孤立词诊断」
+        # 「打开选中的词条」三个**内化进操作本身**，不再各占一个按钮 ——
+        #   · 人工关系 = 按住 Alt 从一张卡拖到另一张（提示行与手势表都写着）；
+        #   · 孤立词诊断 = 点画布上「孤立词…」那一行（见 ``_bind_isolated_label``）；
+        #   · 打开词条 = 双击词卡（``<Double-Button-1>``）。
+        # 三个方法本身都留着（图上的入口、其它调用点与测试都还在用），只是不再
+        # 出现在工具条上：用户要的是「通过操作来实现」，不是一排功能框。
         bar2 = tk.Frame(self.win, bg=theme.BG)
         bar2.pack(fill="x", padx=theme.px(10), pady=(0, theme.px(2)))
-        self.btn_manual = widgets.FlatButton(bar2, "人工关系…", self.open_relation_editor,
-                                            font_size=8, padx=10, pady=4)
-        self.btn_manual.pack(side="left")
-        self.btn_diag = widgets.FlatButton(bar2, "孤立词诊断", self.toggle_diagnostics,
-                                           font_size=8, padx=10, pady=4)
-        self.btn_diag.pack(side="left", padx=(theme.px(6), 0))
         self.btn_export = widgets.FlatButton(bar2, "导出关系图…", self.export_map_files,
                                              font_size=8, padx=10, pady=4)
-        self.btn_export.pack(side="left", padx=(theme.px(6), 0))
-        self.btn_open_entry = widgets.FlatButton(bar2, "打开选中的词条",
-                                                 self.open_selected_entry,
-                                                 font_size=8, padx=10, pady=4)
-        self.btn_open_entry.pack(side="left", padx=(theme.px(6), 0))
+        self.btn_export.pack(side="left")
         # 「模板…」（G1·G2）：换一个布局骨架（思维导图 / 树状图 / 组织架构图 /
         # 单向导图 / 鱼骨图 / 流程线）。按钮上写着当前用的是哪个，一眼能看见。
         self.btn_template = widgets.FlatButton(bar2, "模板…", self.open_template_dialog,
@@ -2135,6 +2184,12 @@ class ConceptMapWindow:
         self.btn_help = widgets.FlatButton(bar2, "操作说明…", self.open_shortcuts_help,
                                            font_size=8, padx=10, pady=4)
         self.btn_help.pack(side="left", padx=(theme.px(6), 0))
+        # 「导图设置…」（本轮）：模板 / 让模型参与挑模板 / 恢复自动布局都在导图自己的
+        # 设置窗里 —— 用户口径「导图的相关设置需要在导图界面中，主界面不应该显示导图
+        # 的相关设置」，所以主界面「设置」里那一节已经搬走（见 MapSettingsDialog）。
+        self.btn_map_settings = widgets.FlatButton(bar2, "导图设置…", self.open_map_settings,
+                                                   font_size=8, padx=10, pady=4)
+        self.btn_map_settings.pack(side="left", padx=(theme.px(6), 0))
         # 图例（用户口径）：连线外观全图统一，人工关系**不在图上**另做标记 ——
         # 想分辨哪条是自己加的，看右下角依据区或双击这条线。
         tk.Label(bar2, text="人工添加的关系不出现在线上标注里：双击一条线可以看到它的来历",
@@ -2175,6 +2230,9 @@ class ConceptMapWindow:
 
     def close(self) -> None:
         """关闭本窗：只关自己，**不退出程序**（迟到的结果也不会再进这个窗口）。"""
+        # 提示的淡出定时器必须先取消：它排在 ``self.win`` 上，窗口一销毁再触发，
+        # 回调就会去打已经没了的控件（真实 Tk 抛 TclError）。
+        self._cancel_hint_fade()
         self.chrome.enable(False)
         self._pending_token = None
         try:
@@ -2232,10 +2290,17 @@ class ConceptMapWindow:
             text = str(getattr(graph, "model_config", "") or "").rsplit("|", 1)[-1].strip()
         return f" · {text}" if text else ""
 
-    def refresh(self) -> None:
-        """重建主题列表并重新载入当前主题的图（幂等，只读本地库）。"""
+    def refresh(self, *, topic_id: int | None = None) -> None:
+        """重建主题列表并重新载入当前主题的图（幂等，只读本地库）。
+
+        ``topic_id``：指定就载入这个主题（主界面点「导图」时把自己正在看的主题
+        报过来 —— 勾选是按那个主题勾的，图却跑去画「最近更新的那个主题」，
+        勾了半天等于没勾）。不给就沿用当前主题，没有就挑第一个。
+        """
         rows = self.topic_rows()
         selected = self._topic_id
+        if topic_id is not None:
+            selected = int(topic_id)
         self.topic_list.delete(0, tk.END)
         self._topic_ids = []
         sel_index = None
@@ -2327,6 +2392,63 @@ class ConceptMapWindow:
         self._subset_ids = {int(node.entry_id) for node in nodes}
         return all_nodes, nodes
 
+    def apply_only_ids(self, only_ids, *, full_ids=None) -> bool:
+        """把「只分析这些词」的范围定为主界面勾选的那些词（K1，空 = 全部）。
+
+        返回范围是否真的变了。**只在这一刻定范围**：之后用户在图上点「只分析选中的
+        词 / 整个主题」都是他自己的选择，不会被反复覆盖；下一次在主界面重新点
+        「导图」时再按当时的勾选重定一次。
+
+        ``full_ids`` = 主界面那一组词的全部 id：**全勾与不勾是一回事**（都画整个
+        主题），不合并的话「一个字都没取消」也会被当成子集，白白多算一份缓存、
+        还在图上多一句「本次只分析选中的 N 词」的废话。
+        """
+        wanted = {int(i) for i in (only_ids or []) if int(i)}
+        every = {int(i) for i in (full_ids or []) if int(i)}
+        if self._topic_id is None:
+            #: 窗口刚建、主题还没挑（:meth:`refresh` → :meth:`_load_topic` 还没跑）：
+            #: 现在算不出交集，先记下来，等 :meth:`_load_topic` 定下主题再套用。
+            self._pending_only_ids = (wanted, every)
+            return False
+        changed = self._set_subset(wanted, full_ids=full_ids)
+        self._only_topic_id = self._topic_id if self._subset_ids else None
+        return changed
+
+    def _set_subset(self, wanted, *, full_ids=None, empty_note: str = "") -> bool:
+        """改子集范围（唯一的写入口）：与当前库的节点求交集，空交集绝不生效。
+
+        三条守卫：①库里已经没有的词条自动掉出去（不留幽灵选中）；
+        ②勾选的是**别的主题**的词时交集为空 —— 这时必须退回「全部」，
+        否则图上会一个词都没有，看起来像这个主题坏了；
+        ③``full_ids`` 全被选中时也算「全部」（见 :meth:`apply_only_ids`）。
+
+        主题还没定时**直接返回 False**（不写、不读库）：交集是跟「当前主题的节点」
+        求的，连主题都还不知道就没有交集可言 —— 调用方（:meth:`_load_topic`）
+        会带着已知的主题再来一次。
+        """
+        if self._topic_id is None:
+            return False
+        ids = {int(i) for i in (wanted or []) if int(i)}
+        if full_ids:
+            every = {int(i) for i in full_ids if int(i)}
+            if every and ids >= every:
+                ids = set()
+        if ids:
+            try:
+                alive = {int(node.entry_id)
+                         for node in self.service.nodes_for_topic(int(self._topic_id))}
+            except Exception:  # pragma: no cover - 读库失败就当交集为空（退回全部）
+                log.exception("读取主题词条失败")
+                alive = set()
+            ids &= alive
+        new = ids
+        if new == self._subset_ids:
+            return False
+        self._subset_ids = new
+        if empty_note and wanted and not new:
+            self._set_feedback(empty_note)
+        return True
+
     def _current_fingerprint(self) -> str:
         """**此刻**按当前库 + 当前配置算出的内容指纹（核对异步结果时重新读库）。
 
@@ -2404,9 +2526,32 @@ class ConceptMapWindow:
         self._labels = {}
         self._fingerprint = ""
         self._coverage_note = ""
-        #: 换主题 = 换范围：子集与词条列表都不跨主题沿用（人工关系按主题各自读库）
+        #: 换主题 = 换范围：词条列表不跨主题沿用（人工关系按主题各自读库）。
+        #: 子集**通常也清空** —— 例外只有一个：主界面刚把「只画勾选的词」设在本主题上
+        #: （见 :meth:`apply_only_ids`），那一次的载入要保住这个子集，否则一打开就被
+        #: 这里清成「全部」，用户勾了半天等于没勾。用户在图窗里自己换主题时照旧清空。
         self._all_nodes = []
-        self._subset_ids = set()
+        pending = getattr(self, "_pending_only_ids", None)
+        if pending is not None:
+            #: 主界面点「导图」时窗口还没定下主题（构造期），范围先寄存在
+            #: :meth:`apply_only_ids` 里 —— 到这里主题已知，套用它。此后这个子集
+            #: 就是「本主题的子集」，用户在图窗自己换主题时照旧清空。
+            self._pending_only_ids = None
+            self._only_topic_id = None
+            self._subset_ids = set()
+            wanted, every = pending
+            self._set_subset(wanted, full_ids=every)
+            if self._subset_ids:
+                self._only_topic_id = self._topic_id
+        elif self._only_topic_id == self._topic_id and self._subset_ids:
+            #: 这个子集是**本主题的**（主界面勾选带进来的）：重读主题时保住它。
+            #: 注意还要 ``_subset_ids`` 非空：删词之后子集可能已经被裁成空集合了，
+            #: 那正是「回到全部」——不拦住的话会被这一支当成「有子集」保住，
+            #: 下一轮又变回子集，来回抖。
+            self._only_topic_id = self._topic_id
+        else:
+            self._only_topic_id = None
+            self._subset_ids = set()
         self._manual_rels = ()
         self._entry_list_ids = ()
         self._entry_options = []
@@ -2620,7 +2765,11 @@ class ConceptMapWindow:
         self._set_feedback(self.service.unavailable_hint() if self.service else "请在设置里配置 API Key")
 
     def _show_hint(self, show: bool) -> None:
-        """内联配置提示按钮的显示 / 收起（同一个按钮，不新增弹窗）。"""
+        """内联配置提示按钮的显示 / 收起（同一个按钮，不新增弹窗）。
+
+        .. note:: 与右下角「操作提示」不是一回事：那个看 :meth:`_build_hint_rows`，
+           本方法里的 ``_hint_visible`` 只管缺 Key 时那个内联「去设置」按钮。
+        """
         show = bool(show)
         if show == self._hint_visible:
             return
@@ -2632,6 +2781,162 @@ class ConceptMapWindow:
                 self.btn_settings.pack_forget()
         except (tk.TclError, AttributeError):  # pragma: no cover
             pass
+
+    # ------------------------------------------------- 右下角操作提示（可折叠）
+    # 用户口径 2026-10-04：「改成可折叠起来的，用户刚刚打开时展开进行提示，过 20 秒
+    # 之后淡出折叠。这个背景要是透明的，不要给提示背景板设置颜色。」
+    #
+    # 三行全展开 → :data:`HINT_EXPAND_MS` 后淡出 → 收成一行 :data:`HINT_COLLAPSED_TEXT`
+    # （可点开）。用户自己点开的那次不再自动收（见 :meth:`_show_hint` 的说明）。
+    def hint_tint(self) -> str:
+        """提示底板 / 文字的「透明」底色 = **画布自己的底色**。
+
+        真透明做不到（见 :meth:`_show_hint` 上面那段说明），于是让提示与画布同色，
+        皮上就只剩文字。底色直接问画布要（``cget("bg")``），这样万一以后画布换了
+        颜色、提示也不用跟着改；问不到再退回 :data:`theme.BG`（测试替身 / 极简
+        Tk 上 ``cget`` 可能不在）。
+        """
+        if self._hint_tint_override:
+            return self._hint_tint_override
+        try:
+            got = str(self.canvas.cget("bg") or "").strip()
+        except Exception:  # pragma: no cover - 极简替身没有 cget
+            got = ""
+        return got or theme.BG
+
+    def _hint_fade_color(self, color: str, progress: float) -> str:
+        """把 ``color`` 按 ``progress``（0 = 原色、1 = 画布底色）混向画布底色。
+
+        tk 没有透明度：淡出只能靠**逐格换文字色**模拟（把字色一格一格挪向底色），
+        所以这一步就是那个「一格」。色值自己解析（``theme`` 只给 ``"#rrggbb"``
+        字符串，没有拆通道的公开函数），解析不出来就原样返回，绝不抛。
+        """
+        p = max(0.0, min(1.0, float(progress)))
+        try:
+            start = (int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16))
+            end = (int(self.hint_tint()[1:3], 16), int(self.hint_tint()[3:5], 16),
+                   int(self.hint_tint()[5:7], 16))
+        except (ValueError, IndexError, TypeError):  # pragma: no cover - 非 #rrggbb
+            return color
+        return "#%02X%02X%02X" % tuple(
+            max(0, min(255, round(a + (b - a) * p))) for a, b in zip(start, end))
+
+    def _cancel_hint_fade(self) -> None:
+        """取消待执行的淡出 / 折叠定时器（关窗与重新展开都要先取消）。"""
+        timer, self._hint_fade_id = self._hint_fade_id, None
+        self._hint_fade_base = None
+        cancel = getattr(self.win, "after_cancel", None)
+        if timer is not None and callable(cancel):
+            try:
+                cancel(timer)
+            except Exception:  # pragma: no cover - 定时器已跑完 / 窗已销毁
+                pass
+
+    def _schedule_hint_fade(self, *, expanded: bool) -> None:
+        """排下一次淡出（``expanded`` 告诉回调**从什么状态开始淡**）。"""
+        self._cancel_hint_fade()
+        if self._hint_user_collapsed:
+            return
+        after = getattr(self.win, "after", None)
+        if not callable(after):  # pragma: no cover - 极简替身
+            return
+        delay = HINT_EXPAND_MS if expanded else HINT_FADE_STEP_MS
+        try:
+            self._hint_fade_id = after(delay, self._on_hint_fade_tick)
+        except Exception:  # pragma: no cover - 窗已销毁
+            self._hint_fade_id = None
+
+    def _on_hint_fade_tick(self) -> None:
+        """定时器回调：把展开的三行逐格混向底色，最后一格收成一行。
+
+        第一次进来是「已经显示满 :data:`HINT_EXPAND_MS`」那一拍（回调是
+        :meth:`_schedule_hint_fade` 按 ``expanded=True`` 排的），之后就每
+        :data:`HINT_FADE_STEP_MS` 一拍，共 :data:`HINT_FADE_STEPS` 拍。
+        """
+        if not self.win.winfo_exists():  # pragma: no cover - 关窗后不许再碰控件
+            return
+        rows = list(getattr(self, "hint_rows", ()) or ())
+        if not rows:  # pragma: no cover - 还没建出来
+            self._hint_fade_id = None
+            return
+        base = self._hint_fade_base or rows[0].cget("fg")
+        self._hint_fade_base = base
+        p = min(1.0, self._hint_fade_progress() + 1.0 / float(HINT_FADE_STEPS))
+        self._hint_fade_set_progress(p)
+        for row in rows:
+            try:
+                row.configure(fg=self._hint_fade_color(base, p))
+            except Exception:  # pragma: no cover - 控件已销毁
+                pass
+        if p >= 1.0:
+            self._hint_fade_id = None
+            self._hint_expanded = False
+            self._build_hint_rows(expanded=False)
+            return
+        self._hint_fade_id = self.win.after(HINT_FADE_STEP_MS, self._on_hint_fade_tick)
+
+    def _hint_fade_progress(self) -> float:
+        """当前淡出进度（0 = 全展开、1 = 已收成一行）。"""
+        return float(getattr(self, "_hint_fade_level", 0.0) or 0.0)
+
+    def _hint_fade_set_progress(self, value: float) -> None:
+        self._hint_fade_level = max(0.0, min(1.0, float(value)))
+
+    def _restart_hint_fade(self) -> None:
+        """回到「刚打开」的样子：三行全展开、计时重来（用户点折叠行时用）。
+
+        **不碰** :attr:`_hint_user_collapsed`：那个闩是「用户自己要看，别再自动收」，
+        正是 :meth:`_on_hint_rows_click` 刚设上的那一个 —— 这里若把它清掉，
+        就等于「用户一点开、定时器又把它收走」，点了像没点。
+        """
+        if not self._hint_expanded:
+            self._build_hint_rows(expanded=True)
+        self._schedule_hint_fade(expanded=True)
+
+    def _build_hint_rows(self, *, expanded: bool) -> None:
+        """画提示的行：展开 = 三行说明（右对齐），折叠 = 一行 :data:`HINT_COLLAPSED_TEXT`。
+
+        两种状态用同一套 Label（先 ``pack_forget`` 再重建），折叠那一行绑左键点开。
+        """
+        for child in list(self.hint_inner.winfo_children()):
+            try:
+                child.destroy()
+            except tk.TclError:  # pragma: no cover - 控件已销毁
+                pass
+        self._hint_expanded = bool(expanded)
+        self._hint_fade_base = None
+        self._hint_fade_set_progress(0.0)
+        tint = self.hint_tint()
+        self.hint_rows: list = []
+        #: 每一行的「原色」：淡出中会被改掉，重新展开时要按它还原。
+        self.hint_row_fg: list = []
+        if expanded:
+            fonts_fg = (theme.TEXT_MUTED,) + (theme.TEXT_FAINT,) * (len(HINT_LINES) - 1)
+            for index, line in enumerate(HINT_LINES):
+                last = index == len(HINT_LINES) - 1
+                label = tk.Label(self.hint_inner, text=line, bg=tint,
+                                 fg=fonts_fg[index], font=theme.font(8),
+                                 anchor="e", justify="right")
+                label.pack(side="top", anchor="e",
+                           pady=(0, 0 if last else theme.px(HINT_ROW_GAP)))
+                self.hint_rows.append(label)
+                self.hint_row_fg.append(fonts_fg[index])
+            return
+        label = tk.Label(self.hint_inner, text=HINT_COLLAPSED_TEXT, bg=tint,
+                         fg=theme.TEXT_FAINT, font=theme.font(8),
+                         anchor="e", justify="right", cursor="hand2")
+        label.pack(side="top", anchor="e")
+        try:
+            label.bind("<Button-1>", self._on_hint_rows_click)
+        except (tk.TclError, TypeError):  # pragma: no cover - 极简替身没有 bind
+            pass
+        self.hint_rows.append(label)
+        self.hint_row_fg.append(theme.TEXT_FAINT)
+
+    def _on_hint_rows_click(self, _event=None) -> None:
+        """点折叠后那一行 = 再展开一次；这是用户自己要看的，**不再自动收**。"""
+        self._hint_user_collapsed = True
+        self._restart_hint_fade()
 
     def _sync_button(self) -> None:
         """单一按钮的文案与可用性（生成 / 重新生成 / 重试 / 正在生成）。"""
@@ -2875,18 +3180,30 @@ class ConceptMapWindow:
         return (dx * dx + dy * dy) >= (DRAG_SLOP * DRAG_SLOP)
 
     def _on_canvas_press_alt(self, event) -> None:
-        """``<Alt-Button-1>``：Alt 在某些 Tk 版本里不进 ``event.state``，这条兜底。"""
+        """``<Alt-Button-1>``：Alt 在某些 Tk 版本里不进 ``event.state``，这条兜底。
+
+        这条绑定**命中本身就是证据**（用户确实按着 Alt 按下的左键），所以直接把
+        「这一下是建关系」交给 :meth:`_on_canvas_press` —— 不再依赖 ``_alt_armed``
+        这个跨事件的标志位去猜意图（它要留到松手才清，中间任何一次移动都可能被
+        误读成建关系）。
+        """
         self._alt_armed = True
-        self._on_canvas_press(event)
+        self._on_canvas_press(event, alt=True)
 
-    def _on_canvas_press(self, event) -> None:
-        """左键按下：**按住 Alt** = 从这张卡拖一条关系；否则 = 抓起这张卡摆位置。
+    def _on_canvas_press(self, event, *, alt: bool | None = None) -> None:
+        """左键按下：**按住 Alt** = 从这张卡拖一条关系；空白处 = 平移整张图；否则 = 抓卡片。
 
-        卡片上**没有**任何小圆点状的连接点（用户要求）：要不要建关系只看 Alt。
-        两条路径都只在松手时才写库，而且**都要先真的拖动**（:data:`DRAG_SLOP`）——
+        用户口径（2026-10-04，照 ProjectGraph 的手感）：**左键就是拖** —— 抓卡片
+        挪卡片、抓空白挪整张图；**按住 Alt 才切换成建关系**。卡片上**没有**任何小
+        圆点状的连接点，要不要建关系只看 Alt。
+
+        ``alt``：由 :meth:`_on_canvas_press_alt` 显式传入 True（那条绑定命中 =
+        按着 Alt）；为 None 时按 :meth:`_alt_held` 判（看 ``event.state`` 的 Alt 位）。
+
+        三条路径都只在松手时才写库，而且**都要先真的拖动**（:data:`DRAG_SLOP`）——
         按一下不动就是一次普通单击（选中 / 看依据由 ``<Button-1>`` 那条绑定负责），
-        不会误固定卡片、也不会误建关系。空白处按下不设任何状态，因此「点空白收起
-        依据」的老行为原样保留（:meth:`_on_canvas_click` 是另一条独立绑定）。
+        不会误固定卡片、也不会误建关系、更不会把图挪走。「点空白收起依据」的老行为
+        因此原样保留（:meth:`_on_canvas_click` 是另一条独立绑定）。
         """
         if self._pan_guard():
             return
@@ -2904,10 +3221,17 @@ class ConceptMapWindow:
         node = layout.node_at(x, y, pad=theme.px(NODE_HIT_PAD))
         self._press_xy = self._event_xy(event)
         self._drag_started = False
+        held = bool(alt) if alt is not None else self._alt_held(event)
         if node is None:
+            # 空白处按下：不碰卡片、不建关系 —— 左键拖动 = 平移整张图（本轮新增）。
+            # 「按住 Alt 在空白处按下」不算平移：那多半是想建关系（起点选错了），
+            # 让它什么都不做比偷偷把图挪走更不容易出事。
             self._drag_node = None
+            self._link_from = None
+            self._bg_pan_last = None if held else self._event_xy(event)
             return
-        if self._alt_held(event):
+        self._bg_pan_last = None
+        if held:
             self._link_from = (int(node.entry_id), float(x), float(y))
             self._drag_node = None
             self._link_item = None
@@ -2927,13 +3251,16 @@ class ConceptMapWindow:
             return None
 
     def _on_canvas_motion(self, event) -> None:
-        """左键拖动中：画一条临时线（Alt 建关系）或把卡片搬到指针下（摆位置）。
+        """左键拖动中：平移整张图（抓的是空白）/ 画临时线（Alt 建关系）/ 搬卡片。
 
-        拖动期间**只动画面，不动数据**：卡片本体与文字跟着鼠标走，连线要等松手
-        重画整张图才重算（半路重算整张图会卡、也会一直闪）。
+        拖动期间**只动画面，不动数据**：平移直接滚视图，卡片本体与文字跟着鼠标走，
+        连线要等松手重画整张图才重算（半路重算整张图会卡、也会一直闪）。
         位移没过 :data:`DRAG_SLOP` 之前什么都不做 —— 那样单击才不会被当成拖动。
         """
         if self._pan_guard():
+            return
+        if self._bg_pan_last is not None:
+            self._pan_by_drag(event)
             return
         if self._link_from is None and self._drag_node is None:
             return
@@ -2976,8 +3303,36 @@ class ConceptMapWindow:
             entry_id, off_x, off_y = self._drag_node
             self._move_node_items(int(entry_id), x - off_x, y - off_y)
 
+    def _pan_by_drag(self, event) -> None:
+        """左键拖**空白处** = 平移整张图（本轮新增，ProjectGraph 式的手感）。
+
+        与右键平移走同一套滚动调用（``xscrollincrement = 1``，1 unit = 1 设备像素），
+        区别只在起点：右键用 ``x_root / y_root``，这条用按下那一刻的 ``event.x / y``
+        —— 两者都是**屏幕**坐标，因此缩放多少都跟手 1:1。
+
+        没过 :data:`DRAG_SLOP` 之前一动不动：空白处按一下仍然只是「取消选中」。
+        """
+        if not self._drag_started:
+            if not self._over_slop(event):
+                return
+            self._drag_started = True
+            self._set_feedback("平移整张图：松手就停（滚轮缩放 · 右键拖动也一样）")
+        point = self._event_xy(event)
+        if point is None or self._bg_pan_last is None:  # pragma: no cover - 替身事件
+            return
+        dx = point[0] - self._bg_pan_last[0]
+        dy = point[1] - self._bg_pan_last[1]
+        self._bg_pan_last = point
+        if dx == 0 and dy == 0:
+            return
+        try:
+            self.canvas.xview_scroll(-int(round(dx)), "units")
+            self.canvas.yview_scroll(-int(round(dy)), "units")
+        except (tk.TclError, AttributeError):  # pragma: no cover - 极简替身
+            pass
+
     def _on_canvas_release(self, event) -> None:
-        """左键松手：落库（建立关系 / 固定位置），然后重画一次。
+        """左键松手：落库（建立关系 / 固定位置 / 结束平移），然后重画一次。
 
         **没拖起来就是一次单击**：清掉内部状态直接返回 —— 不写库、不弹「已固定」，
         也不说「连线取消」（用户只是点了一下，没什么可取消的）。
@@ -2988,6 +3343,10 @@ class ConceptMapWindow:
         started = bool(self._drag_started)
         self._press_xy = None
         self._drag_started = False
+        if self._bg_pan_last is not None:
+            # 左键拖空白 = 平移：松手就停（画面上的东西一个都没动过，没有要写库的）
+            self._bg_pan_last = None
+            return
         try:
             x = self._canvas_coord("canvasx", float(event.x))
             y = self._canvas_coord("canvasy", float(event.y))
@@ -3292,6 +3651,15 @@ class ConceptMapWindow:
                 button.configure(text=text)
         except (tk.TclError, AttributeError):  # pragma: no cover - 极简替身
             pass
+        # 「导图设置…」窗口若开着，顺手把「当前的布局骨架」那一行也刷新 ——
+        # 同一份状态在开关两边显示，绝不能一边写着「树状图」、另一边还是「自动」。
+        dialog = getattr(self, "_map_settings_dialog", None)
+        setter = getattr(dialog, "set_template", None)
+        if callable(setter):
+            try:
+                setter(self._template, self.template_name())
+            except Exception:  # pragma: no cover - 窗口已经关了
+                log.exception("刷新导图设置窗口失败")
 
     def local_template_suggestion(self) -> tuple[str, str]:
         """本地规则（零成本）给的模板建议：``(key, 理由)``；没有建议 → ``("", "")``。"""
@@ -3549,6 +3917,29 @@ class ConceptMapWindow:
             log.exception("打开操作说明窗口失败")
             self._set_feedback("打开操作说明窗口失败，详见日志")
 
+    def open_map_settings(self) -> None:
+        """打开「导图设置」窗口（本轮）：模板 / 让模型参与挑模板 / 恢复自动布局。
+
+        用户口径（2026-10-04）：「思维导图的导出和相关设置都需要在导图界面中，
+        主界面不应该显示导图的相关设置」—— 主界面「设置」里原来那一节「关系图」
+        已经删掉，全部收进这个小窗口。窗口本身只写两个设置键，**不碰任何关系数据**。
+        """
+        try:
+            from .map_settings_dialog import MapSettingsDialog
+        except Exception:  # pragma: no cover - 打包缺文件时给出可读反馈
+            log.exception("导入导图设置窗口失败")
+            self._set_feedback("导图设置窗口不可用，详见日志")
+            return
+        try:
+            self._map_settings_dialog = MapSettingsDialog(
+                self.win, cfg=self.config, template_key=self._template,
+                template_name=self.template_name(),
+                on_open_templates=self.open_template_dialog,
+                on_reset_layout=self.reset_node_pins)
+        except Exception:
+            log.exception("打开导图设置窗口失败")
+            self._set_feedback("打开导图设置窗口失败，详见日志")
+
     def manual_relation_options(self) -> list[tuple[int, str]]:
         """给人工关系对话框用的 ``(entry_id, 显示名)`` 列表（本主题全部词条）。"""
         return [(int(node.entry_id),
@@ -3688,7 +4079,7 @@ class ConceptMapWindow:
         if not picks:
             self._set_feedback("先在左边选几个词（Ctrl / Shift 可多选），再点「只分析选中的词」")
             return
-        self._subset_ids = {int(eid) for eid in picks}
+        self._set_subset({int(eid) for eid in picks})
         self._drop_expired(force=True)
         self._set_feedback(f"只分析选中的 {len(self._subset_ids)} 个词……")
         self._request(force=True)
@@ -3698,7 +4089,7 @@ class ConceptMapWindow:
         if not self._subset_ids:
             self._on_generate()
             return
-        self._subset_ids = set()
+        self._set_subset(set())
         self._drop_expired(force=True)
         self._set_feedback("已切回全部词条，正在按整个主题重新分析……")
         self._request(force=True)
@@ -3784,6 +4175,27 @@ class ConceptMapWindow:
         if self._diag_visible:
             self._fill_diagnostics()
 
+    def _bind_isolated_label(self, item) -> None:
+        """把画布上「孤立词…」那一行接上诊断开关（本轮：按钮内化成图上的入口）。
+
+        用户口径：这几个功能「本身就是功能，用户通过操作来完成……不需要单独作为
+        一个功能框去展示」。所以入口挂在图上那句话上，而不是再排一个按钮。
+
+        测试替身画布没有 ``tag_bind``（见 ``tests\\support.py`` 的 FakeCanvas），
+        因此先探测再绑：替身上只是少一个入口，不会让 ``_draw`` 抛错。
+        """
+        binder = getattr(self.canvas, "tag_bind", None)
+        if not callable(binder):
+            return
+        try:
+            binder(item, "<Button-1>", self._on_isolated_label_click)
+        except (tk.TclError, TypeError):  # pragma: no cover - 替身画布
+            pass
+
+    def _on_isolated_label_click(self, _event=None) -> None:
+        """点那一行 = 展开 / 收起孤立词诊断（原来工具条按钮的入口，C2）。"""
+        self.toggle_diagnostics()
+
     def _on_diag_open(self, event=None) -> None:
         """双击诊断面板的一行 → 在图上定位并选中那个词。"""
         widget = getattr(self, "diag_text", None)
@@ -3856,7 +4268,10 @@ class ConceptMapWindow:
                 opener()
             except Exception:  # pragma: no cover - 主界面打不开也不该炸图窗
                 log.exception("打开主界面失败")
-        main = getattr(self.app, "main_window", None)
+        #: 主窗口在 App 上叫 ``self.main``（``self.main_window`` 不存在 —— 早先这里
+        #: 拿错了名字，于是「双击词卡回主界面并选中」那一步的**切主题**静默失效，
+        #: 主界面停在别的主题时看起来就像「跳过去没反应」）。
+        main = getattr(self.app, "main", None)
         # 先把主界面的浏览范围切到这个词条所属的主题：只调 select_entry 的话，
         # 主界面若正停在别的主题（或跟着阅读页面走），右栏会显示这条词，
         # 左边列表里却找不到它 —— 看起来像「跳过去没反应」。
@@ -4210,6 +4625,9 @@ class ConceptMapWindow:
         self._drag_node = None
         self._drag_target = None
         self._link_item = None
+        #: 左键拖空白平移（本轮）：重画时也要忘掉，否则下一次 Motion 会按一个
+        #: 早已不存在的按下点继续滚视图。
+        self._bg_pan_last = None
 
     def _items_matching(self, kind: str) -> list:
         """当前画布上的某类 item（回归断言用；真实 / 假 Canvas 都可用）。"""
@@ -4396,12 +4814,15 @@ class ConceptMapWindow:
             self._text(topic.x, topic.y, text="\n".join(topic.lines), fill=theme.TEXT,
                        font=theme.font_at(10, self._zoom), anchor="center",
                        justify="center", _kind="topic-text")
-        # ⑥ 孤立词那一行的短标题
+        # ⑥ 孤立词那一行的短标题 —— 本轮它同时是**孤立词诊断的入口**：点这一行
+        #    展开 / 收起下方那本账（工具条上原来那个「孤立词诊断」按钮已按用户口径
+        #    内化掉，见 :meth:`_bind_isolated_label`）。
         if layout.isolated_label_pos is not None:
-            self._text(layout.isolated_label_pos[0], layout.isolated_label_pos[1],
-                       text=ISOLATED_TEXT, fill=theme.TEXT_FAINT,
-                       font=theme.font_at(7, self._zoom), anchor="w",
-                       _kind="isolated-label")
+            item = self._text(layout.isolated_label_pos[0], layout.isolated_label_pos[1],
+                              text=ISOLATED_TEXT, fill=theme.TEXT_FAINT,
+                              font=theme.font_at(7, self._zoom), anchor="w",
+                              tags=("isolated-label",), _kind="isolated-label")
+            self._bind_isolated_label(item)
         # ⑦ **关系短标签最后画**：直接从线上方的空白里落字，没有底板（用户要求：
         #    文字背景透明），也不带「人工·」前缀（用户要求）—— 人工关系与 AI 关系
         #    在图上完全同款，要区分就看依据区或者双击这条线。放在最后是为了让标签

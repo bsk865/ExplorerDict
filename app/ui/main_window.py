@@ -65,6 +65,57 @@ MAX_CARDS = 300
 #: 底部状态行最多显示多少字（超出省略）：状态行只放一句短状态，从不横向挤工具条
 STATUS_MAX_CHARS = 40
 
+# ---- 悬浮说明与搜索框占位（P0-4）-----------------------------------------
+#: 搜索框空着且没聚焦时显示的那句提示。**只说人话**：讲清「能搜什么」，
+#: 不讲内部字段名（``one_line`` / ``source_title``）。
+SEARCH_PLACEHOLDER = "搜词语 / 上下文 / 来源"
+#: 搜索框自己的悬浮说明（占位文字太短，装不下「全库」与命中说明）
+SEARCH_TOOLTIP = ("搜索全部词条：词语、上下文、释义、来源、例子、标签都算命中；\n"
+                  "有搜索词时按整库找，不再局限当前主题")
+#: 卡片勾选框的悬浮说明（K1）：勾选**同时**决定「哪些词进参考关系图」与
+#: 「拆分时搬走哪些词」。以前只服务后者，用户看不懂这个方框是干什么的。
+CHECK_TOOLTIP = "勾上这个词：它才会进参考关系图；「拆分…」也只搬勾上的词"
+#: 勾选状态那一行自己的说明（点它可选全部，所以要说清它能点）
+SEL_HINT_TOOLTIP = "这一组里有多少词已经勾上（点这一行 = 全选）"
+
+#: 每个按钮的悬浮说明（一句话说清「点了会怎样」）。
+#:
+#: 为什么集中在模块级而不是散在 ``_build_*`` 里：这些句子是**面向用户的口径**，
+#: 集中一处才便于统一改口、也便于测试逐条读。键 = 按钮文案（与
+#: ``tests/test_reading_panel.py`` 里那份「按钮 ↔ 回调」审计表用的是同一套文案）。
+BUTTON_TOOLTIPS: dict[str, str] = {
+    # 工具条
+    "搜索": "按输入的内容筛出词条（回车同样生效）",
+    "清空": "清掉搜索词，回到当前主题的全部词条",
+    "导出": "把当前看到的词表导出成 CSV + Markdown 两份（写进 data\\exports\\，不发网络请求）",
+    "导图": "把**勾选**的词画成参考关系图（图里的生成要单独点，会消耗额度）",
+    "设置": "接口、取词、解释与外观设置",
+    "游戏模式：关": "游戏模式：开会暂停取词并把浮窗压下去，全屏游戏时不再打扰",
+    "暂停取词": "临时不记录新划的词（已存的词条不受影响）",
+    "退出": "退出探索词典（主窗的 × 只是收起，后台继续取词）",
+    # 主题区
+    "重命名": "给当前选中的主题改个名字",
+    "删除": "删除当前主题（里面的词条会一并处理，删前会再问一次）",
+    "合并…": "把选中的另一个主题并进当前主题",
+    "拆分…": "把勾选的词条搬进新主题 / 另一个主题（要拆的词在中栏勾选）",
+    # 标签区
+    "标签改名": "改掉这个标签在所有词条上的名字",
+    "标签删除": "删掉这个标签（词条本身留着，只是不再挂这个标签）",
+    "全部": "取消标签筛选，回到全部词条",
+    # 词条列表
+    "手动录入": "手动新建一条词条（不用划词）",
+    "剪贴板导入": "把剪贴板里的文字当成一次划词收进来",
+    "全选": "勾上当前这一组里的全部词条（包括屏幕外没画出来的）",
+    "全不选": "全部取消勾选：导图会没有词可画，拆分也没有可搬的词",
+    # 详情右栏
+    "保存修改": "把右栏改过的词语 / 上下文 / 来源 / 标签保存回库里",
+    "解释": "让模型解释这条词在上下文里的意思（会消耗额度）",
+    "重试": "上一次解释失败了，再试一次（会消耗额度）",
+    "重新解释": "重新问一次模型（上下文改过时用这个，会消耗额度）",
+    "删除词条": "删除这一条词条（会再问一次）",
+    "重试注册": "全局热键没注册上（被别的程序占用了），点这里再试一次",
+}
+
 
 class ScrollFrame(tk.Frame):
     """一个可垂直滚动的容器（细线滚动条、无立体边框）。"""
@@ -111,6 +162,20 @@ def _entry(parent, textvariable=None, **kw) -> tk.Entry:
     )
 
 
+def _small_button(parent, text: str, command, *, side: str = "left"):
+    """左栏那种小号功能键（主题区 / 标签区两排共用），**顺带挂上悬浮说明**。
+
+    两排按钮各自一行文案、名字又都只有两三个字（「合并…」合的是主题还是词条？），
+    所以统一走这个工厂：建立 + 排版 + 说明一次做完，新增按钮时不会漏挂说明。
+    """
+    btn = widgets.FlatButton(parent, text, command, font_size=8, padx=6, pady=2)
+    btn.pack(side=side, padx=theme.px(2))
+    hint = BUTTON_TOOLTIPS.get(text)
+    if hint:
+        widgets.tooltip(btn, hint)
+    return btn
+
+
 class MainWindow:
     def __init__(self, root: tk.Tk, app):
         self.root = root
@@ -131,10 +196,18 @@ class MainWindow:
         #: 标签筛选（B1）：**跨主题**的轻量筛选，非空时列表改呈全库中打了该标签的词
         self._tag_filter = ""
         self._tag_rows: list = []
-        #: 卡片上勾选的词条（B2 拆分用）：只存 id，刷新列表时保留
+        #: 卡片上勾选的词条（B2 拆分 / K1 导图用）：只存 id，刷新列表时保留 ——
+        #: 用户勾的就是这些词，切搜索词、滚动、刷新都不该把他的勾选抖掉。
         self._checked: set[int] = set()
         #: 卡片勾选框的 BooleanVar（刷新时随卡片一起重建）
         self._card_vars: dict[int, object] = {}
+        #: 当前这一组里的**全部**词条 id（顺序 = 列表顺序）。它按库算，不是按
+        #: 画出来的卡片算 —— 中栏只画 ``MAX_CARDS`` 张，拿卡片算范围会让「全选」
+        #: 悄悄漏掉没画出来的词，而用户以为整个主题都进图了（K1 的默认全勾同理）。
+        self._checked_scope: list[int] = []
+        #: 上一次做「默认全勾」判断时的**视野键** ``(batch_id, show_all)``。
+        #: 只认视野：搜索词 / 标签筛选变化**不重置**勾选（用户正在挑词，不能抖）。
+        self._checked_scope_key: tuple | None = None
 
         root.title("探索词典")
         root.configure(bg=theme.BG)
@@ -171,6 +244,7 @@ class MainWindow:
                                             self.app.retry_hotkeys, font_size=8,
                                             padx=10, pady=3)
         self.alert_btn.pack(side="right", padx=theme.px(8), pady=theme.px(4))
+        widgets.tooltip(self.alert_btn, BUTTON_TOOLTIPS["重试注册"])
 
     def _render_alerts(self) -> None:
         if not self._alerts:
@@ -218,14 +292,28 @@ class MainWindow:
 
         self.search_var = tk.StringVar()
         entry = _entry(bar, textvariable=self.search_var, width=20)
+        #: 搜索输入框本身（占位提示挂在它上面；测试也按这个名字找它）
+        self.search_entry = entry
         entry.pack(side="left", pady=theme.px(10), ipady=theme.px(3))
         entry.bind("<Return>", lambda e: self.refresh_entries())
         entry.bind("<KeyRelease>", self._on_search_key)
+        # 占位提示（只动**显示文本**，绝不写进 search_var，否则真会拿提示去查库）
+        widgets.placeholder(entry, SEARCH_PLACEHOLDER, variable=self.search_var)
+        widgets.tooltip(entry, SEARCH_TOOLTIP)
 
-        widgets.FlatButton(bar, "搜索", self.refresh_entries, font_size=8,
-                           padx=10, pady=3).pack(side="left", padx=theme.px(5))
-        widgets.FlatButton(bar, "清空", self._clear_search, font_size=8,
-                           padx=10, pady=3).pack(side="left")
+        #: 工具条上每个按钮的说明（P0-4）：这些入口的名字都很短，「导出」导到哪、
+        #: 「导图」点了到底是出图还是要花钱，光看字看不出来 —— 存进列表是为了
+        #: 建完统一挂悬浮说明，新增按钮时**不会漏**（列表里没登记的文案测试会报）。
+        toolbar_buttons: list[tk.Widget] = []
+
+        def _toolbar_button(text: str, command) -> tk.Widget:
+            btn = widgets.FlatButton(bar, text, command, font_size=8, padx=10, pady=3)
+            toolbar_buttons.append(btn)
+            return btn
+
+        _toolbar_button("搜索", self.refresh_entries).pack(side="left",
+                                                           padx=theme.px(5))
+        _toolbar_button("清空", self._clear_search).pack(side="left")
 
         # 「全部词语」复选框已按用户要求删除：检索由**主题选择 + 全库搜索**完成。
         # 这里保留 ``scope_var`` 只是兼容 ``entry_scope`` 的既有判据，值恒为 False
@@ -237,23 +325,28 @@ class MainWindow:
         # 游戏，正是用户截图里「同一页重复功能键」的问题。原生菜单栏已删除，
         # 这里就是唯一的入口组；「退出」全程序只有这一个清晰入口（主窗「×」只是
         # 收起、后台继续）。
-        widgets.FlatButton(bar, "退出", self.app.quit, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=(theme.px(10),
-                                                                   theme.px(4)))
-        widgets.FlatButton(bar, "设置", self.app.open_settings, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=theme.px(4))
-        widgets.FlatButton(bar, "导图", self.app.open_concept_map, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=theme.px(4))
+        _toolbar_button("退出", self.app.quit).pack(
+            side="right", padx=(theme.px(10), theme.px(4)))
+        _toolbar_button("设置", self.app.open_settings).pack(side="right",
+                                                             padx=theme.px(4))
+        _toolbar_button("导图", self.app.open_concept_map).pack(side="right",
+                                                                padx=theme.px(4))
         #: 导出（B3）：把**当前看到的**词表写成 CSV + Markdown，落在 data/exports/。
         #: 冻结运行时没有「另存为」对话框，所以按钮只负责写文件 + 报路径。
-        widgets.FlatButton(bar, "导出", self.export_entries, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=theme.px(4))
-        self.game_btn = widgets.FlatButton(bar, "游戏模式：关", self.app.toggle_game_mode,
-                                           font_size=8, padx=10, pady=3)
+        _toolbar_button("导出", self.export_entries).pack(side="right",
+                                                         padx=theme.px(4))
+        self.game_btn = _toolbar_button("游戏模式：关", self.app.toggle_game_mode)
         self.game_btn.pack(side="right", padx=theme.px(4))
-        self.pause_btn = widgets.FlatButton(bar, "暂停取词", self.app.toggle_capture,
-                                            font_size=8, padx=10, pady=3)
+        self.pause_btn = _toolbar_button("暂停取词", self.app.toggle_capture)
         self.pause_btn.pack(side="right", padx=theme.px(4))
+
+        # 工具条这一排统一挂悬浮说明（P0-4）：入口名字都很短，「导出」导到哪、
+        # 「导图」点了到底是出图还是要花钱，光看字看不出来。文案统一在
+        # :data:`BUTTON_TOOLTIPS`（测试会逐条核对**每个按钮都有说明**）。
+        for btn in toolbar_buttons:
+            hint = BUTTON_TOOLTIPS.get(str(btn.cget("text")))
+            if hint:
+                widgets.tooltip(btn, hint)
 
         # 「全部词语」与「置顶」开关已删除：检索由**主题选择 + 全库搜索**完成，
         # 浮窗在普通阅读下自动置顶、主窗口保持普通层级（游戏 / 全屏硬阻断照旧）。
@@ -324,8 +417,7 @@ class MainWindow:
         for text, cmd in (("重命名", self.rename_batch), ("删除", self.delete_batch),
                           ("合并…", self.merge_batches_dialog),
                           ("拆分…", self.split_entries_dialog)):
-            widgets.FlatButton(bb, text, cmd, font_size=8, padx=6, pady=2).pack(
-                side="left", padx=theme.px(2))
+            _small_button(bb, text, cmd)
 
         # ---- 标签（左下，B1）----
         # 标签是**跨主题**的：点一下就把全库里打了这个标签的词聚到一起看，
@@ -347,8 +439,7 @@ class MainWindow:
         tb.pack(fill="x", padx=theme.px(10), pady=theme.px(8))
         for text, cmd in (("标签改名", self.rename_tag), ("标签删除", self.delete_tag),
                           ("全部", self.clear_tag_filter)):
-            widgets.FlatButton(tb, text, cmd, font_size=8, padx=6, pady=2).pack(
-                side="left", padx=theme.px(2))
+            _small_button(tb, text, cmd)
 
         # ---- 词条列表（中）----
         center = tk.Frame(body, bg=theme.BG)
@@ -358,14 +449,21 @@ class MainWindow:
         self.count_label = tk.Label(head, text="0 条", bg=theme.BG, fg=theme.TEXT_MUTED,
                                     font=theme.font(8))
         self.count_label.pack(side="left")
-        #: 勾选状态提示（B2）：只有勾了词条才有内容，平时不占视觉
+        #: 勾选状态（B2 / K1）：显示「已勾选 N / M 条」。**点它可选全部** ——
+        #: 全不选之后它就是屏幕上唯一还提这件事的地方（留着词还有用的人要能一键找回）。
         self.sel_hint = tk.Label(head, text="", bg=theme.BG, fg=theme.TEXT_MUTED,
-                                 font=theme.font(8))
+                                 font=theme.font(8), cursor="hand2")
         self.sel_hint.pack(side="left", padx=theme.px(8))
-        widgets.FlatButton(head, "手动录入", self.app.open_manual_dialog, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=theme.px(3))
-        widgets.FlatButton(head, "剪贴板导入", self.app.import_clipboard, font_size=8,
-                           padx=10, pady=3).pack(side="right", padx=theme.px(3))
+        self.sel_hint.bind("<Button-1>", self._on_sel_hint_click)
+        widgets.tooltip(self.sel_hint, SEL_HINT_TOOLTIP)
+        #: 全选 / 全不选（K1）：一次改一整组（含屏幕外没画出来的词条）
+        _small_button(head, "全选", lambda: self._set_all_checked(True))
+        _small_button(head, "全不选", lambda: self._set_all_checked(False))
+        for text, cmd in (("手动录入", self.app.open_manual_dialog),
+                          ("剪贴板导入", self.app.import_clipboard)):
+            btn = widgets.FlatButton(head, text, cmd, font_size=8, padx=10, pady=3)
+            btn.pack(side="right", padx=theme.px(3))
+            widgets.tooltip(btn, BUTTON_TOOLTIPS[text])
 
         self.cards = ScrollFrame(center, bg=theme.BG)
         self.cards.pack(fill="both", expand=True, padx=theme.px(10), pady=(0, theme.px(10)))
@@ -453,16 +551,25 @@ class MainWindow:
 
         btns = tk.Frame(parent, bg=theme.PANEL)
         btns.pack(fill="x", padx=theme.px(12), pady=theme.px(10))
-        widgets.FlatButton(btns, "保存修改", self.save_detail, font_size=8, padx=10,
-                           pady=3).pack(side="left", padx=(0, theme.px(4)))
+        btn_save = widgets.FlatButton(btns, "保存修改", self.save_detail, font_size=8,
+                                      padx=10, pady=3)
+        btn_save.pack(side="left", padx=(0, theme.px(4)))
+        widgets.tooltip(btn_save, BUTTON_TOOLTIPS["保存修改"])
         #: 解释入口**只有一个**（用户明确要求：同一页不出现两个功能键）。
         #: 文案随状态变：未解释 → 「解释」；失败 / 过期 → 「重试」；已解释 →「重新解释」。
         self.btn_explain = widgets.FlatButton(btns, self.EXPLAIN_LABEL_NEW,
                                               self._on_explain_button, font_size=8,
                                               padx=10, pady=3)
         self.btn_explain.pack(side="left", padx=theme.px(3))
-        widgets.FlatButton(btns, "删除词条", self.delete_selected, font_size=8, padx=10,
-                           pady=3).pack(side="right")
+        # 说明跟着按钮文案走：这个按钮会在三种文案之间切换，硬写死一句就会与当前
+        # 状态对不上，所以传 callable、每次弹出重新取（见 widgets.Tooltip.text）。
+        widgets.tooltip(self.btn_explain,
+                        lambda: BUTTON_TOOLTIPS.get(self.explain_button_label(),
+                                                    BUTTON_TOOLTIPS["解释"]))
+        btn_del = widgets.FlatButton(btns, "删除词条", self.delete_selected, font_size=8,
+                                     padx=10, pady=3)
+        btn_del.pack(side="right")
+        widgets.tooltip(btn_del, BUTTON_TOOLTIPS["删除词条"])
 
     #: 详情页唯一解释入口的三种文案（按状态切换，绝不并排两个按钮）
     EXPLAIN_LABEL_NEW = "解释"
@@ -761,11 +868,80 @@ class MainWindow:
         """当前勾选的词条 id（升序，便于测试与提示）。"""
         return sorted(self._checked)
 
+    def checked_scope_ids(self) -> list[int]:
+        """当前这一组里的全部词条 id（列表顺序，**不受卡片绘制上限影响**）。"""
+        return list(self._checked_scope)
+
+    def _checked_view_key(self) -> tuple[int | None, bool]:
+        """「在浏览哪一组词」的键：``(batch_id, 看全库)``。
+
+        与 :meth:`entry_scope` 的区别只有一个、但很关键：**搜索不算换组**。
+        ``entry_scope()`` 一见搜索词就返回 ``(None, True)``（搜索走全库），拿它当键
+        的话「按提示搜了一下」就会被当成换主题 → 把用户点掉的勾全补回来。所以这里
+        明确用 :attr:`_browse_batch_id` 当「当前这一组」，标签筛选与搜索都只换范围、
+        不换组（这条键里根本没有标签与搜索词）。
+        """
+        if self._tag_filter or self.search_var.get().strip():
+            #: 跨主题筛选 / 全库搜索：组还是主界面正在浏览的那个主题（没有就全库）
+            browse = self._browse_batch_id
+            if browse is not None and self.db.get_batch(browse):
+                return int(browse), False
+            return None, True
+        return self.entry_scope()
+
+    def _refresh_checked_scope(self) -> None:
+        """按当前视野重算「这一组有哪些词」，并在**换主题**时把它们默认全勾上。
+
+        口径（用户 2026-10-05 确认）：新进一个主题 = 该主题的词条**默认全部勾选**
+        ——「好多词都要，只有几个不要」时，取消几个比一条条勾快得多；切换主题
+        重新全勾；搜索词 / 标签筛选变化只换范围，**不动**用户已经手动改过的勾选。
+        """
+        tag = self._tag_filter
+        query = self.search_var.get().strip()
+        #: 范围（查库）与「组」（要不要重置全勾）必须用**同一条键**算：
+        #: 之前左边用 ``view_all``、右边重新调一次 ``entry_scope()``，
+        #: 两者在「有搜索词且正在浏览某个主题」时并不相等（``(1, True)`` vs
+        #: ``(1, False)``），于是每搜一次都被当成换主题、把勾全补回来。
+        view_key = self._checked_view_key()
+        batch_id = view_key[0]
+        try:
+            self._checked_scope = list(self.db.list_entry_ids(
+                batch_id=batch_id, query=query, tag=tag))
+        except Exception:  # pragma: no cover - 读库失败不该炸列表
+            log.exception("读取勾选范围失败")
+            self._checked_scope = []
+        if view_key != self._checked_scope_key:
+            #: 进一个主题 = 默认全勾（用户 2026-10-05 确认）。只在**视野键真的变了**
+            #: 时重置：搜索 / 标签筛选换的是范围，不重置；「全不选」之后刷新也不许
+            #: 自动勾回来（早先这里有一条 ``elif not self._checked`` 的兜底，正好
+            #: 会把用户刚点掉的勾全部补回来，已删）。
+            self._checked_scope_key = view_key
+            self._checked = set(self._checked_scope)
+
+    def _set_all_checked(self, checked: bool) -> None:
+        """「全选 / 全不选」：整组一起改，屏幕外的词条也算在内。"""
+        if checked:
+            self._checked = set(self._checked_scope)
+        else:
+            self._checked.clear()
+        self._sync_card_checks()
+        self._update_sel_hint()
+
+    def _sync_card_checks(self) -> None:
+        """把可见卡片的方框拨到与 ``self._checked`` 一致（不能只改数据不改界面）。"""
+        for eid, var in list(self._card_vars.items()):
+            try:
+                var.set(int(eid) in self._checked)
+            except tk.TclError:  # pragma: no cover - 控件正在销毁
+                continue
+
     def _toggle_checked(self, entry_id: int, var=None) -> None:
         try:
             checked = bool(var.get()) if var is not None else True
         except tk.TclError:  # pragma: no cover
             checked = False
+        #: 手动改过 = 记住这个视野，别再自动「补全勾」（否则取消一条会立刻被勾回来）
+        self._checked_scope_key = self._checked_view_key()
         if checked:
             self._checked.add(int(entry_id))
         else:
@@ -773,14 +949,26 @@ class MainWindow:
         self._update_sel_hint()
 
     def _update_sel_hint(self) -> None:
+        """中栏顶部那一行勾选状态：**点了会全选**，所以空着时也给一句话。"""
         count = len(self._checked)
+        total = len(self._checked_scope)
+        if not count:
+            text = "点这里全选" if total else ""
+        elif total and count >= total:
+            text = f"本组 {total} 条已全勾"
+        else:
+            text = f"已勾选 {count} / {total} 条"
         hint = getattr(self, "sel_hint", None)
         if hint is None:
             return
         try:
-            hint.configure(text=f"已勾选 {count} 条" if count else "")
+            hint.configure(text=text)
         except tk.TclError:  # pragma: no cover
             pass
+
+    def _on_sel_hint_click(self, _event=None) -> None:
+        """点勾选状态那一行 = 全选（全不选之后它是屏幕上唯一还提这件事的地方）。"""
+        self._set_all_checked(True)
 
     def _drop_missing_checks(self) -> None:
         """勾选的词条被删掉之后（别处删的也算）从勾选集合里清掉。"""
@@ -840,9 +1028,19 @@ class MainWindow:
         ids = self.checked_ids()
         if not ids:
             messagebox.showinfo("拆分主题",
-                                "先在左边词条卡片上勾选要拆出去的词条（可多选）。",
+                                "先在中栏词条卡片上勾选要搬走的词条（可多选）。",
                                 parent=self.root)
             return
+        #: 安全阀（K1）：进主题时**默认全勾**，于是「点开拆分就搬走整个主题」只要
+        #: 两下。整组都被勾上时先问一句 —— 搬家本身可逆，但用户往往没意识到自己
+        #: 搬的是全部（当年这条操作得一条条勾，风险不一样）。
+        if self._checked_scope and set(ids) >= set(self._checked_scope):
+            if not messagebox.askyesno(
+                    "拆分主题",
+                    f"当前这一组的 {len(self._checked_scope)} 条词全部被勾选，"
+                    "继续就会把整个主题搬走。\n确定要搬吗？",
+                    parent=self.root):
+                return
         MoveEntriesDialog(self.root, self.app, ids, list(self.db.list_batches()),
                           on_move=self.apply_move)
 
@@ -864,6 +1062,10 @@ class MainWindow:
         self.clear_checked()
         if self._browse_batch_id is not None:
             self._browse_batch_id = bid            # 跟着搬过去看结果
+            #: 搬到哪儿就是「换了组」这件事，用户自己已经做完了：先把视野键提前
+            #: 对齐，否则下面这次刷新会把「换主题 = 默认全勾」再执行一遍，
+            #: 刚被 ``clear_checked()`` 清掉的勾会立刻按新主题全勾回来。
+            self._checked_scope_key = self._checked_view_key()
         self.refresh_batches()
         self.refresh_tags()
         self.refresh_entries()
@@ -886,7 +1088,11 @@ class MainWindow:
         return " ".join(parts) if parts else "全部词语"
 
     def export_entries(self) -> None:
-        """导出当前列表（CSV + Markdown）到 ``data/exports/``，再问要不要打开文件夹。"""
+        """导出当前列表（CSV + Markdown）到 ``data/exports/``，再问要不要打开文件夹。
+
+        口径（K1，用户本轮确认）：导出**不按勾选筛**，导的是当前列表范围 ——
+        勾选只决定「哪些词进参考关系图」。
+        """
         try:
             rows = list(self.db.list_entries(
                 batch_id=None if (self._tag_filter or self.search_var.get().strip())
@@ -975,6 +1181,7 @@ class MainWindow:
         if tag:
             scope += f" · 标签「{tag}」"
         self.count_label.configure(text=f"{len(rows)} / {total} 条（{scope}）")
+        self._refresh_checked_scope()
         self._update_sel_hint()
         self._drop_missing_checks()
         # 选中的词条可能刚刚消失（单条删除 / **整个主题被删** / 面板里删掉）：
@@ -1004,8 +1211,9 @@ class MainWindow:
         top = tk.Frame(card, bg=theme.PANEL)
         top.pack(fill="x", padx=theme.px(10), pady=(theme.px(7), 0))
 
-        #: 勾选框（B2）：用于「拆分主题」时多选词条。选中的 id 存在
-        #: ``self._checked`` 里（刷新列表后仍然保留 —— 用户勾的就是这些词）。
+        #: 勾选框（B2 拆分 / K1 导图）：勾上的词才进参考关系图，拆分也只搬勾上的。
+        #: 选中的 id 存在 ``self._checked`` 里（刷新列表后仍然保留 —— 用户勾的
+        #: 就是这些词）；进一个主题时默认**全勾**，见 :meth:`_refresh_checked_scope`。
         var = tk.BooleanVar(value=eid in self._checked)
         check = tk.Checkbutton(
             top, text="", variable=var, command=lambda i=eid, v=var: self._toggle_checked(i, v),
@@ -1013,6 +1221,7 @@ class MainWindow:
             highlightthickness=0, bd=0, takefocus=0,
         )
         check.pack(side="left", padx=(0, theme.px(4)))
+        widgets.tooltip(check, CHECK_TOOLTIP)
         self._card_vars[eid] = var
 
         tk.Label(top, text=row["term"], bg=theme.PANEL, fg=theme.TEXT,
@@ -1114,9 +1323,13 @@ class MainWindow:
         names = [str(r["name"]) for r in self._tag_rows
                  if str(r["name"]).casefold() not in have]
         for name in names[: self.TAG_CHIP_LIMIT]:
-            widgets.FlatButton(frame, f"+{name}", command=lambda n=name: self._add_tag_chip(n),
-                               font_size=7, padx=5, pady=1).pack(side="left",
-                                                                padx=(0, theme.px(3)))
+            chip = widgets.FlatButton(frame, f"+{name}",
+                                      command=lambda n=name: self._add_tag_chip(n),
+                                      font_size=7, padx=5, pady=1)
+            chip.pack(side="left", padx=(0, theme.px(3)))
+            # 说明要把「这是往输入框里填字、还没存」说清楚 —— 光看「+标签」会以为
+            # 点一下就已经加上了。
+            widgets.tooltip(chip, f"把「{name}」填进标签框（还要点「保存修改」才生效）")
 
     def _add_tag_chip(self, name: str) -> None:
         """把标签按钮的名字并进输入框（不落库 —— 还要点「保存修改」）。"""

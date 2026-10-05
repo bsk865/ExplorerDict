@@ -81,6 +81,7 @@ _DIAGNOSE_MODULES = (
     "app.ui.relation_editor",
     "app.ui.edge_block_dialog",
     "app.ui.shortcuts_dialog",
+    "app.ui.map_settings_dialog",
     "app.ui.reading_panel",
     "app.ui.settings_dialog",
     "app.ui.setup_wizard",

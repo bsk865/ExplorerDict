@@ -220,6 +220,11 @@ class App:
         # 这里在任何窗口/置顶操作之前先做一次**实时**门控判定。
         self._evaluate_environment()
         self.main = MainWindow(root, self)
+        #: ``main_window`` 是个**只读别名**，指的还是 ``self.main``。
+        #: 加它是因为导图窗与勾选筛选那边两处都写成 ``getattr(app, "main_window")``
+        #: —— 名字不存在 + ``getattr`` 的兜底 = 静默失效（不报错，功能就是不生效）。
+        #: 属性名对不上的写法以后再落到这个别名上也不会再坑一次。
+        self.main_window = self.main
         self.selection_bar, self.explain_window = build_overlays(root, self)
         #: 同一个面板的两个角色引用（用户只看到一个窗口）
         self.reading_panel = self.selection_bar
@@ -2250,13 +2255,42 @@ class App:
         画布首次 ``<Configure>`` 之前 ``winfo_width`` 只有 1 → 什么节点都画不出来。
         现在：主窗口**不动**（只 lift 导图窗），窗口自己按当前画布尺寸重画。
         """
+        #: 勾选范围（K1）：主界面勾上的词才进这张图 —— 词条攒多了之后，
+        #: 最后总结只要几个关键术语，不必把整个主题都画出来。
+        #: 主窗口存的是 ``self.main``（见本文件 ``self.main = MainWindow(...)``）——
+        #: 早先这里写的是 ``self.main_window``，那个属性根本不存在：``getattr`` 的
+        #: 兜底让它静默退化成「一个词都没勾」，勾选筛选于是在真机上完全不起作用。
+        only_ids = []
+        full_ids = []
+        browse_id = None
+        main = getattr(self, "main", None)
+        if main is not None:
+            ids = getattr(main, "checked_ids", None)
+            if callable(ids):
+                only_ids = list(ids())
+            scope = getattr(main, "checked_scope_ids", None)
+            if callable(scope):
+                full_ids = list(scope())
+            #: 主界面正在看的主题：勾选是按它勾的，图必须落在这个主题上。
+            raw_browse = getattr(main, "_browse_batch_id", None)
+            if raw_browse is not None:
+                browse_id = int(raw_browse)
         win = self._map_win
         if win is not None and win.alive():
             win.lift()
-            win.refresh()
+            apply_ids = getattr(win, "apply_only_ids", None)
+            if callable(apply_ids):
+                #: 重新点「导图」= 按**现在的勾选**重新定范围（取消几个词后再点一下，
+                #: 图里就只剩勾上的那些）。窗口本来就在，只是换了个范围。
+                apply_ids(only_ids, full_ids=full_ids)
+                #: 一并跟到主界面正在看的主题：勾选是按那个主题勾的。
+                win.refresh(topic_id=browse_id)
             self.set_status("参考关系图已在最前")
             return
-        self._map_win = ConceptMapWindow(self.root, self)
+        self._map_win = ConceptMapWindow(self.root, self,
+                                         only_ids=only_ids, full_ids=full_ids)
+        if browse_id is not None:
+            self._map_win.refresh(topic_id=browse_id)
         self.set_status("参考关系图：AI 参考关系（带依据与原文片段）")
 
     def _handle_map_result(self, payload) -> None:

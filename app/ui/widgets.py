@@ -821,6 +821,232 @@ def clear_children(widget) -> None:
             pass
 
 
+# --------------------------------------------------------------- 悬浮说明
+#: 光标停在控件上多久才弹出说明（毫秒）。太快会在鼠标扫过一排按钮时
+#: 一路闪出小条，太慢又像「没反应」—— 450 是这两者之间的常用折中。
+TOOLTIP_DELAY_MS = 450
+#: 说明与光标之间的留白（设备像素），免得贴着按钮边
+TOOLTIP_GAP = 8
+#: 距屏幕边缘至少留这么多（设备像素）
+TOOLTIP_EDGE = 6
+
+
+class Tooltip:
+    """光标停在控件上时弹出的一行小字（**纯 tk 实现**，不用 ``ttk``）。
+
+    为什么自己做一个
+    ----------------
+    冻结运行时里没有 ``tkinter.ttk``（导入即崩，``tests/test_runtime_recovery.py``
+    有 AST 守卫），Tk 原生控件也没有悬浮说明；所以说明只能是**自己建的
+    无框小窗**。样式沿用编辑杂志风：米色底、细线方框、方角、无阴影。
+
+    为什么延时弹出
+    --------------
+    ``<Enter>`` 立刻弹的话，鼠标横扫一排按钮会一路闪出小条。这里等
+    :data:`TOOLTIP_DELAY_MS` 毫秒再弹，``<Leave>`` 会取消这次待弹。
+
+    哪些地方该用 / 不该用
+    ---------------------
+    给**看不懂的入口**用（`合并…` 是合并什么、`导图` 是出图还是要花钱），
+    一句话说清「点了会怎样」；不要给已经有自解释文案的按钮硬加同义反复。
+    """
+
+    def __init__(self, widget, text, *, delay: int = TOOLTIP_DELAY_MS,
+                 text_fg: str | None = None):
+        #: 说明文字；传 ``callable`` 时**每次弹出都重新取**（按钮改了文案的
+        #: 情况：``游戏模式：关`` → ``游戏模式：开``，说明要跟着变）
+        self._text = text
+        self._delay = int(delay)
+        self._fg = text_fg
+        self.widget = widget
+        self.tip: tk.Toplevel | None = None
+        self._timer = None
+        try:
+            widget.bind("<Enter>", self._on_enter, add="+")
+            widget.bind("<Leave>", self._on_leave, add="+")
+            # 控件被点一下（按钮真的按下去）先把说明收掉：说明挡住了下面的东西
+            # 时，用户正要点的那一下不该被一行小字压着看。
+            widget.bind("<Button-1>", self.hide, add="+")
+        except tk.TclError:  # pragma: no cover - 控件已销毁
+            pass
+
+    # ---------------------------------------------------------------- 文案
+    def text(self) -> str:
+        """当前该显示的说明（``callable`` 每次都重新求值）。"""
+        source = self._text
+        return str(source() if callable(source) else source or "")
+
+    # ---------------------------------------------------------------- 显示
+    def _on_enter(self, _event=None) -> None:
+        self._cancel_timer()
+        after = getattr(self.widget, "after", None)
+        if not callable(after):
+            # 极简替身没有 ``after``：宁可不弹，也不要在鼠标一扫而过时
+            # 真的建出一堆窗口（真 Tk 上这条分支永远不会走到）。
+            return
+        try:
+            self._timer = after(self._delay, self.show)
+        except tk.TclError:  # pragma: no cover - 控件已销毁
+            self._timer = None
+
+    def _on_leave(self, _event=None) -> None:
+        self._cancel_timer()
+        self.hide()
+
+    def _cancel_timer(self) -> None:
+        timer, self._timer = self._timer, None
+        if timer is None:
+            return
+        cancel = getattr(self.widget, "after_cancel", None)
+        if not callable(cancel):  # pragma: no cover - 极简替身
+            return
+        try:
+            cancel(timer)
+        except tk.TclError:  # pragma: no cover - 定时器已经响过了
+            pass
+
+    def show(self, _event=None) -> None:
+        """弹出说明（已经弹着 / 文案为空就什么都不做）。"""
+        self._timer = None
+        if self.tip is not None:
+            return
+        text = self.text()
+        if not text:
+            return
+        widget = self.widget
+        try:
+            alive = bool(widget.winfo_exists())
+        except tk.TclError:  # pragma: no cover - 控件已销毁
+            return
+        if not alive:
+            return
+        try:
+            tip = tk.Toplevel(widget, bg=theme.BORDER, padx=1, pady=1)
+            # 无框 + 不抢焦点 + 不进任务栏：它只是一行字，不该像窗口一样存在
+            tip.overrideredirect(True)
+            self.tip = tip
+            for setter, value in (("wm_attributes", "-topmost"),):
+                wm = getattr(tip, setter, None)
+                if callable(wm):
+                    try:
+                        wm(value, True)
+                    except tk.TclError:  # pragma: no cover - 平台不支持
+                        pass
+            label = tk.Label(tip, text=text, bg=theme.PANEL,
+                             fg=self._fg or theme.TEXT_BODY, font=theme.font(8),
+                             justify="left", padx=theme.px(8), pady=theme.px(4))
+            label.pack()
+            x, y = self._place(widget, tip)
+            tip.geometry(f"+{x}+{y}")
+        except tk.TclError:  # pragma: no cover - 建不出窗口（无 GUI 时会话）
+            self.hide()
+
+    def _place(self, widget, tip) -> tuple[int, int]:
+        """算出说明该落在哪：**控件正下方居中**，撞到屏幕边缘就翻上去 / 贴边。
+
+        用控件自己的屏幕坐标而不是光标坐标：说明要跟**它解释的那个按钮**
+        对齐，不是跟着鼠标飘。
+        """
+        try:
+            wx, wy = int(widget.winfo_rootx()), int(widget.winfo_rooty())
+            ww, wh = int(widget.winfo_width()), int(widget.winfo_height())
+        except (tk.TclError, TypeError, ValueError):  # pragma: no cover
+            wx = wy = ww = wh = 0
+        try:
+            tip.update_idletasks()
+            tw = int(tip.winfo_reqwidth())
+            th = int(tip.winfo_reqheight())
+            sw = int(widget.winfo_screenwidth())
+            sh = int(widget.winfo_screenheight())
+        except (tk.TclError, TypeError, ValueError):  # pragma: no cover
+            return wx, wy + wh + TOOLTIP_GAP
+        x = wx + (ww - tw) // 2
+        y = wy + wh + TOOLTIP_GAP
+        if y + th > sh - TOOLTIP_EDGE:                 # 下面放不下 → 放到上面
+            y = wy - th - TOOLTIP_GAP
+        x = max(TOOLTIP_EDGE, min(x, sw - tw - TOOLTIP_EDGE))
+        y = max(TOOLTIP_EDGE, y)
+        return x, y
+
+    # ---------------------------------------------------------------- 收起
+    def hide(self, _event=None) -> None:
+        """收起说明（没弹着就是空操作）。"""
+        self._cancel_timer()
+        tip, self.tip = self.tip, None
+        if tip is None:
+            return
+        try:
+            tip.destroy()
+        except tk.TclError:  # pragma: no cover - 已经没了
+            pass
+
+
+def tooltip(widget, text, **kw) -> Tooltip:
+    """给控件挂一句悬浮说明（``widgets.tooltip(btn, "点了会怎样")``）。"""
+    return Tooltip(widget, text, **kw)
+
+
+def placeholder(entry, text: str, *, variable=None, fg: str | None = None,
+                fg_normal: str | None = None) -> None:
+    """给输入框挂**占位提示**：空着且没聚焦时显示，一输入就消失。
+
+    用户看到的提示文字与输入框的值必须彻底分开
+    ------------------------------------------
+    占位文字**绝不**写进 ``textvariable`` —— 那样搜索框的值会变成
+    「搜索词语…」这样一句提示，程序会真的拿它去查库（还查不到东西）。
+    这里只改控件上的显示文本（``insert`` / ``delete``），真实的值永远留在
+    调用方的变量里。
+
+    ``variable`` 传进来的话，会在每次状态切换时**核对**一次：变量里有内容
+    （例如程序替用户填了搜索词）就绝不显示占位文字。
+    """
+    state = {"showing": False}
+    text = str(text or "")
+    color_hint = fg or theme.TEXT_FAINT
+    color_normal = fg_normal or theme.TEXT
+
+    def _current() -> str:
+        if variable is None:
+            return ""
+        try:
+            return str(variable.get() or "")
+        except tk.TclError:  # pragma: no cover - 变量已销毁
+            return ""
+
+    def _show(_event=None) -> None:
+        if state["showing"] or _current().strip():
+            return
+        try:
+            entry.delete(0, "end")
+            entry.insert(0, text)
+            entry.configure(fg=color_hint)
+            state["showing"] = True
+        except tk.TclError:  # pragma: no cover - 控件已销毁
+            pass
+
+    def _hide(_event=None) -> None:
+        if not state["showing"]:
+            return
+        state["showing"] = False
+        try:
+            entry.delete(0, "end")
+            entry.configure(fg=color_normal)
+        except tk.TclError:  # pragma: no cover - 控件已销毁
+            pass
+
+    try:
+        entry.bind("<FocusIn>", _hide, add="+")
+        entry.bind("<FocusOut>", _show, add="+")
+        # 键盘 / 鼠标 / 输入法三条路都要覆盖：中文输入法落字走的是
+        # ``<KeyRelease>``，直接点进去打字也会先经过 ``<Button-1>``。
+        entry.bind("<KeyRelease>", _hide, add="+")
+        entry.bind("<Button-1>", _hide, add="+")
+    except tk.TclError:  # pragma: no cover
+        return
+    if not _current().strip():
+        _show()
+
+
 #: 自绘标题带高度（逻辑像素）
 CHROME_H = 30
 #: 可缩放的无框窗口最小尺寸（逻辑像素）

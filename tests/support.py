@@ -400,6 +400,8 @@ class FakeRoot:
     def __init__(self):
         self.protocols: dict = {}
         self.after_calls: list = []
+        #: 被 ``after_cancel`` 取消掉的定时器 id（「关窗要取消提示淡出」用得上）
+        self.after_cancelled: list = []
         self.attributes_calls: list = []
         self.lift_calls = 0
         self.focus_calls = 0
@@ -458,6 +460,16 @@ class FakeRoot:
     def after(self, ms, func=None, *args):
         self.after_calls.append((ms, func))
         return f"after-{len(self.after_calls)}"
+
+    def after_cancel(self, timer=None):
+        """真实 Tk 的 ``after_cancel``：登记被取消的定时器 id。
+
+        没有它的话，「关窗要取消提示的淡出定时器」这条测试会被产品里的
+        ``getattr(self.win, "after_cancel", None)`` 兜底悄悄跳过 —— 那等于用假环境
+        的缺口替产品背书（见 ``tests/test_ui_roundrect.py`` 的提示折叠用例）。
+        """
+        self.after_cancelled.append(timer)
+        return None
 
     def attributes(self, *a, **k):
         self.attributes_calls.append(a)
@@ -1052,13 +1064,66 @@ def run_gesture_worker(app, *, timeout: float = 5.0) -> None:
         stop.clear()
 
 
+def _chain_binds(binds: dict, sequence, func) -> None:
+    """把一次 ``bind`` 记进假控件的 ``binds``，**保留先前绑定的那些回调**。
+
+    真 Tk 的 ``bind(..., add="+")`` 是叠加：同一个控件上「点击」可以既走自己的
+    处理、又走挂上去的悬浮说明（例如搜索框：点进去要收起占位提示，同时说明气泡
+    要收掉）。早先这里直接 ``binds[sequence] = func``，后绑的把先绑的**顶掉**，
+    于是「点进搜索框，占位提示没消失」这种真问题在假环境里根本红不了 ——
+    拿替身的缺口替产品背书。
+
+    仍然按**单个回调**取用（``binds[seq](event)`` / ``binds.get(seq)``）：只有一个
+    回调时存的就是它本人，两个以上时存一个可调用的 :class:`_ChainedBinds`。
+    """
+    if func is None:
+        binds.pop(sequence, None)
+        return
+    current = binds.get(sequence)
+    if current is None:
+        binds[sequence] = func
+    elif isinstance(current, _ChainedBinds):
+        current.append(func)
+    else:
+        binds[sequence] = _ChainedBinds([current, func])
+
+
+class _ChainedBinds:
+    """一个控件上同一事件的多条绑定，按登记顺序依次执行。"""
+
+    def __init__(self, funcs):
+        self.funcs = list(funcs)
+
+    def append(self, func) -> None:
+        self.funcs.append(func)
+
+    def __call__(self, event=None):
+        result = None
+        for func in list(self.funcs):
+            result = func(event)
+        return result
+
+    def __eq__(self, other):
+        return list(self.funcs) == [other] if not isinstance(other, _ChainedBinds) \
+            else self.funcs == other.funcs
+
+    def __hash__(self):
+        return hash(tuple(self.funcs))
+
+    def __repr__(self):
+        return f"<_ChainedBinds {[getattr(f, '__name__', f) for f in self.funcs]}>"
+
+
 # ------------------------------------------------------------------ 浮窗探针
 class FakeTkWindow:
     """假 Tk Toplevel：记录 geometry / deiconify / withdraw 的**调用顺序**。"""
 
-    def __init__(self, width: int = 220, height: int = 70):
+    def __init__(self, width: int = 220, height: int = 70, **_kw):
         self._w = int(width)
         self._h = int(height)
+        #: 建窗时传进来的配置（``bg`` / ``padx`` / ``pady`` …）。真实 Tk 会照单
+        #: 收下；悬浮说明的假替身要能核对「说明小窗自己有没有多余的颜色」。
+        self.kw: dict = dict(_kw)
         #: ``winfo_width`` / ``winfo_height`` 报告出来的**实测尺寸**：默认与展开面板
         #: 一致，测试可以改写它来模拟「Tk 还停在旧尺寸上」这类时序。
         self.winfo_w = 360
@@ -1069,6 +1134,10 @@ class FakeTkWindow:
         self.binds: dict = {}
         #: ``after_idle`` 登记的回调（浮窗的 region 回执走这条路径，可手动驱动）
         self.idle_callbacks: list = []
+        #: ``after`` 登记的回调（只登记不执行，与 :class:`FakeRoot` 一致）
+        self.after_calls: list = []
+        #: 被 ``after_cancel`` 取消掉的定时器 id
+        self.after_cancelled: list = []
         self.mapped = False
 
     # --- FloatingWindow 用到的 Tk API ---
@@ -1086,6 +1155,29 @@ class FakeTkWindow:
     def after_idle(self, func=None, *args):
         self.idle_callbacks.append(func)
         return f"idle-{len(self.idle_callbacks)}"
+
+    def after(self, ms, func=None, *args):
+        """真实 Toplevel 的 ``after``：**只登记、不执行**（与 :class:`FakeRoot` 一致）。
+
+        导图窗口的右下角提示把「20 秒后淡出」排在这里（``self.win.after``）。没有这个
+        方法的话，产品里那句 ``callable(after)`` 会兜底跳过 —— 于是「提示到底有没有
+        排上定时器、延时是不是 20 秒」在假环境里**永远测不出来**（拿替身的缺口替产品
+        背书）。登记下来，测试就能自己把那一次回调跑掉。
+        """
+        self.after_calls.append((ms, func))
+        if not ms and func is not None:
+            # 真实 Tk 的 ``after(0, …)`` 就是「下一轮事件循环立刻做」：等到真跑起来时
+            # 它跟同步调用没有区别，所以这里直接跑掉。这一步是必要的 ——
+            # ``settings_dialog._finish_connection_test`` 与 ``concept_map`` 的
+            # 「回 UI 线程」都走 ``after(0, …)``，只登记不执行的话结果永远回不来。
+            # 真正要等的定时器（延时 > 0）仍然只登记、由测试自己驱动。
+            func(*args)
+        return f"after-{len(self.after_calls)}"
+
+    def after_cancel(self, timer=None):
+        """真实 Toplevel 的 ``after_cancel``：登记被取消的定时器 id。"""
+        self.after_cancelled.append(timer)
+        return None
 
     def geometry(self, spec):
         self.events.append(f"geometry:{spec}")
@@ -1138,7 +1230,7 @@ class FakeTkWindow:
         return None
 
     def bind(self, sequence=None, func=None, **_k):
-        self.binds[sequence] = func
+        _chain_binds(self.binds, sequence, func)
         return None
 
     def destroy(self):
@@ -1428,6 +1520,9 @@ class FakeWidget:
         self.packed = 0
         self.pack_kw = {}
         self.binds: dict = {}
+        #: ``after`` 登记的回调（``(延时, 函数)``，只登记不执行）与取消记录
+        self.after_calls: list = []
+        self.after_cancelled: list = []
         self.placed = 0
         self.place_kw: dict = {}
         self._buffer = str(kw.get("text", ""))
@@ -1522,7 +1617,7 @@ class FakeWidget:
 
     def bind(self, sequence=None, func=None, **_k):
         self.tcl_call("bind")
-        self.binds[sequence] = func
+        _chain_binds(self.binds, sequence, func)
         return None
 
     def bind_all(self, *_a, **_k):
@@ -1544,7 +1639,21 @@ class FakeWidget:
         return int(self.kw.get("width", 0) or 0)
 
     def winfo_height(self):
-        return 0
+        # 真控件总是有高度的。恒返回 0 会让「把说明摆到控件正下方」这类
+        # 定位计算在假环境里算出荒唐坐标 —— 那是替身的缺口，不是产品的行为。
+        return 22
+
+    def winfo_rootx(self):
+        return 100
+
+    def winfo_rooty(self):
+        return 100
+
+    def winfo_screenwidth(self):
+        return 1920
+
+    def winfo_screenheight(self):
+        return 1080
 
     def winfo_exists(self):
         return 1
@@ -1614,7 +1723,23 @@ class FakeWidget:
     def update_idletasks(self):
         return None
 
-    def after(self, *_a, **_k):
+    def after(self, ms, func=None, *args):
+        """真实控件的 ``after``：**只登记、不执行**（与 :class:`FakeRoot` 一致）。
+
+        导图窗口的提示把淡出的每一拍排在提示自己的 Frame 上。登记下来（而不是像
+        早先那样直接 ``return None``），测试才能自己驱动「20 秒到 → 淡出 → 折叠」
+        这条链子；不然产品把定时器排在哪个控件上、排了几拍，假环境里全看不见。
+        """
+        self.after_calls.append((ms, func))
+        if not ms and func is not None:
+            # 同 ``FakeTkWindow.after``：``after(0, …)`` 在真 Tk 上就是「立刻做」，
+            # 这里直接跑掉；延时 > 0 的定时器只登记，由测试自己驱动。
+            func(*args)
+        return f"after-{len(self.after_calls)}"
+
+    def after_cancel(self, timer=None):
+        """真实控件的 ``after_cancel``：登记被取消的定时器 id。"""
+        self.after_cancelled.append(timer)
         return None
 
     # --- Listbox（主界面批次列表）---
@@ -2084,8 +2209,11 @@ class _FakeTkEnv:
     def _make_var(self, master=None, value=None, name=None):
         return FakeVar(value)
 
-    def _make_toplevel(self, master=None, **_kw):
-        widget = FakeTkWindow(self.width, self.height)
+    def _make_toplevel(self, master=None, **kw):
+        # 配置原样交给替身（``FakeTkWindow`` 收进 ``self.kw``）：丢掉的话，
+        # 「说明小窗有没有自己的底色 / 内边距」这类断言在假环境里根本无从查起
+        # —— 那又是一次「拿替身的缺口替产品背书」。
+        widget = FakeTkWindow(self.width, self.height, **kw)
         self.windows.append(widget)
         self.w32.windows[widget.winfo_id()] = widget
         return widget

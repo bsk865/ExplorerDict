@@ -894,6 +894,18 @@ class Database:
         params.append(limit)
         return self.query(sql, tuple(params))
 
+    def list_entry_ids(self, batch_id: int | None = None, query: str = "",
+                       tag: str = "") -> list[int]:
+        """当前范围（主题 / 搜索词 / 标签）里**全部**词条 id（按显示顺序，不受分页上限影响）。
+
+        只取 id：主界面要给整个范围默认打勾（新主题一进来就是「全勾」），
+        而屏幕上只画得下 ``MAX_CARDS`` 张卡片 —— 拿卡片算范围会漏掉没画出来的词。
+        """
+        where, params = self._entries_where(batch_id, query, tag)
+        rows = self.query("SELECT id FROM entries" + where
+                          + " ORDER BY captured_at DESC, id DESC", tuple(params))
+        return [int(r["id"]) for r in rows]
+
     @staticmethod
     def _entries_where(batch_id: int | None, query: str, tag: str = "") -> tuple[str, list]:
         """``list_entries`` / ``count_entries`` 共用的 WHERE 片段与参数。"""

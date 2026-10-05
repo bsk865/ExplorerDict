@@ -33,7 +33,11 @@
   用途 / 对照的跨边、孤立词单独成行），窗口里**没有**手动录入控件、只有单一生成入口；
   镜头：滚动范围四边各留**一个视口**（内容比视口小的小图也能左右上下自由平移），
   初始视图落在**世界原点 0**，右键松手之后的第一次左键照常点线 / 点空白
-  （只挡「右键还按着」期间的左键，绝不吞掉拖动后的下一次点击）。
+  （只挡「右键还按着」期间的左键，绝不吞掉拖动后的下一次点击）；本轮按用户口径补上「左键拖空白 = 平移整张图」
+  （抓画布：门槛之内只是手抖、松手就停），并把三个功能框内化进操作里 ——
+  建关系 = 按住 Alt 从左键拖出来、孤立词诊断 = 点画布上那一行孤立词、打开词条 =
+  双击词卡；导图设置（模板 / 让模型也看一眼）从主界面「设置」搬进导图窗口的
+  「导图设置…」。
 """
 from __future__ import annotations
 
@@ -2813,9 +2817,11 @@ class TestConceptMapWindow(unittest.TestCase):
     def test_the_canvas_window_keeps_its_own_controls_minimal(self):
         """画布窗口本身只放**入口按钮**：人工关系的输入控件在独立对话框里。
 
-        批次 C 之前这条断言的是「窗口上没有手动关系控件」；现在 C5 明确要做人工关系，
-        但那些裸输入框（起点 / 终点 / 关系名）仍然不该挤在图上 —— 图上只有
-        「人工关系…」这个入口，点开才是对话框。
+        批次 C 之前这条断言的是「窗口上没有手动关系控件」；C5 明确要做人工关系，
+        但那些裸输入框（起点 / 终点 / 关系名）仍然不该挤在图上。
+        本轮（用户口径 2026-10-04）：原来那三个功能框（人工关系… / 孤立词诊断 /
+        打开选中的词条）内化进操作里，不再各占一个按钮 —— 图上只留导出、模板、
+        恢复自动布局、操作说明与导图设置五个入口。
         """
         from app.ui import concept_map as cm
 
@@ -2828,9 +2834,14 @@ class TestConceptMapWindow(unittest.TestCase):
                 texts = [str(widget.cget("text")) for widget in env.widgets]
                 for banned in ("起点", "终点", "添加关系", "删除选中关系", "关系名"):
                     self.assertNotIn(banned, texts, f"裸输入控件「{banned}」不该挤在画布窗口上")
-                # 批次 C 的四个入口都要在，而且都只是入口（真正的编辑在对话框里）
-                for entry_text in ("人工关系…", "孤立词诊断", "导出关系图…", "打开选中的词条"):
+                # 本轮内化的三个：功能留着（方法 / 操作路径），按钮不留
+                for gone in ("人工关系…", "孤立词诊断", "打开选中的词条"):
+                    self.assertNotIn(gone, texts, f"「{gone}」已经内化进操作里，不该再有按钮")
+                # 留下的入口：导出 / 模板 / 恢复自动布局 / 操作说明 / 导图设置
+                for entry_text in ("导出关系图…", "恢复自动布局", "操作说明…", "导图设置…"):
                     self.assertIn(entry_text, texts, f"缺少入口「{entry_text}」")
+                self.assertTrue(any(str(text).startswith("模板：") for text in texts),
+                                "模板那一个入口要写着当前骨架")
                 self.assertIn("只分析选中的词", texts, "局部生成（C3）的入口")
                 self.assertIn("分析全部词条", texts, "切回整个主题的入口")
                 self.assertIn("人工添加的关系不出现在线上标注里：双击一条线可以看到它的来历",
@@ -2869,16 +2880,23 @@ class TestConceptMapWindow(unittest.TestCase):
                                 "提示块必须按右下角定位（relx/rely 都是 1.0）")
                 self.assertEqual(len(hints), len(cm.HINT_LINES),
                              "三行必须是三个独立的 Label（Tk 多行文本没有行距）")
-                # 提示块要有**不透明底**：用户反馈「框选位置的提示背景是透明的」
-                # —— 原来它跟画布同色（都取 theme.PANEL），看着像浮在半空。
+                # 提示块要**没有自己的背景色**（用户口径 2026-10-04）：「这个背景要是
+                # 透明的，不要给提示背景板设置颜色」—— 底板与行都用画布自己的底色，
+                # 皮上只剩文字；**没有**边框。这一条**推翻了**早先「加一张不透明小卡片」
+                # 的做法（那次用户说压在卡片上看着透明读不清，才加的 CARD_BG + 细边），
+                # 按新口径实现：不给背景板设颜色。
                 from app.ui import theme
                 self.assertEqual(str(win.hint_box.cget("bg")).lower(),
-                                 theme.CARD_BG.lower(),
-                                 "提示块要有自己的底色（不是画布同色）")
-                self.assertEqual(str(win.hint_box.cget("highlightthickness")), "1",
-                                 "提示块要有一圈细边，才看得出是一张卡片")
+                                 str(theme.PANEL).lower(),
+                                 "提示块底色 = 画布底色（也就是没有自己的背景板）")
+                self.assertEqual(str(win.hint_box.cget("highlightthickness") or 0), "0",
+                                 "提示块不许再画那一圈边框（边框也是「背景板」的一部分）")
+                self.assertTrue(all(str(label.cget("bg")).lower() == str(theme.PANEL).lower()
+                                    for label in win.hint_rows),
+                                "每一行提示也不许有自己的底色")
                 self.assertNotEqual(theme.CARD_BG.lower(), theme.PANEL.lower(),
-                                    "底色必须真的与画布底色不同，否则还是不透明等于没有")
+                                    "别把提示又退回卡片色：那两个色本来就不同，"
+                                    "退回卡片色就等于又把背景板加回来了")
 
     def test_entry_budget_is_spelled_out_in_the_window(self):
         """单次分析有上限时，窗口要用短句说清「本次分析 N 词 / 共 M 词」。"""
@@ -4426,11 +4444,13 @@ class TestConceptMapCamera(unittest.TestCase):
                 self._click(win, -300.0, -200.0)
                 self.assertIsNone(win._selected, "点空白照样要能收起依据")
 
-                # 左键**不参与**平移：按着左键移动（没有右键按住），视图一动不动
+                # 右键通道没按下过就不动视图（中键 / 右键平移都必须从「按下」开始）。
+                # 左键拖空白那条平移走的是另一条路（``_pan_by_drag``，见
+                # test_left_dragging_the_blank_pans_the_whole_map）。
                 before = (win._view_left(), win._view_top())
                 win._on_pan_motion(SimpleNamespace(x_root=500, y_root=400))
                 self.assertEqual((win._view_left(), win._view_top()), before,
-                                 "左键移动不许平移（平移只认右键按住）")
+                                 "没有右键按下的 Motion 不许平移（平移只从按下开始）")
 
     def test_small_content_pans_freely_in_all_four_directions(self):
         """小图（内容比画布小）也必须四个方向自由平移，且平移后首次点击有效。
@@ -4735,6 +4755,122 @@ class TestConceptMapAppWiring(unittest.TestCase):
             self.assertIs(win._graph, graph, "迟到的结果不许改动已关闭窗口的状态")
 
 
+class TestConceptMapCheckedFilter(unittest.TestCase):
+    """K1（勾选 → 导图）：主界面勾上的词才进参考关系图。
+
+    导图侧本来就有「只分析选中的词」这套子集机制（C3）；K1 只是把**主界面卡片上
+    的勾选框**接到同一个入口上。这里验证的是接线本身与三条守卫。
+    """
+
+    def _seed(self, app):
+        """一个主题三条词，全部解释过（导图只画解释过的词）。"""
+        bid = int(app.db.create_batch("笔记"))
+        ids = []
+        for term, context in (("卷积", "卷积核在输入上滑动"),
+                              ("池化", "池化用于降采样"),
+                              ("全连接", "每个输入都连到每个输出")):
+            ids.append(int(app.db.add_entry(batch_id=bid, term=term, context=context)))
+        app.main._browse_batch_id = bid
+        app.main.refresh_batches()
+        app.main.refresh_entries()
+        for eid, term in zip(ids, ("卷积", "池化", "全连接")):
+            app.db.update_entry(eid, one_line=f"{term}的意思", explain_status="ok")
+        return bid, ids
+
+    def test_the_map_only_draws_the_words_checked_in_the_main_window(self):
+        with support.headless_app(main_window="real") as app:
+            bid, (first, second, third) = self._seed(app)
+            self.assertEqual(app.main.checked_ids(), [first, second, third],
+                             "进主题默认全勾")
+            app.main._card_vars[second].set(False)
+            app.main._toggle_checked(second, app.main._card_vars[second])
+
+            app.open_concept_map()
+            win = app._map_win
+            self.assertEqual(int(win._topic_id), bid)
+            self.assertCountEqual([int(n.entry_id) for n in win._nodes],
+                                  [first, third], "只画勾上的词")
+
+            win.close()
+            win.win.winfo_exists = lambda: 0
+            app.main._card_vars[third].set(False)
+            app.main._toggle_checked(third, app.main._card_vars[third])
+            app.open_concept_map()             # 单例：不重建，按新勾选换范围
+            self.assertIsNot(app._map_win, win, "窗口已经关了 ⇒ 重建一个")
+            self.assertEqual([int(n.entry_id) for n in app._map_win._nodes], [first],
+                             "重新点「导图」按**现在的**勾选重定范围")
+
+    def test_checking_everything_is_the_same_as_a_plain_topic_map(self):
+        """全勾 = 整个主题：不许被当成子集（否则白多一份缓存 + 一句废话提示）。"""
+        with support.headless_app(main_window="real") as app:
+            bid, ids = self._seed(app)
+            app.open_concept_map()
+            win = app._map_win
+            self.assertEqual(win._subset_ids, set(), "一个都没取消 = 没有子集")
+            self.assertNotIn("只分析选中的", str(win._coverage_note))
+            self.assertEqual(len(win._nodes), len(ids))
+
+    def test_checked_words_without_an_explanation_do_not_break_the_map(self):
+        with support.headless_app(main_window="real") as app:
+            bid, (first, second, third) = self._seed(app)
+            bare = int(app.db.add_entry(batch_id=bid, term="还没解释", context="上下文"))
+            app.main.refresh_entries()
+            self.assertIn(bare, app.main._checked_scope,
+                          "没解释的词也在这个范围里（勾选不按「解释过」筛）")
+            self.assertNotIn(bare, app.main.checked_ids(),
+                             "默认全勾只发生在**进主题**那一刻：之后新增的词不自动勾上，"
+                             "否则「全不选」再添一条就被破坏了")
+            app.main._set_all_checked(True)     # 想连它一起画，点「全选」即可
+            self.assertIn(bare, app.main.checked_ids())
+            app.main._card_vars[third].set(False)
+            app.main._toggle_checked(third, app.main._card_vars[third])
+
+            app.open_concept_map()
+            win = app._map_win
+            self.assertCountEqual([int(n.entry_id) for n in win._nodes],
+                                  [first, second, bare],
+                                  "只画勾上且解释过的")
+
+    def test_checked_words_from_another_topic_do_not_empty_the_map(self):
+        """勾的是**别的主题**的词 ⇒ 交集为空 ⇒ 退回「全部」，绝不给一张空图。
+
+        导图窗挑主题时的兜底规则：主界面勾的那些词若一个都不在这张图的主题里
+        （比如刚新建了一个主题，导图按 ``list_batches()`` 的排序挑中了它），
+        交集就是空的 —— 这时宁可画整个主题，也不能交出一张什么都没有的图。
+        """
+        with support.headless_app(main_window="real") as app:
+            bid, (first, second, third) = self._seed(app)
+            other = int(app.db.create_batch("另一篇"))
+            stranger = int(app.db.add_entry(batch_id=other, term="外部词", context="上下文"))
+            app.open_concept_map()
+            win = app._map_win
+            before = [int(n.entry_id) for n in win._nodes]
+            self.assertCountEqual(before, [first, second, third],
+                                  "主界面正在浏览这个主题、三条全勾 ⇒ 图就落在这个主题上")
+
+            self.assertFalse(win.apply_only_ids([stranger]),
+                             "一个都交集不上 ⇒ 范围不变")
+            self.assertEqual(win._subset_ids, set())
+            self.assertEqual([int(n.entry_id) for n in win._nodes], before, "图上还是原样")
+
+    def test_a_missing_entry_drops_out_of_the_subset(self):
+        with support.headless_app(main_window="real") as app:
+            _bid, (first, second, third) = self._seed(app)
+            app.main._card_vars[second].set(False)
+            app.main._toggle_checked(second, app.main._card_vars[second])
+            app.open_concept_map()
+            win = app._map_win
+            self.assertEqual(win._subset_ids, {first, third})
+
+            app.db.delete_entry(first)
+            app.main.refresh_entries()
+            win.refresh()
+            self.assertEqual([int(n.entry_id) for n in win._nodes], [third],
+                             "删掉的词不留幽灵选中：勾选范围里只剩 third 还活着")
+            self.assertEqual(win._subset_ids, {third}, "子集只剩还活着的那条勾选")
+            self.assertNotIn(first, win._subset_ids)
+
+
 class TestLibraryOrganizationControls(unittest.TestCase):
     """B 批（词库组织）：标签筛选、合并 / 拆分、导出、搜索命中。
 
@@ -4872,32 +5008,43 @@ class TestLibraryOrganizationControls(unittest.TestCase):
 
     def test_checking_a_card_survives_a_refresh_and_drives_the_hint(self):
         with support.headless_app(main_window="real") as app:
-            _bid, first, _second = self._seed(app)
+            _bid, first, second = self._seed(app)
+            self.assertEqual(app.main.checked_ids(), [first, second],
+                             "K 批：进一个主题默认**全勾**")
+            self.assertEqual(str(app.main.sel_hint.cget("text")), "本组 2 条已全勾")
+
             var = app.main._card_vars[first]
-            var.set(True)
+            var.set(False)
             app.main._toggle_checked(first, var)
-            self.assertEqual(app.main.checked_ids(), [first])
-            self.assertEqual(str(app.main.sel_hint.cget("text")), "已勾选 1 条")
+            self.assertEqual(app.main.checked_ids(), [second])
+            self.assertEqual(str(app.main.sel_hint.cget("text")), "已勾选 1 / 2 条")
 
             app.main.refresh_entries()
-            self.assertTrue(bool(app.main._card_vars[first].get()), "刷新后勾还在")
+            self.assertFalse(bool(app.main._card_vars[first].get()),
+                             "手动取消的勾，刷新后不许自己回来")
+            self.assertTrue(bool(app.main._card_vars[second].get()), "别的勾还在")
+            self.assertEqual(app.main.checked_ids(), [second])
+
             app.main.clear_checked()
             self.assertEqual(app.main.checked_ids(), [])
-            self.assertEqual(str(app.main.sel_hint.cget("text")), "")
+            self.assertEqual(str(app.main.sel_hint.cget("text")), "点这里全选")
 
     def test_a_check_disappears_when_its_entry_is_gone(self):
         with support.headless_app(main_window="real") as app:
-            _bid, first, _second = self._seed(app)
-            var = app.main._card_vars[first]
-            var.set(True)
-            app.main._toggle_checked(first, var)
-            app.db.delete_entry(first)
+            _bid, first, second = self._seed(app)
+            app.main._card_vars[first].set(False)   # 默认全勾，先取消一条
+            app.main._toggle_checked(first, app.main._card_vars[first])
+            self.assertEqual(app.main.checked_ids(), [second], "只剩第二条勾着")
+            app.db.delete_entry(second)
             app.main.refresh_entries()
             self.assertEqual(app.main.checked_ids(), [], "已删词条不许留在勾选集合里")
 
     def test_splitting_checked_entries_creates_a_new_batch_and_follows_it(self):
         with support.headless_app(main_window="real") as app:
-            bid, _first, second = self._seed(app)
+            bid, first, second = self._seed(app)
+            app.main._card_vars[first].set(False)   # 只搬走第二条
+            app.main._toggle_checked(first, app.main._card_vars[first])
+            self.assertEqual(app.main.checked_ids(), [second])
             self.assertEqual(app.main.apply_move([second], "new", 0, "  新专题  "), 1)
             rows = app.db.list_batches()
             self.assertIn("新专题", [str(r["name"]) for r in rows], "标题两端空白要压掉")
@@ -4907,6 +5054,79 @@ class TestLibraryOrganizationControls(unittest.TestCase):
             self.assertEqual(int(app.main._browse_batch_id), new_id, "搬完跟着看新主题")
             self.assertIn("已移动 1 条词语", str(app.main.status_label.cget("text")))
             self.assertEqual(app.db.count_entries(batch_id=bid), 1)
+
+    def test_entering_a_topic_checks_everything_again(self):
+        """换主题 = 重新全勾（K 批口径）；搜索 / 标签筛选**不**重置。"""
+        with support.headless_app(main_window="real") as app:
+            _bid, first, second = self._seed(app)
+            other = int(app.db.create_batch("另一篇"))
+            third = int(app.db.add_entry(batch_id=other, term="博弈", context="纳什均衡"))
+            app.main.refresh_batches()
+
+            app.main._card_vars[first].set(False)
+            app.main._toggle_checked(first, app.main._card_vars[first])
+            self.assertEqual(app.main.checked_ids(), [second])
+
+            app.main._browse_batch_id = other          # 换主题
+            app.main.refresh_entries()
+            self.assertEqual(app.main.checked_ids(), [third], "新主题默认全勾")
+
+            app.main._browse_batch_id = _bid
+            app.main.refresh_entries()
+            self.assertEqual(app.main.checked_ids(), [first, second], "换回来又是全勾")
+            app.main._set_all_checked(False)
+            app.main.search_var.set("边际")
+            app.main.refresh_entries()
+            self.assertEqual(app.main.checked_ids(), [],
+                             "搜索只换范围，不许把用户点掉的勾补回来")
+
+    def test_select_all_and_none_cover_entries_that_are_off_screen(self):
+        """全选 / 全不选按**整组**算，不是按画出来的卡片算。
+
+        卡片有 ``MAX_CARDS`` 上限，屏幕上也放不下那么多张；这里造的患者就是
+        「列表里还有好几条、可它们连卡片都没画出来」——早先用卡片算范围时，
+        这批词既不会被「全选」勾上，也不会被「全不选」取消。
+        """
+        from app.ui.main_window import MAX_CARDS
+
+        total = MAX_CARDS + 20
+        with support.headless_app(main_window="real") as app:
+            bid = int(app.db.create_batch("大主题"))
+            ids = [int(app.db.add_entry(batch_id=bid, term=f"词{i}", context="上下文"))
+                   for i in range(total)]
+            app.main._browse_batch_id = bid
+            app.main.refresh_batches()
+            app.main.refresh_entries()
+
+            self.assertEqual(len(app.main.checked_scope_ids()), total, "范围不受卡片上限影响")
+            self.assertEqual(len(app.main._card_vars), MAX_CARDS, "屏幕外的词没有卡片")
+            self.assertEqual(app.main.checked_ids(), sorted(ids), "默认全勾，含屏幕外的")
+
+            app.main._set_all_checked(False)
+            self.assertEqual(app.main.checked_ids(), [], "全不选也要管到屏幕外的词")
+            app.main._on_sel_hint_click()
+            self.assertEqual(app.main.checked_ids(), sorted(ids), "点提示行 = 全选")
+            app.main.refresh_entries()
+            self.assertEqual(app.main.checked_ids(), sorted(ids), "全选后刷新仍是全勾")
+
+    def test_splitting_the_whole_topic_asks_first(self):
+        """整组都被勾上时先问一句：否则「全勾」一个手滑就把整个主题搬走了。"""
+        with support.headless_app(main_window="real") as app:
+            _bid, first, second = self._seed(app)
+            self.assertEqual(app.main.checked_ids(), [first, second], "默认全勾")
+
+            with mock.patch("app.ui.main_window.messagebox") as box:
+                box.askyesno.return_value = False
+                app.main.split_entries_dialog()
+            self.assertTrue(box.askyesno.called, "全勾时必须先确认")
+            self.assertFalse(box.askstring.called, "用户点了「不」就不该再弹选主题的窗")
+
+            app.main._card_vars[first].set(False)
+            app.main._toggle_checked(first, app.main._card_vars[first])
+            with mock.patch("app.ui.main_window.messagebox") as box:
+                box.askyesno.return_value = True
+                app.main.split_entries_dialog()
+                self.assertFalse(box.askyesno.called, "只搬一部分时不问")
 
     def test_moving_checked_entries_into_an_existing_batch(self):
         with support.headless_app(main_window="real") as app:
@@ -5335,8 +5555,10 @@ class TestConceptMapManualAndTools(unittest.TestCase):
             with _FakeTkEnv():
                 win, ids, bid = self._window(
                     db, open_main_window=open_main,
-                    main_window=SimpleNamespace(select_entry=selected.append,
-                                                set_browse_scope=scopes.append))
+                    #: 属性名用 ``main``：``App`` 上主窗口就叫 ``self.main``
+                    #: （``main_window`` 只是最近才加的别名）。
+                    main=SimpleNamespace(select_entry=selected.append,
+                                         set_browse_scope=scopes.append))
                 node = win._layout.find(ids["过拟合"])
                 win._on_canvas_double_click(SimpleNamespace(
                     x=node.x - win._view_left(), y=node.y - win._view_top()))
@@ -5640,6 +5862,113 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                 self.assertEqual(win.manual_relation_rows(), [], "更不许写库")
                 self.assertEqual(str(win.feedback.cget("text")), before,
                                  "单击不该弹任何提示（没什么可固定的、也没什么可取消的）")
+
+    # --------------------------- 本轮：左键拖空白 = 平移整张图（ProjectGraph 式）
+    def test_left_dragging_the_blank_pans_the_whole_map(self):
+        """用户口径（2026-10-04）：「鼠标左键不按 ALT 的时候是可以自动拖动的」。
+
+        左键抓空白 = 平移整张图（ProjectGraph 里抓空白挪画布那一下）；门槛之内
+        只是手抖、松手就停，而且一个字节都不写。
+        """
+        with support.temp_db() as db:
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win, _ids, bid = self._window(db)
+                canvas = env.canvases[-1]
+                blank = None
+                for candidate in ((-600.0, -600.0), (600.0, -600.0),
+                                  (-600.0, 600.0), (900.0, 900.0)):
+                    if win._layout.node_at(*candidate) is None:
+                        blank = candidate
+                        break
+                self.assertIsNotNone(blank, "画布上总找得到一个空白点")
+                before = (win._view_left(), win._view_top())
+                win._on_canvas_press(_screen(win, blank[0], blank[1]))
+                self.assertIsNotNone(win._bg_pan_last, "空白处按下 = 抓起画布")
+                self.assertIsNone(win._drag_node, "空白处按下不是挪卡")
+                # ① 抖 2 像素：视图一动不动，也不算「拖动过」
+                moves = len(canvas.xview_calls)
+                win._on_canvas_motion(_screen(win, blank[0] + 2.0, blank[1] + 1.0))
+                self.assertEqual((win._view_left(), win._view_top()), before,
+                                 "手抖一下不许把图晃走")
+                self.assertEqual(len(canvas.xview_calls), moves, "门槛之内不许滚视图")
+                self.assertFalse(win._drag_started)
+                # ② 真的拖 60 × 30：图跟着手走（往右拖 = 手底下的纸往右挪）
+                win._on_canvas_motion(_screen(win, blank[0] + 60.0, blank[1] + 30.0))
+                self.assertTrue(win._drag_started)
+                self.assertAlmostEqual(win._view_left(), before[0] - 60.0, delta=1.0)
+                self.assertAlmostEqual(win._view_top(), before[1] - 30.0, delta=1.0)
+                self.assertIn("平移", str(win.feedback.cget("text")))
+                # ③ 松手就停：再动鼠标也不跟着走了，且什么都没写
+                win._on_canvas_release(_screen(win, blank[0] + 60.0, blank[1] + 30.0))
+                self.assertIsNone(win._bg_pan_last)
+                stopped = (win._view_left(), win._view_top())
+                win._on_canvas_motion(_screen(win, blank[0] + 300.0, blank[1] + 300.0))
+                self.assertEqual((win._view_left(), win._view_top()), stopped,
+                                 "松手之后再动鼠标也不许继续平移")
+                self.assertEqual(db.list_node_pins(bid), {}, "平移不写任何数据")
+
+    def test_dragging_a_card_never_pans_the_view(self):
+        """拖词卡与拖空白是两件事：拖卡片时整张图一动不动。"""
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, ids, _bid = self._window(db)
+                src = win._layout.find(ids["卷积"])
+                before = (win._view_left(), win._view_top())
+                win._on_canvas_press(_screen(win, src.x, src.y))
+                self.assertIsNone(win._bg_pan_last, "按在词卡上不算抓画布")
+                win._on_canvas_motion(_screen(win, src.x + 80.0, src.y + 40.0))
+                win._on_canvas_release(_screen(win, src.x + 80.0, src.y + 40.0))
+                self.assertEqual((win._view_left(), win._view_top()), before,
+                                 "拖词卡不许把整张图一起挪走")
+
+    # --------------------------- 本轮：三个功能框内化进操作里
+    def test_the_toolbar_drops_the_standalone_feature_buttons(self):
+        """用户口径：「这几个功能框应该都是内化于实际功能中的，不需要单独的功能栏」。
+
+        「人工关系…」→ 按住 Alt 从左键拖出来；「孤立词诊断」→ 点画布上那一行孤立词；
+        「打开选中的词条」→ 双击词卡。方法一条都没删，只是不再各占一个按钮。
+        """
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, _ids, _bid = self._window(db)
+                for name in ("btn_manual", "btn_diag", "btn_open_entry"):
+                    self.assertFalse(hasattr(win, name), f"{name} 这个功能框要删掉")
+                self.assertEqual(str(win.btn_export.cget("text")), "导出关系图…")
+                self.assertTrue(str(win.btn_template.cget("text")).startswith("模板："))
+                self.assertEqual(str(win.btn_unpin.cget("text")), "恢复自动布局")
+                self.assertEqual(str(win.btn_help.cget("text")), "操作说明…")
+                self.assertEqual(str(win.btn_map_settings.cget("text")), "导图设置…")
+                for name in ("open_relation_editor", "toggle_diagnostics",
+                             "open_selected_entry"):
+                    self.assertTrue(callable(getattr(win, name, None)),
+                                    f"{name} 只是没有按钮了，方法要留着")
+
+    def test_the_isolated_label_itself_opens_the_diagnostics(self):
+        """孤立词诊断的入口 = 画布上那一行孤立词（点一下就展开 / 收起）。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win, _ids, _bid = self._window(db)
+                canvas = env.canvases[-1]
+                bound: list = []
+                canvas.tag_bind = (lambda item, seq, func=None:
+                                   bound.append((item, seq, func)))
+                win._draw(force=True)
+                items = [item for item, options in canvas.item_options.items()
+                         if str(options.get("_kind") or "") == "isolated-label"]
+                self.assertEqual(len(items), 1, "画布上要有那一行孤立词标题")
+                hits = [entry for entry in bound
+                        if entry[0] == items[0] and entry[1] == "<Button-1>"]
+                self.assertEqual(len(hits), 1, "那一行要绑上左键（点它 = 诊断入口）")
+                self.assertIn("点这一行", cm.ISOLATED_TEXT, "文案要告诉用户能点")
+                self.assertFalse(win._diag_visible)
+                hits[0][2]()
+                self.assertTrue(win._diag_visible, "点一下 = 展开诊断面板")
+                hits[0][2]()
+                self.assertFalse(win._diag_visible, "再点一下 = 收起")
 
     def test_the_operations_table_matches_the_help_window(self):
         """手势表是**唯一来源**：提示行、操作说明窗口、绑定三者对得上。"""
@@ -6292,3 +6621,494 @@ class TestConceptMapTemplates(unittest.TestCase):
                 self.assertEqual(export.call_args.kwargs.get("template_name"), "树状图",
                                  "页脚写的模板名必须与屏幕上的一致")
                 self.assertEqual(export.call_args.kwargs.get("topic_name"), "卷积网络")
+
+    # ------------------------------------------------------ 导图设置搬进导图界面
+    def test_the_map_settings_window_lives_in_the_map_window(self):
+        """用户口径（2026-10-04）：「导图的相关设置都需要在导图界面中」。
+
+        主界面「设置」里原来那一节「关系图」整段搬走 —— 键还是
+        ``map.template_ask_model``，只是显示与落盘都挪到导图窗口的「导图设置…」。
+        """
+        from tests.support import FakeWidget
+        from app.ui.settings_dialog import SettingsDialog
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, _ids, _bid, cfg, _service = self._window(db)
+                # ① 主界面「设置」里不再有导图那一节
+                settings = SettingsDialog(FakeWidget(None), SimpleNamespace(
+                    config=cfg,
+                    explain_service=SimpleNamespace(is_ready=lambda: (True, "")),
+                    on_settings_changed=lambda: None,
+                    restore_pending_explain_window=lambda: None))
+                self.assertFalse(hasattr(settings, "var_ask_template"),
+                                 "主界面设置里不许再显示导图那一节")
+                # ② 导图窗口里有入口，且写着当前骨架
+                self.assertEqual(str(win.btn_map_settings.cget("text")), "导图设置…")
+                win.open_map_settings()
+                dialog = win._map_settings_dialog
+                self.assertIsNotNone(dialog, "「导图设置…」要真的开一个窗口")
+                self.assertIn("自动（按关系分层）",
+                              str(dialog.template_label.cget("text")))
+                # ③ 勾选直接落到同一个设置键上（默认关 → 开 → 关）
+                self.assertFalse(cfg.get_bool("map.template_ask_model", False))
+                dialog.var_ask_model.set(True)
+                dialog.toggle_ask_model()
+                self.assertTrue(cfg.get_bool("map.template_ask_model", False),
+                                "勾上 = 允许「让模型也看一眼」发请求")
+                dialog.var_ask_model.set(False)
+                dialog.toggle_ask_model()
+                self.assertFalse(cfg.get_bool("map.template_ask_model", False))
+                self.assertTrue(str(dialog.status.cget("text")), "窗口要给一句反馈")
+                # ④ 窗口里那两个按钮走的是导图里原有的两条路
+                calls: list = []
+                dialog.on_open_templates = lambda: calls.append("templates")
+                dialog.on_reset_layout = lambda: calls.append("reset")
+                dialog.open_templates()
+                dialog.reset_layout()
+                self.assertEqual(calls, ["templates", "reset"])
+
+    def test_switching_a_skeleton_refreshes_the_settings_window(self):
+        """同一份状态在两处显示：按钮与设置窗口不许各说各话。"""
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, _ids, _bid, _cfg, _service = self._window(db)
+                win.open_map_settings()
+                dialog = win._map_settings_dialog
+                self.assertTrue(win.apply_template("tree"))
+                self.assertIn("树状图", str(dialog.template_label.cget("text")),
+                              "切完骨架，设置窗口那一行也要跟着变")
+                self.assertIn("树状图", str(win.btn_template.cget("text")))
+
+
+class TestConceptMapHintFold(unittest.TestCase):
+    """右下角操作提示：刚打开三行 → 20 秒后淡出折叠成一行（可点开）。
+
+    用户口径 2026-10-04（原话）：「右下角的提示你改成可折叠起来的，用户刚刚打开时
+    展开进行提示，过 20 秒之后淡出折叠。这个背景要是透明的，不要给提示背景板设置
+    颜色。」
+
+    跑在假 Tk 上：假 root 的 ``after`` **只登记不执行**，所以「20 秒之后」这一段
+    由测试**自己把那一次回调跑掉**（不睡 20 秒，也不去改产品的延时）——
+    产品的 20 秒写死在 :data:`app.ui.concept_map.HINT_EXPAND_MS`，下面逐条钉住它。
+    """
+
+    @staticmethod
+    def _window(db):
+        """一个真的建起来的导图窗（图内容与本类无关，全部断言都在提示浮层上）。"""
+        from app.ui import concept_map as cm
+
+        _bid, _ids = _map_db(db)
+        service, _cfg = _map_service(db, key="", client=_MapClient([]))
+        return cm.ConceptMapWindow(None, SimpleNamespace(
+            db=db, map_service=service, open_settings=lambda: None))
+
+    @staticmethod
+    def _fade_callbacks(win):
+        """登记在窗口上的 ``after`` 回调：``(延时, 函数)`` 原样返回。
+
+        产品把淡出排在 ``self.win.after`` 上（第一拍 20 秒，之后每拍 90 毫秒排下一
+        拍），所以「跑一拍」就是跑这个列表的最后一个。假 Tk 的 ``after`` 只登记、
+        不执行（见 ``tests/support.py`` 的 ``FakeTkWindow``）。
+        """
+        return list(getattr(win.win, "after_calls", ()))
+
+    def _run_fade_timer(self, win) -> int:
+        """把「20 秒到了」那一次回调（以及它自己排下来的每一拍）跑掉。
+
+        每一次都取 ``after_calls`` 里**最新登记**的那一个 —— 产品每跑完一拍就用手里的
+        窗口再排下一拍，所以这个列表只增不减，最后一个永远是「下一拍」。整条
+        展开 → 淡出 → 折叠的链子因此都是产品自己的代码在走。
+        """
+        ticks = 0
+        for _ in range(64):
+            calls = self._fade_callbacks(win)
+            if not calls:
+                break
+            _delay, func = calls[-1]
+            if func is None:
+                break
+            ticks += 1
+            func()
+            if not win._hint_expanded:
+                break
+        return ticks
+
+    def test_it_starts_expanded_with_all_three_lines(self):
+        """刚打开：三行全展开（不是一上来就折着）。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                self.assertTrue(win._hint_expanded, "刚打开必须展开")
+                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
+                                 list(cm.HINT_LINES), "展开态就是那三行，逐字、按序")
+                self.assertFalse(win._hint_user_collapsed)
+                # 计时从建窗那一刻就开始了：延时必须正好是产品常量里的 20 秒
+                self.assertTrue(self._fade_callbacks(win), "刚打开就要排上淡出定时器")
+                self.assertEqual(self._fade_callbacks(win)[-1][0], cm.HINT_EXPAND_MS,
+                                 "自动折叠的延时要正好是 HINT_EXPAND_MS（20 秒）")
+                self.assertEqual(cm.HINT_EXPAND_MS, 20000, "用户口径就是 20 秒")
+
+    def test_it_folds_into_one_line_after_the_20_seconds(self):
+        """20 秒一到：三行淡出，收成一行「操作说明」。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                self._run_fade_timer(win)
+                self.assertFalse(win._hint_expanded, "走完定时器必须已经折叠")
+                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
+                                 [cm.HINT_COLLAPSED_TEXT],
+                                 "折叠后只剩一行（可点开的那一行）")
+                # 折叠后不再有定时器在跑（否则这行小字会一直空转）
+                self.assertIsNone(win._hint_fade_id, "折叠完不该还留着待执行的定时器")
+
+    def test_the_fade_actually_walks_the_colour_towards_the_canvas(self):
+        """「淡出」= 字色一格一格挪向画布底色（tk 没有透明度，只能这么模拟）。
+
+        这里只验混色本身（纯函数，确定性）：起点是原色、终点正好是底色，中间几格
+        必须**严格夹在**两者之间 —— 否则不是淡出，是「啪」一下换了个字。
+        """
+        from app.ui import theme
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                canvas = str(win.hint_box.cget("bg")).lower()
+
+                def channels(color):
+                    return tuple(int(color[i:i + 2], 16) for i in (1, 3, 5))
+
+                start, end = channels(theme.TEXT_MUTED), channels(canvas)
+                self.assertEqual(win._hint_fade_color(theme.TEXT_MUTED, 0.0).lower(),
+                                 theme.TEXT_MUTED.lower(), "0 = 还是原色")
+                self.assertEqual(win._hint_fade_color(theme.TEXT_MUTED, 1.0).lower(),
+                                 canvas, "1 = 已经淡到画布底色")
+                middle = channels(win._hint_fade_color(theme.TEXT_MUTED, 0.5))
+                self.assertTrue(all(min(a, b) <= m <= max(a, b)
+                                    for a, b, m in zip(start, end, middle)),
+                                "中间那几格必须夹在原色与底色之间")
+                self.assertNotEqual(middle, start)
+                self.assertNotEqual(middle, end)
+                # 一格一格越来越淡（单调），不会忽深忽浅
+                steps = [channels(win._hint_fade_color(theme.TEXT_MUTED, i / 6.0))
+                         for i in range(7)]
+                distances = [sum(abs(a - b) for a, b in zip(step, end)) for step in steps]
+                self.assertEqual(distances, sorted(distances, reverse=True),
+                                 "每一格都要比上一格更靠近底色")
+
+    def test_the_folded_line_can_be_opened_again(self):
+        """折叠那一行点一下 = 重新展开，且**这一轮不再自动收**（用户自己要看的）。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                self._run_fade_timer(win)
+                self.assertFalse(win._hint_expanded)
+                # 点那一行（假 Tk 里 bind 只记函数，这里直接调产品绑上去的那个）
+                handler = win.hint_rows[0].binds.get("<Button-1>")
+                self.assertTrue(callable(handler), "折叠那一行必须能点开")
+                handler(None)
+                self.assertTrue(win._hint_expanded, "点完要重新展开")
+                self.assertFalse(win.win.after_cancelled,
+                                 "点开是「不再自动收」，不是「重新计时」："
+                                 "既不该取消什么，也不该再排新的定时器")
+                self.assertIsNone(win._hint_fade_id, "点开之后不该再排定时器")
+                win.win.after_calls.clear()
+                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
+                                 list(cm.HINT_LINES), "展开回来还是那三行")
+                self.assertTrue(win._hint_user_collapsed,
+                                "用户自己点开的这一次不能再被定时器收走")
+                # 再跑一遍定时器：这次它必须**不再**自动折叠
+                # （产品在用户点开时干脆不再排定时器，所以最后一拍还是上一轮的残留）
+                self._run_fade_timer(win)
+                self.assertTrue(win._hint_expanded,
+                                "用户点开之后不许再自动折叠（否则点了像没点）")
+
+    def test_the_box_has_no_background_of_its_own(self):
+        """「这个背景要是透明的，不要给提示背景板设置颜色」——底板不要颜色、不要边框。"""
+        from app.ui import theme
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                canvas_bg = str(win.canvas.cget("bg")).lower()
+                self.assertEqual(str(win.hint_box.cget("bg")).lower(), canvas_bg,
+                                 "提示底板要跟画布同色（= 看不出有一块背景板）")
+                self.assertEqual(str(win.hint_box.cget("highlightthickness") or 0), "0",
+                                 "不许有边框（没设过就等于 0）")
+                for label in win.hint_rows:
+                    self.assertEqual(str(label.cget("bg")).lower(), canvas_bg,
+                                     "每一行文字也不许有自己的底色")
+                self.assertEqual(canvas_bg, str(theme.PANEL).lower(),
+                                 "画布底色就是主题里的 PANEL")
+
+    def test_closing_the_window_cancels_the_pending_fade(self):
+        """关窗要取消定时器：它排在已销毁的窗口上，回调再去碰控件就炸了。"""
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                timer = win._hint_fade_id
+                self.assertIsNotNone(timer, "刚打开时要有待执行的淡出定时器")
+                win.close()
+                self.assertIn(timer, list(getattr(win.win, "after_cancelled", ())),
+                              "关窗必须把提示的淡出定时器取消掉")
+                self.assertIsNone(win._hint_fade_id)
+
+
+# ============================================================================
+# P0-4：功能按钮的悬浮说明 + 搜索框的占位提示
+# ============================================================================
+class TestButtonTooltips(unittest.TestCase):
+    """光标停在功能框上给一句简短说明（用户口径 2026-10-05）。
+
+    产品的悬浮说明**只能** `widgets.Tooltip`：冻结运行时里没有
+    ``tkinter.ttk``（导入即崩，``tests/test_runtime_recovery.py`` 有 AST 守卫），
+    Tk 原生控件也没有悬浮说明这回事，所以说明是自己建的无框小窗。
+    跑在假 Tk 上：假控件的 ``after`` 只登记不执行，所以「停够 450 毫秒」这一步由
+    测试**自己把那一次回调跑掉**（不真的 sleep）。
+    """
+
+    @staticmethod
+    def _all_widgets(app):
+        return list(app.fake_tk.widgets) + list(app.fake_tk.buttons)
+
+    def _toolbar_buttons(self, app):
+        """工具条上那一排按钮（按文案找）。
+
+        假环境里控件是**平铺**登记在 ``fake_tk.widgets`` 里的（假控件不维护
+        ``winfo_children`` 树），所以按 ``cget("text")`` 找，不沿控件树走。
+        """
+        from app.ui import main_window as mw
+
+        wanted = {"搜索", "清空", "导出", "导图", "设置", "游戏模式：关", "暂停取词",
+                  "退出"}
+        found = {}
+        for widget in self._all_widgets(app):
+            text = str(widget.cget("text"))
+            if text in wanted:
+                found.setdefault(text, widget)
+        self.assertEqual(set(found), wanted,
+                         f"工具条按钮没找全（缺 {wanted - set(found)}）")
+        return found
+
+    def test_every_toolbar_button_carries_a_hover_hint(self):
+        """工具条上每个按钮都必须挂上说明 —— 新增按钮忘了挂，这条会红。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            for label, widget in self._toolbar_buttons(app).items():
+                for sequence in ("<Enter>", "<Leave>", "<Button-1>"):
+                    self.assertTrue(callable(widget.binds.get(sequence)),
+                                    f"「{label}」缺 {sequence} 绑定（说明弹不出来 / 收不掉）")
+                self.assertIn(label, mw.BUTTON_TOOLTIPS,
+                              f"「{label}」还没有一句给用户看的说明")
+
+    def test_the_toolbar_hint_table_has_no_dead_entry(self):
+        """表里写的说明必须真的挂在某个按钮上（改文案时留下的孤儿说明会红）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            labels = set(self._toolbar_buttons(app))
+            self.assertIn("游戏模式：关", labels)
+            dead = [key for key in ("搜索", "清空", "导出", "导图", "设置",
+                                    "游戏模式：关", "暂停取词", "退出")
+                    if key not in labels or key not in mw.BUTTON_TOOLTIPS]
+            self.assertEqual(dead, [], f"这些说明在界面上找不到对应按钮：{dead}")
+
+    def test_hovering_shows_the_written_hint_and_leaving_takes_it_away(self):
+        """停 450 毫秒弹出说明；鼠标一走（或按下去）立刻收掉、定时器也取消。"""
+        from app.ui import main_window as mw
+        from app.ui import widgets as w
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            button = self._toolbar_buttons(app)["导图"]
+            self.assertEqual(button.after_calls, [],
+                             "还没碰它就不该有定时器（说明是懒建的）")
+            button.binds["<Enter>"](None)
+            self.assertEqual(len(button.after_calls), 1, "悬停要排一次延时弹出")
+            delay, pop = button.after_calls[-1]
+            self.assertEqual(delay, w.TOOLTIP_DELAY_MS,
+                             "延时必须正好是 TOOLTIP_DELAY_MS（太短会一路闪小条）")
+            self.assertTrue(callable(pop))
+            before = len(app.fake_tk.windows)
+            pop()
+            self.assertEqual(len(app.fake_tk.windows), before + 1,
+                             "到点要真的弹出一个说明小窗")
+            tip = app.fake_tk.windows[-1]
+            self.assertIn("overrideredirect", tip.events,
+                          "说明必须是无框小窗（有标题栏就不像一句说明了）")
+            said = [child for child in app.fake_tk.widgets
+                    if str(child.cget("text")) == mw.BUTTON_TOOLTIPS["导图"]]
+            self.assertTrue(said, "弹出的小窗里要写着表里那一句说明")
+            button.binds["<Leave>"](None)
+            self.assertIn("destroy", tip.events, "移开鼠标必须把说明收掉")
+            # 说明不能被鼠标一扫而过弄丢：这次悬停的定时器要同时被取消
+            before_calls = len(button.after_calls)
+            button.binds["<Enter>"](None)
+            self.assertEqual(len(button.after_calls), before_calls + 1)
+            timer = button.after_calls[-1]
+            button.binds["<Leave>"](None)
+            self.assertIn(timer[1] and f"after-{len(button.after_calls)}",
+                          button.after_cancelled,
+                          "离开时必须取消还没弹的那一次（否则它过一会又冒出来）")
+
+    def test_the_hint_text_matches_the_button_it_explains(self):
+        """说明文案来自 ``BUTTON_TOOLTIPS``，且**每个按钮各自不同**（不串台）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            seen: dict[str, str] = {}
+            for label, widget in self._toolbar_buttons(app).items():
+                hint = mw.BUTTON_TOOLTIPS[label]
+                self.assertNotIn(hint, seen,
+                                 f"「{label}」与「{seen.get(hint)}」的说明一字不差："
+                                 "那不如只写一句")
+                seen[hint] = label
+                # 弹一下，把说明文字取出来核对（说明是懒建的，弹完就收）
+                widget.binds["<Enter>"](None)
+                _delay, pop = widget.after_calls[-1]
+                pop()
+                tip = app.fake_tk.windows[-1]
+                said = [child for child in app.fake_tk.widgets
+                        if str(child.cget("text")) == hint]
+                self.assertTrue(said, f"「{label}」弹出的小窗里没有那句说明文字")
+                widget.binds["<Leave>"](None)
+                self.assertIn("destroy", tip.events, "收尾：说明要收掉")
+            self.assertTrue(seen, "至少得有一条说明可查")
+
+    def test_the_explain_button_hint_follows_its_current_label(self):
+        """「解释」按钮的说明跟着当前文案走（解释 / 重试 / 重新解释三态）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            main = app.main
+            for label in (main.EXPLAIN_LABEL_NEW, main.EXPLAIN_LABEL_RETRY,
+                          main.EXPLAIN_LABEL_AGAIN):
+                self.assertIn(label, mw.BUTTON_TOOLTIPS,
+                              f"「{label}」这一态也要有说明（用户看到的就是这个字）")
+
+
+class TestSearchPlaceholder(unittest.TestCase):
+    """搜索框的占位提示：空着时显示「能搜什么」，一动键盘就消失。
+
+    用户口径 2026-10-05：「搜索框可以加入可以搜索什么内容的提示，用户开始输入后
+    消失。」最要紧的一条是**占位文字绝不能进 search_var** —— 那等于拿一句提示
+    去查库（查不到东西，用户还会以为检索坏了）。
+    """
+
+    def _entry(self, app):
+        """搜索框本身：产品里存成 ``MainWindow.search_entry``。
+
+        占位文字是通过 ``Entry.insert`` 写进**输入缓冲**的，不会出现在
+        ``cget("text")`` 里，所以只能按这个属性找（早先按文案找的写法全军覆没）。
+        """
+        return app.main.search_entry
+
+    def _shown(self, app) -> str:
+        """搜索框此刻肉眼看到的那一行字。"""
+        return str(self._entry(app).get())
+
+    def _press_key(self, app, keysym: str = "a") -> None:
+        """敲一个键：真 tk 会给回调一个带 ``keysym`` 的事件对象。
+
+        产品在同一个 ``<KeyRelease>`` 上还绑着防抖搜索 ``_on_search_key``
+        （它要读 ``event.keysym``），所以这里必须给个像样的事件，不能传 ``None``。
+        """
+
+        class _KeyEvent:
+            def __init__(self, sym):
+                self.keysym = sym
+                self.char = ""
+                self.widget = None
+
+        self._entry(app).binds["<KeyRelease>"](_KeyEvent(keysym))
+
+    def test_the_empty_box_shows_what_can_be_searched(self):
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            self.assertEqual(str(app.main.search_var.get()), "",
+                             "初始状态的真实值是空的（占位文字不许进变量）")
+            entry = self._entry(app)
+            self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
+                             "空着的时候要把「能搜什么」写在框里")
+            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT_FAINT,
+                             "提示用浅一号的字色，跟真的输入区分开")
+
+    def test_typing_makes_the_hint_go_away(self):
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            entry = self._entry(app)
+            entry.binds["<Button-1>"](None)          # 点进去
+            self.assertEqual(self._shown(app), "",
+                             "点进去（要开始打字了）提示就该从框里消失")
+            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT,
+                             "字色要回到正常色，否则用户真输入的字是灰的")
+            self._press_key(app)                     # 中文输入法落字也走这条
+            self.assertEqual(self._shown(app), "")
+
+    def test_the_search_still_works_after_the_hint_is_gone(self):
+        """提示消失之后照常搜：值进变量、按钮回调照旧（真实值从未被提示污染）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            entry = self._entry(app)
+            self._press_key(app)
+            entry.binds["<FocusIn>"](None)
+            entry.binds["<Button-1>"](None)
+            app.main.search_var.set("卷积")
+            app.fake_tk.find_button("搜索").invoke()
+            self.assertEqual(str(app.main.search_var.get()), "卷积")
+
+    def test_the_hint_comes_back_when_the_box_is_left_empty(self):
+        """空着离开搜索框：提示回来（否则那个框看上去就是个空白洞）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            entry = self._entry(app)
+            entry.binds["<Button-1>"](None)
+            self.assertEqual(self._shown(app), "")
+            entry.binds["<FocusOut>"](None)
+            self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
+                             "空着离开要重新显示提示")
+            self.assertEqual(str(entry.cget("fg")), mw.theme.TEXT_FAINT)
+
+    def test_what_the_user_typed_is_never_replaced_by_the_hint(self):
+        """框里有真内容时，离开焦点**不许**把提示盖上去（会吃掉用户刚打的字）。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            entry = self._entry(app)
+            entry.binds["<Button-1>"](None)
+            # 真 tk 里是 Entry 自己跟随 textvariable；假 Entry 的缓冲要手动填，
+            # 否则这一条等于什么都没验（用户真的打了字，缓冲里就是有字）
+            entry.insert(0, "注意力")
+            app.main.search_var.set("注意力")
+            entry.binds["<FocusOut>"](None)
+            self.assertEqual(str(app.main.search_var.get()), "注意力")
+            self.assertEqual(self._shown(app), "注意力",
+                             "用户打的字必须原样留在框里（提示只在空框时才算数）")
+            self.assertNotEqual(self._shown(app), mw.SEARCH_PLACEHOLDER,
+                                "有真实内容时不许显示提示")
+
+    def test_the_hint_never_leaks_into_the_query(self):
+        """占位文字**从不**写进 search_var —— 这条是这一整块的地基。"""
+        from app.ui import main_window as mw
+
+        with support.headless_app(overlays="panel", main_window="real") as app:
+            self.assertEqual(self._shown(app), mw.SEARCH_PLACEHOLDER)
+            self.assertEqual(str(app.main.search_var.get()), "")
+            app.main.refresh_entries()
+            self.assertEqual(str(app.main.search_var.get()), "",
+                             "刷新列表也不该把提示写进搜索变量")
+            self.assertTrue(str(mw.SEARCH_PLACEHOLDER).strip(),
+                            "占位提示不能是空的（空着就等于没做）")
+            self.assertEqual(str(mw.SEARCH_PLACEHOLDER).strip(),
+                             mw.SEARCH_PLACEHOLDER,
+                             "占位提示首尾别带空白（框里会看着歪）")
