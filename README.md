@@ -2800,3 +2800,107 @@ used, pages = pdf_writer.PdfDoc.measure(
 逐字 19 模块白名单 **Ran 954 / failures=6**（`_check\batch_m8_whitelist.log`；
 6 条仍是 `test_reading_panel` 2 条 + `test_unified_action` 4 条，无新增）。
 
+## 36. 批次 M9：双击 exe 弹「启动失败」
+
+### 36.1 你看到的现象
+
+双击 `探索词典.exe`，弹一个框：「**探索词典启动失败。** 详情见日志文件：
+`D:\探索工具\探索词典\data\logs\startup.log`」。点掉之后什么都没有。
+
+### 36.2 日志里的那一行
+
+`data\logs\startup.log` 里躺着（20:11:10 与 20:11:16 各一次，
+末尾 `DONE exit=4 elapsed=0.79s`）：
+
+    File "bootstrap.py", line 499, in run_app
+    File "D:\探索工具\探索词典\app\main.py", line 45, in <module>
+        from .ui.main_window import MainWindow
+    File "D:\探索工具\探索词典\app\ui\main_window.py", line 56, in <module>
+        from .. import export_service, search_service
+    File "D:\探索工具\探索词典\app\export_service.py", line 31, in <module>
+        import html
+    ModuleNotFoundError: No module named 'html'
+
+### 36.3 标准库怎么会没有
+
+因为**冻进 exe 的只有「构建那一刻」的那一份标准库快照**，而 `app\` 是**从磁盘
+加载**的（`bootstrap.py:43-46`：`ROOT = Path(sys.executable).parent if frozen else
+Path(__file__).parent`，再 `sys.path.insert(0, str(ROOT))`）。「改一行 `app\`、
+重启 exe 就生效」这条约定因此一直成立 —— 但它有个前提：**这个批次没有新增
+import**。批次 M 的导出功能加了 `import html`，而部署的 exe 是 **10-03 10:16:54**
+构建的，那天还没有这一行，于是双击就死在 `import app.main`。
+
+### 36.4 为什么所有测试都是绿的
+
+源码模式跑的是系统 Python，标准库齐全；19 模块白名单跑的也是源码。这件事**只有
+「双击 exe」才暴露得出来**。
+
+### 36.5 改法：把标准库整个收进 exe
+
+`ExplorerDict.spec` 新增 `_stdlib_hiddenimports()`：遍历
+`sorted(sys.stdlib_module_names)`，逐个 `collect_submodules(name)`，平台不支持的包
+`try/except` 跳过，最后按 `_STDLIB_SKIP` 过滤去重，接进
+`HIDDEN_IMPORTS = _diagnose_hiddenimports() + _stdlib_hiddenimports() + [...]`。
+「只收构建那一刻 import 到的」这个策略从此作废。
+
+### 36.6 刻意继续不收的四个模块
+
+`_STDLIB_SKIP` 分三类：Windows 上没有的 POSIX 模块；只服务 Python 自己的开发工具
+（`idlelib` / `test` / `venv` …）；以及**四个 tkinter 模块**。
+
+前两类是常识，第三类值得说清楚：`tkinter.ttk` 有 AST 守卫盯着（界面全部手写 tk）。
+`tkinter.filedialog` / `tkinter.colorchooser` / `tkinter.scrolledtext` 则是
+`app\paths.py:113`、`app\export_service.py:22`、`app\ui\export_dialog.py:19`、
+`app\ui\shortcuts_dialog.py:18` 四处注释公开声明的设计前提 ——「冻结运行时里没有
+`filedialog`，所以这里自己画纯 tk 的另存为对话框」。**收进来这些注释就变成假话了。**
+与其让文档失真，不如继续不给它：谁哪天真的要用，改这一行 + 重新打包，正好是一次
+有意识的决定。
+
+（第一版重建时 `collect_submodules("tkinter")` 顺手把 `tkinter.filedialog` 收了
+进去，是拆开 `PYZ.pyz` 数模块才发现的。）
+
+### 36.7 护栏
+
+`tests\test_runtime_recovery.py` 新增 `TestPackagingKeepsUpWithTheSource`（4 条）：
+
+- `test_source_only_imports_what_the_frozen_build_ships`：AST 扫 `app/**/*.py` +
+  `bootstrap.py` + `desktop_entry.py` 的顶层 import，每个名字必须是标准库、本仓库
+  的模块，或 `PIL` / `pystray` / `six` 这三个已声明的第三方之一。加了新依赖就会红。
+- `test_the_declared_third_party_is_actually_in_the_spec`：那三个名字必须在打包清单
+  里出现过（前缀匹配，`"PIL.Image"` 也算 `PIL`）。
+- `test_spec_collects_the_whole_standard_library`：清单里必须还有
+  `sys.stdlib_module_names`，防止被删回「只收 import 到的」。
+- `test_spec_keeps_the_hand_rolled_dialogs_out`：AST 读出 `_STDLIB_SKIP`，
+  断言那四个 tkinter 名字仍在里面。
+
+### 36.8 重新打包与实测
+
+    .build-env\Scripts\python.exe -m PyInstaller --noconfirm \
+        --distpath artifacts/package --workpath artifacts/pyinstaller ExplorerDict.spec
+    robocopy artifacts\package\探索词典\_runtime _runtime /MIR
+    Copy-Item artifacts\package\探索词典\探索词典.exe 探索词典.exe -Force
+
+- exe **3,652,536 B → 6,159,151 B**（`_runtime` 42,525,744 → 42,605,887 B）。
+- `探索词典.exe --diagnose --console-log` ⇒ `STATUS OK (no window created, no hook
+  installed)`，**exit 0**；32 个 `_DIAGNOSE_MODULES` 全部 `import … ok`。
+- 拆开新 exe 的 `PYZ.pyz`（**538 个模块**）：`html` / `csv` / `urllib.parse` /
+  `email.mime.text` / `xml.etree.ElementTree` / `zoneinfo` / `app.export_service` /
+  `app.pdf_writer` / `app.ui.export_dialog` / `app.ttf_subset` **都在**；
+  `tkinter.ttk` / `tkinter.filedialog` / `tkinter.colorchooser` /
+  `tkinter.scrolledtext` / `test` / `idlelib` / `lib2to3` / `distutils` /
+  `ensurepip` / `venv` **都不在**。
+- 构建期只剩两条无害 WARNING（`curses` 收不到子模块、`tzdata` 没装）。
+
+### 36.9 回归
+
+`tests.test_runtime_recovery` = **33 OK**（新增 4 条）；
+逐字 19 模块白名单 = **Ran 958 / failures=6**（此前 954，正好 +4；
+`_check\batch_m9_whitelist.log`；6 条仍是 `test_reading_panel` 2 条 +
+`test_unified_action` 4 条，无新增）。
+
+### 36.10 这一批的教训
+
+「改了 `app\` 重启就行」是个**有前提**的约定：前提是这一批次没有新增 import。
+只要新增了一个当时没冻进去的模块，双击就是「启动失败」—— 而源码模式、19 模块
+白名单、`--diagnose` 全都看不出来（`--diagnose` 是在**新**构建上跑的）。
+现在这个前提由四道静态护栏 + 「标准库整个收进来」一起兜住了。

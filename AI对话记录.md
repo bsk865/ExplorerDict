@@ -400,6 +400,45 @@ test_no_pdf_line_runs_past_the_right_margin      # 照阅读器方式算，没�
 | 31 | 本文件（AI 对话记录 + 对话截图） | 迭代 4 |
 | 32 | 仓库地址与对话记录的互链（发布收尾） | 迭代 4 |
 | 33 | PDF 版式照 HTML 骨架重排 + 词条不被劈开 + 空白页（批次 M7） | 迭代 7.7 |
+| 34 | 双击 exe「启动失败」：冻结包缺标准库 `html` + 打包护栏（批次 M9） | 迭代 7.9 |
+
+### 7.9 交付之后第四句：双击 exe 弹「启动失败」
+
+**你说**：截图一张 —— `探索词典.exe` 弹「探索词典启动失败。详情见日志文件：
+`D:\探索工具\探索词典\data\logs\startup.log`」。
+
+**真相**：日志里是 `app\export_service.py` 第 31 行的 `import html` 抛
+`ModuleNotFoundError: No module named 'html'`。`html` 是标准库，但**冻进 exe 的
+只有「构建那一刻」的标准库快照**，而部署的 exe 是 **10-03 10:16:54** 构建的 ——
+批次 M 的导出功能才加的 `import html`。`app\` 是从磁盘加载的，所以「改一行重启
+就行」一直成立，**前提是这一批次没新增 import**；这一批次偏偏新增了。
+
+**为什么测试全绿**：源码模式用系统 Python，标准库齐全。这件事只有双击 exe 才
+暴露得出来。
+
+**我做了什么**：
+
+1. `ExplorerDict.spec` 新增 `_stdlib_hiddenimports()`：遍历
+   `sorted(sys.stdlib_module_names)` 逐个 `collect_submodules`，把**标准库整个**
+   收进 exe（只排除 Windows 上不存在的 POSIX 模块、只服务 Python 自己的开发工具、
+   以及刻意不收的四个 tkinter 模块）。
+2. 那四个 tkinter 模块（`ttk` / `filedialog` / `colorchooser` / `scrolledtext`）
+   继续不收：`app\paths.py:113` 等四处注释都写着「冻结运行时里没有 filedialog，
+   所以自己画纯 tk 对话框」—— 收进来这些理由就成了假话。第一版重建时
+   `collect_submodules("tkinter")` 顺手把 `filedialog` 收了进去，是拆开 `PYZ.pyz`
+   数模块才发现的。
+3. `tests\test_runtime_recovery.py` 新增 `TestPackagingKeepsUpWithTheSource` 4 条
+   静态护栏：源码只许 import 标准库 / 本仓库 / 已声明的第三方；那三个第三方必须
+   在清单里；清单必须还收着整个标准库；那四个 tkinter 名字必须还在排除集里。
+4. 重新打包 + 部署：exe **3,652,536 → 6,159,151 B**；`--diagnose --console-log`
+   报 `STATUS OK`、exit 0；拆 `PYZ.pyz` 数了 538 个模块，`html` 在、
+   `tkinter.filedialog` 等不在。
+
+**回归**：`tests.test_runtime_recovery` 33 OK；19 模块白名单
+**Ran 958 / failures=6**（此前 954，正好 +4，无新增失败）。
+
+**一句话教训**：「改了 `app\` 重启就行」是个有前提的约定 —— 前提是这一批次没有
+新增 import。现在这个前提由护栏兜住了。
 
 ## 附录 B · 完整对话留痕在哪里
 
