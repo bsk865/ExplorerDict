@@ -42,6 +42,7 @@
 from __future__ import annotations
 
 import ast
+import contextlib
 import json
 import threading
 import time
@@ -5931,6 +5932,29 @@ def _screen(win, x, y, *, alt=False):
                            state=cm.ALT_MASK if alt else 0)
 
 
+@contextlib.contextmanager
+def _real_root():
+    """一个真 ``tk.Tk`` 根窗口（已 withdraw），退出时**把主题全局恢复原样**。
+
+    ``theme.init()`` 会把字体族从兜底的 ``"TkDefaultFont"`` 换成真族名（本机实测
+    ``"Microsoft YaHei UI"`` / ``"Noto Serif SC"``），而那是**进程级全局**：不恢复
+    的话，同一次 ``unittest`` 里排在后面的测试全都在另一个字体下跑 —— 最先遭殃的是
+    ``TestOfflinePreviewButtonCentering`` 的像素断言（墨迹偏 2px，就像产品坏了）。
+    所以真窗口测试一律走这个上下文管理器，用完把世界还原。
+    """
+    import tkinter as tk
+
+    root = tk.Tk()
+    root.withdraw()
+    before = (theme._sans, theme._serif, theme._scale)
+    try:
+        theme.init(root, 96)
+        yield root
+    finally:
+        theme._sans, theme._serif, theme._scale = before
+        root.destroy()
+
+
 def _free_point_on(win, edge):
     """在一条连线的折线上找一个**不压着任何词卡**的点（双击连线用）。"""
     from app.ui import concept_map as cm
@@ -5952,7 +5976,11 @@ def _free_point_on(win, edge):
 class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
     """批次 F：拖连线柄建关系（F1）· 拖卡片固定位置（F2）· 双击连线改 / 删（F3）。
 
-    同样全跑在假 Tk 上：一个真窗口都不建、一次网络都不发（图来自 ``_put_map_cache``）。
+    绝大多数跑在假 Tk 上：不建真窗口、不发一次网络（图来自 ``_put_map_cache``）。
+
+    唯一例外是 ``test_a_real_canvas_drag_actually_moves_the_card`` —— 它**必须**建
+    真窗口真画布：拖不动那个 bug 只存在于真 ``tk.Canvas`` 上（替身画布自带
+    ``item_options``，把病根遮了个严实），假环境里根本复现不出来。
     """
 
     AI_RELATION = {"type": "包含", "reason": "池化是卷积网络的一层",
@@ -6305,6 +6333,87 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                                        msg="松手停在鼠标最后的位置（纵向）")
                 self.assertEqual(win._drag_items, [], "松手要清掉拖动登记")
                 self.assertIsNone(win._drag_last)
+
+    def test_a_real_canvas_drag_actually_moves_the_card(self):
+        """★ 真 Tk 的事实验证：左键拖卡片**必须真的搬走图元**。
+
+        病根是**真 Tk 的行为**，假环境复现不了（跟 P0-5 那条一个道理）：拖动原先靠
+        ``self.canvas.item_options`` 里记的 ``_kind`` 找图元 —— 那个字典**只有**
+        ``tests/support.py`` 的 ``FakeCanvas`` 有，真 ``tk.Canvas`` 上根本没有，
+        ``getattr(..., {})`` 静默给个空字典 ⇒ 实机上拖动期间卡片纹丝不动、只有松手
+        那一下把卡片瞬移到鼠标处（用户 2026-10-05 报「无法拖动 / 拖动不准确」）。
+        替身自带 ``item_options``，所以上面两条拖动测试一直是绿的。
+
+        所以这一条**用真 ``tk.Canvas``**：建真窗口、真画布，按住左键走几步，量图元
+        坐标到底动没动、动得对不对，以及连线跟着走没走。
+        """
+        import tkinter as tk
+
+        from app.ui import concept_map as cm
+
+        with _real_root() as root:
+            with support.temp_db() as db:
+                bid, ids = _map_db(db)
+                service, _cfg = _map_service(db, client=_MapClient([]))
+                _put_map_cache(db, service, bid,
+                               [dict(self.AI_RELATION, src=ids["卷积"], dst=ids["池化"])])
+                win = cm.ConceptMapWindow(root, SimpleNamespace(
+                    db=db, map_service=service, open_settings=lambda: None))
+                win.win.geometry("+4000+4000")      # 挪到屏幕外，别闪用户的眼
+                win.refresh(topic_id=bid)
+                root.update()
+                try:
+                    self.assertFalse(hasattr(win.canvas, "item_options"),
+                                     "真 tk.Canvas 没有 item_options —— 这正是病根")
+
+                    node = win._layout.find(ids["池化"])
+                    entry_id = int(node.entry_id)
+                    items = win._node_items(entry_id)
+                    self.assertEqual(len(items), 2,
+                                     "一张卡 = 框 + 文字，两个图元都要能认到")
+
+                    def center(item):
+                        coords = [float(v) for v in win.canvas.coords(item)]
+                        xs, ys = coords[0::2], coords[1::2]
+                        return (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+
+                    before = [center(item) for item in items]
+                    # 这张卡自己的连线（拖动期间它也得跟着走，不能留在原地）
+                    rel = next(e.rel for e in win._layout.edges
+                               if entry_id in (int(e.rel.src_entry_id),
+                                               int(e.rel.dst_entry_id)))
+                    edge_item = win._edge_items[id(rel)]
+
+                    win._on_canvas_press(_screen(win, node.x, node.y))
+                    self.assertEqual([int(i) for i in win._drag_items], items,
+                                     "按下时就要把这张卡的两个图元都认下来")
+                    for step in (1, 2, 3):
+                        win._on_canvas_motion(
+                            _screen(win, node.x + 20.0 * step, node.y + 10.0 * step))
+                    root.update()
+
+                    for index, item in enumerate(items):
+                        now = center(item)
+                        self.assertAlmostEqual(now[0] - before[index][0], 60.0, places=3,
+                                               msg=f"第 {index + 1} 个图元没跟手（横向）")
+                        self.assertAlmostEqual(now[1] - before[index][1], 30.0, places=3,
+                                               msg=f"第 {index + 1} 个图元没跟手（纵向）")
+
+                    landed = (node.x + 60.0, node.y + 30.0)
+                    pts = [float(v) for v in win.canvas.coords(edge_item)]
+                    ends = [(pts[0], pts[1]), (pts[-2], pts[-1])]
+                    theirs = (ends[0] if entry_id == int(rel.src_entry_id) else ends[1])
+                    self.assertLess(abs(theirs[0] - landed[0]), node.w / 2.0 + 1.0,
+                                    "拖动期间这张卡的连线端头要跟着走，不能留在原地（横向）")
+                    self.assertLess(abs(theirs[1] - landed[1]), node.h / 2.0 + 1.0,
+                                    "拖动期间这张卡的连线端头要跟着走，不能留在原地（纵向）")
+
+                    win._on_canvas_release(_screen(win, landed[0], landed[1]))
+                    root.update()
+                    self.assertEqual(win._drag_items, [], "松手要清掉拖动登记")
+                    self.assertEqual(db.list_node_pins(bid), {entry_id: landed})
+                finally:
+                    win.win.destroy()
 
     def test_a_pinned_card_stays_put_across_regeneration_and_is_per_topic(self):
         with support.temp_db() as db:
@@ -7413,16 +7522,11 @@ class TestSearchPlaceholder(unittest.TestCase):
         """
         import tkinter as tk
 
-        from app.ui import theme as th
-
         from app.ui import widgets as w
 
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            th.init(root, 96)
+        with _real_root() as root:
             var = tk.StringVar()
-            entry = tk.Entry(root, textvariable=var, bg=th.PANEL, fg=th.TEXT)
+            entry = tk.Entry(root, textvariable=var, bg=theme.PANEL, fg=theme.TEXT)
             w.placeholder(entry, "搜词语 / 上下文 / 来源", variable=var)
             self.assertEqual(str(var.get()), "",
                              "挂上占位提示不许把提示写进变量")
@@ -7432,5 +7536,3 @@ class TestSearchPlaceholder(unittest.TestCase):
             root.update()
             self.assertEqual(str(var.get()), "卷积",
                              "用户打的字要照常进变量（这正是 P0-5 之前做不到的事）")
-        finally:
-            root.destroy()

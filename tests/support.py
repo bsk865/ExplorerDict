@@ -1930,6 +1930,33 @@ class FakeCanvas(FakeWidget):
             entry["coords"] = _flat_coords(args)
         return tuple(entry["coords"])
 
+    def find_withtag(self, tag) -> list:
+        """真 ``tk.Canvas.find_withtag`` 的替身：按 tag（或 id）取图元 id，按创建顺序。
+
+        产品代码**只能**走这条路认图元。曾经拖动是读 ``item_options`` 里的 ``_kind``
+        找图元 —— 那个字典**只有这个替身有**，真 ``tk.Canvas`` 上没有，于是实机上
+        左键拖不动卡片、松手才瞬移，而这里一直是绿的（2026-10-05 用户报障）。
+        """
+        self.tcl_call("find_withtag")
+        return self._tagged(tag)
+
+    def move(self, tag_or_id, x_amount, y_amount) -> None:
+        """真 ``tk.Canvas.move`` 的替身：``tag_or_id`` 可以是 tag，整组平移。
+
+        真 Tk 上是**一条 Tcl 命令搬一组图元**（实测 2 个图元 0.003 ms）——
+        拖动每个 Motion 事件都要走它，替身必须跟真的一致，别让产品代码
+        在这里退化成「逐个图元读坐标再写回」。
+        """
+        self.tcl_call("move")
+        dx, dy = float(x_amount), float(y_amount)
+        for item in self._tagged(tag_or_id):
+            entry = self.items.get(item)
+            if entry is None:  # pragma: no cover - _tagged 已保证存在
+                continue
+            entry["coords"] = [value + (dx if index % 2 == 0 else dy)
+                               for index, value in enumerate(entry["coords"])]
+        return None
+
     def _tagged(self, tag) -> list[int]:
         if isinstance(tag, int):
             return [tag] if tag in self.items else []
@@ -1940,7 +1967,7 @@ class FakeCanvas(FakeWidget):
                 tags = (tags,)
             if tag in tags:
                 out.append(item)
-        return out
+        return sorted(out)
 
     def itemconfigure(self, item, cnf=None, **kw):
         self.tcl_call("itemconfigure")

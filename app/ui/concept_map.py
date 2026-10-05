@@ -87,6 +87,21 @@ HINT_COLLAPSED_TEXT = "操作说明"
 HIT_TOL = 10
 #: 点选词卡的**外扩**半径（逻辑像素）：贴着卡片边缘点一下也算点中这个词
 NODE_HIT_PAD = 2
+#: 画布上「一张词卡」的 **Tk tag** 前缀：这张卡的框与文字共用同一个 tag（``node-24``）。
+#: 拖动靠它认图元（``canvas.find_withtag``）与搬图元（``canvas.move``）。
+#:
+#: ★ 为什么必须是**真 Tk 的 tag**：旧实现拿 ``self.canvas.item_options`` 里记的
+#: ``_kind`` 去找图元 —— 那个字典**只有测试替身有**，真 ``tk.Canvas`` 上根本没有，
+#: 于是 ``getattr(..., {})`` 静默返回空字典、``_node_items()`` 永远返回 ``[]``、
+#: ``_move_node_items()`` 一路 early-return：**实机上左键压根拖不动卡片**，
+#: 只有松手那一下 ``pin_node()`` 把卡片「啪」地瞬移到鼠标处（用户 2026-10-05 报的
+#: 「无法拖动 / 拖动不准确」）。假 Tk 因为自带 ``item_options`` 一直是绿的。
+NODE_TAG_PREFIX = "node-"
+
+
+def node_tag(entry_id: int) -> str:
+    """一张词卡在画布上的 tag 名（框与文字共用）。"""
+    return f"{NODE_TAG_PREFIX}{int(entry_id)}"
 #: 「按住 Alt」在 Tk ``event.state`` 里的位（Windows）：``<Alt-Button-1>`` 这个
 #: 绑定在某些 Tk 版本里收不到，所以按下时两条路都认（见 :meth:`_alt_held`）。
 ALT_MASK = 0x00020000
@@ -3254,7 +3269,8 @@ class ConceptMapWindow:
         """左键拖动中：平移整张图（抓的是空白）/ 画临时线（Alt 建关系）/ 搬卡片。
 
         拖动期间**只动画面，不动数据**：平移直接滚视图，卡片本体与文字跟着鼠标走，
-        连线要等松手重画整张图才重算（半路重算整张图会卡、也会一直闪）。
+        贴着这张卡的连线端头也跟着走（:meth:`_follow_edges`，只写 ``coords``、不重排队），
+        整张图的重画与走线重算留到松手（半路重画整张图要 15 ms 一帧，会卡、也会一直闪）。
         位移没过 :data:`DRAG_SLOP` 之前什么都不做 —— 那样单击才不会被当成拖动。
         """
         if self._pan_guard():
@@ -3411,69 +3427,86 @@ class ConceptMapWindow:
     def _node_items(self, entry_id: int) -> list:
         """这张卡在画布上的图元 id（框 + 文字）：**按下时认一次**，拖动期间照单搬。
 
-        卡片是圆角多边形（:meth:`_round` 走 ``create_polygon``），第一个点不是左上角，
-        所以按**外接矩形中心**认框；文字按 ``anchor="center"`` 的落点认。
+        认法是 **Tk tag**（:func:`node_tag` → ``node-24``）：:meth:`_draw` 给框和文字
+        打的就是这一个 tag，``canvas.find_withtag`` 一次全取回。
+
+        ★ 2026-10-05 修的真 bug（用户口径：「左键的时候无法拖动 / 拖动不准确」）：
+        旧实现遍历 ``self.canvas.item_options`` 按 ``_kind`` 找图元 —— 那个字典
+        **只有测试替身有**（``tests/support.py`` 的 ``FakeCanvas``），真 ``tk.Canvas``
+        上根本没有，``getattr(..., {})`` 静默给个空字典 ⇒ 这里永远返回 ``[]``
+        ⇒ :meth:`_move_node_items` 一路 early-return：**实机上拖动期间卡片纹丝不动**，
+        只有松手那一下 :meth:`pin_node` 把卡片瞬移到鼠标处。替身画布自带
+        ``item_options``，所以两条拖动测试一直是绿的。
         """
-        node = self._node_by_id(entry_id)
-        if node is None:
+        finder = getattr(self.canvas, "find_withtag", None)
+        if not callable(finder):  # pragma: no cover - 没有 find_withtag 就不是画布
             return []
-        out: list = []
-        for item, options in list(getattr(self.canvas, "item_options", {}).items()):
-            kind = str(options.get("_kind") or "")
-            if kind not in ("node", "node-text"):
-                continue
-            try:
-                coords = [float(value) for value in self.canvas.coords(item)]
-            except (tk.TclError, TypeError, ValueError):  # pragma: no cover
-                continue
-            if not coords:
-                continue
-            if kind == "node":
-                xs = coords[0::2]
-                ys = coords[1::2]
-                if not xs or not ys:  # pragma: no cover - 坏图元
-                    continue
-                cx = (min(xs) + max(xs)) / 2.0
-                cy = (min(ys) + max(ys)) / 2.0
-                inside = abs(cx - node.x) < 1.0 and abs(cy - node.y) < 1.0
-            else:
-                inside = abs(coords[0] - node.x) < 1.0 and abs(coords[1] - node.y) < 1.0
-            if inside:
-                out.append(int(item))
-        return out
+        try:
+            return [int(item) for item in finder(node_tag(entry_id))]
+        except (tk.TclError, TypeError, ValueError):  # pragma: no cover - 坏图元
+            return []
 
     def _move_node_items(self, entry_id: int, cx: float, cy: float) -> None:
-        """把一张卡（框 + 文字）**平滑地**搬到 ``(cx, cy)``；不动数据、不重算连线。
+        """把一张卡（框 + 文字）**平滑地**搬到 ``(cx, cy)``；不动数据。
 
-        两条「移动锚点不对」的真因都在这里（用户实机反馈：卡片跟着鼠标一跳一跳）：
+        三条纪律（前两条是历史真 bug，第三条是 2026-10-05 的实机反馈）：
 
-        * 要搬的图元在**按下时**就认好了（:meth:`_node_items`）—— 不能每次按「图元
-          中心 == 布局坐标」重新认图元：图元已经搬走了，第二下就再也认不出来，
+        * 要搬的图元在**按下时**就认好了（:meth:`_node_items`）—— 不能每次按
+          「图元中心 == 布局坐标」重新认图元：图元已经被搬走了，第二下就再也认不出来，
           卡片只会动一下；
-        * 位移按**上一次落点**算增量 —— 不能每次拿 ``self._layout`` 里的坐标重算
-          位移（图元位置已经变了，那样位移会被重复累加，卡片越拖飞得越远）。
+        * 位移按**上一次落点**算增量 —— 不能每次拿 ``self._layout`` 里的坐标重算位移
+          （图元位置已经变了，那样位移会被重复累加，卡片越拖飞得越远）；
+        * 搬用 ``canvas.move``，**带上那个 tag**：一次 Tcl 调用同时挪框和文字。
+          不读回 ``coords`` 再写回 —— 省掉两趟往返（实测搬 2 个图元：``coords`` 读+写
+          0.021 ms，``move`` 0.003 ms），也让「只挪了框、文字留在原地」无从发生。
+
+        拖动期间**不重算连线走线**：整张重画的实测成本是 17.9 ms（10 个节点），
+        按 60 Hz 拖就是每秒一千毫秒，必然「一卡一卡的」。连线只做最便宜的跟随，
+        见 :meth:`_follow_edges`；松手后由 :meth:`_draw` 恢复正规走线。
         """
-        items = [int(item) for item in (self._drag_items or ())]
-        if not items:
+        if not self._drag_items:
             return
         last_x, last_y = self._drag_last or (float(cx), float(cy))
         dx, dy = float(cx) - float(last_x), float(cy) - float(last_y)
         if dx == 0.0 and dy == 0.0:
             return
-        for item in items:
-            try:
-                coords = [float(value) for value in self.canvas.coords(item)]
-            except (tk.TclError, TypeError, ValueError):  # pragma: no cover
-                continue
-            if not coords:
-                continue
-            moved = [value + (dx if index % 2 == 0 else dy)
-                     for index, value in enumerate(coords)]
-            try:
-                self.canvas.coords(item, *moved)
-            except (tk.TclError, AttributeError):  # pragma: no cover
-                continue
+        mover = getattr(self.canvas, "move", None)
+        if not callable(mover):  # pragma: no cover - 没有 move 就不是画布
+            return
+        try:
+            mover(node_tag(entry_id), dx, dy)
+        except tk.TclError:  # pragma: no cover - 图元已被删掉
+            return
         self._drag_last = (float(cx), float(cy))
+        self._follow_edges(entry_id, float(cx), float(cy))
+
+    def _follow_edges(self, entry_id: int, cx: float, cy: float) -> None:
+        """拖动期间让**这张卡自己的连线**端头跟着走：一头贴在它边上、一头贴在对面边上。
+
+        只做这件事，**不重算走线**（避障绕行那套要重排整张图，17.9 ms 一次）。
+        拖动时线被拉成直的、松手后 :meth:`_draw` 恢复绕行 —— 这是常见的做法，
+        关键是「线不能留在原地不动」，否则卡片一挪、线就像挂空了一样。
+        线段端点顺序按**原来的 src→dst** 给，箭头方向才不会翻过来。
+        """
+        layout = self._layout
+        node = layout.find(entry_id)
+        if node is None:  # pragma: no cover - 正在拖的卡一定在布局里
+            return
+        for edge in layout.edges:
+            src, dst, _type = _relation_parts(edge.rel)
+            if entry_id not in (src, dst):
+                continue
+            item = self._edge_items.get(id(edge.rel))
+            other = layout.find(dst if entry_id == src else src)
+            if item is None or other is None:
+                continue
+            here = box_edge_point(cx, cy, node.w, node.h, other.x, other.y)
+            there = box_edge_point(other.x, other.y, other.w, other.h, cx, cy)
+            x1, y1, x2, y2 = (here + there) if entry_id == src else (there + here)
+            try:
+                self.canvas.coords(item, x1, y1, x2, y2)
+            except (tk.TclError, AttributeError):  # pragma: no cover - 图元已删
+                continue
 
     def _clear_link_line(self) -> None:
         """删掉拖拽期间那条临时线（松手 / 取消都要删，绝不留在图上）。"""
@@ -4799,12 +4832,16 @@ class ConceptMapWindow:
         #    连接点（用户要求）：建关系改成「按住 Alt + 左键拖」。
         for node in layout.nodes:
             fill = theme.CARD_BG if not node.isolated else theme.PANEL
+            #: 框与文字**打同一个 tag**（``node-24``）：拖动时按这个 tag 认图元、搬图元。
+            #: 见 :data:`NODE_TAG_PREFIX` —— 不能靠「图元中心 == 布局坐标」去找，
+            #: 那套比对只认得出「此刻正好落在布局坐标上」的图元，卡片一搬走就失联。
+            tag = node_tag(node.entry_id)
             self._round(node.x - node.w / 2.0, node.y - node.h / 2.0, node.w, node.h,
                         theme.px(9), fill=fill, outline=theme.BORDER_STRONG,
-                        width=max(1, theme.px(1)), _kind="node")
+                        width=max(1, theme.px(1)), tags=(tag,), _kind="node")
             self._text(node.x, node.y, text="\n".join(node.lines), fill=theme.TEXT,
                        font=theme.font_at(9, self._zoom), anchor="center",
-                       justify="center", _kind="node-text")
+                       justify="center", tags=(tag,), _kind="node-text")
         # ⑤ 中心主题节点
         if layout.topic is not None and layout.topic.w > 0:
             topic = layout.topic
