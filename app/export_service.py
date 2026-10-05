@@ -505,15 +505,15 @@ def _pdf_card(doc, index: int, cells, header, *, tag_index: int,
         if not text:
             continue
         if label in meta_labels:
-            doc.field(label, text, size=pdf_writer.SIZE_FOOT,
-                      label_size=pdf_writer.SIZE_FOOT - 0.6,
+            # 元信息（来源链接 / 来源应用 / 捕获时间 / 重复次数）：只靠**颜色**
+            # 淡一档来退到背景，字号和间距跟别的字段一样 —— 之前这里字号小、
+            # 间距也自己一套（3.0），一列看下来忽宽忽窄，现在统一走模数。
+            doc.field(label, text,
                       color=pdf_writer.COLOR_MUTED,
                       label_color=pdf_writer.COLOR_FAINT,
-                      indent=inset, width=card_w,
-                      gap_after=3.0, gap_before=1.0)
+                      indent=inset, width=card_w)
         else:
-            doc.field(label, text, indent=inset, width=card_w,
-                      gap_after=pdf_writer.GAP_AFTER_FIELD)
+            doc.field(label, text, indent=inset, width=card_w)
 
 
 def pdf_bytes(header, body, *, scope_label: str = "全部词语",
@@ -538,15 +538,19 @@ def pdf_bytes(header, body, *, scope_label: str = "全部词语",
     doc.new_page()
 
     # ---- 抬头 -------------------------------------------------------------
+    # 抬头这几行的间距也不是随手给的：大标题→元信息 26.0、元信息→小字说明
+    # 13.9、小字说明→横线 14.0（都是基线差），和卡片里那个模数同一个量级。
     doc.title(f"{FILE_PREFIX} · 词条导出")
-    doc.space(2.0)
+    doc.space(pdf_writer.GAP_AFTER_TITLE)
     doc.paragraph(f"范围：{scope_label}　｜　条数：{len(body)}　｜　导出时间：{stamp}",
                   size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_MUTED,
-                  leading=pdf_writer.LEADING_FOOT, gap_after=2.0)
+                  leading=pdf_writer.LEADING_FOOT,
+                  gap_after=pdf_writer.GAP_AFTER_META)
     doc.paragraph("上下文是划词当时原文里的那句话；来源是当时的窗口标题"
                   "（未做后台采集，也没有再联网）。",
                   size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_FAINT,
-                  leading=pdf_writer.LEADING_FOOT, gap_after=4.0)
+                  leading=pdf_writer.LEADING_FOOT,
+                  gap_after=pdf_writer.GAP_AFTER_NOTE)
     doc.rule(color=pdf_writer.COLOR_RULE_STRONG)
 
     tag_index = header.index("标签") if "标签" in header else -1
@@ -561,8 +565,20 @@ def pdf_bytes(header, body, *, scope_label: str = "全部词语",
         # 先量整条从页顶铺下来要多高（量法固定从页顶起，所以同一个词条每次
         # 量出来都是同一个数），再决定它落在哪一页。量完才画分隔线 —— 免得线
         # 留在上一页页底、词条却翻到下一页去了。
+        # ``used`` 是「卡片真正的上边界 → 下一条之前」的整段占地；而游标指的是
+        # 第一条线的**基线**，还剩多少地方要看基线到页底这段（``doc.y()`` 与
+        # ``used`` 里的 ``pad_top`` 各管一头，合起来正好是整段）。
         start_y = doc.y() - pdf_writer.MARGIN_BOTTOM
-        used, pages = pdf_writer.PdfDoc.measure(render_card)
+        # 量高时补两笔 ``measure`` 自己看不到的占地（pad_top）：
+        #   ① 词条标题那一格行高 —— 游标指的是标题的**基线**，卡片真正的上边界
+        #      在它之上一个 LEADING_HEADING；
+        #   ② 卡片之后那条分隔线到卡片之间的空当（GAP_AFTER_RULE）—— 下游内容
+        #      也是这段占地的后果。
+        # 少算任何一笔，「刚刚好放得下」的卡片真画时都会从页底溢出一行，那行被
+        # 甩到下一页，页数平白多出来（踩过：10 条词多出 4 个「只有一行字」的页）。
+        used, pages = pdf_writer.PdfDoc.measure(
+            render_card,
+            pad_top=pdf_writer.LEADING_HEADING + pdf_writer.GAP_AFTER_RULE)
         if used <= start_y:
             moved = False                       # 这页放得下，整条留着
         elif used <= one_page:
@@ -573,13 +589,15 @@ def pdf_bytes(header, body, *, scope_label: str = "全部词语",
         else:
             moved = False                       # 自己就超过一页，只能顺着排
         if index > 1:
-            doc.space(pdf_writer.GAP_BEFORE_ENTRY - 6.0)
+            # 词条之间：上一条最后一行 → 分隔线 → 下一条标题，一律用抬头那条线
+            # 之后同样的间距（GAP_AFTER_RULE），全篇的分隔线看着才是一个节奏。
+            doc.space(pdf_writer.GAP_BEFORE_ENTRY)
             # 要挪页时把「线 + 整条」的高度告诉 rule()，它会**先翻页再画线**
             # （这样线落在新页页首，和词条待在一起）。翻页这件事就交给它，
             # 下面别再自己 new_page() —— 两边都翻会翻出空白页（踩过）。
             doc.rule(color=pdf_writer.COLOR_RULE, span=line_w,
                      keep_with_next=(used + 10.0) if moved else 0.0)
-        doc.space(2.0)
+        doc.space(pdf_writer.GAP_AFTER_RULE)
         render_card(doc)
     return doc.build()
 

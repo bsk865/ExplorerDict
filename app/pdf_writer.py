@@ -43,26 +43,35 @@ MARGIN_BOTTOM = 54.0
 # --------------------------------------------------------------------- 字号
 SIZE_TITLE = 17.0
 SIZE_HEADING = 12.5          # 词条标题（序号 + 词语）
-SIZE_FIELD = 8.2             # 字段名（「上下文」「释义」这些小标题）
+SIZE_FIELD = 8.6             # 字段名（「上下文」「释义」这些小标题）
 SIZE_BODY = 9.5              # 正文
 SIZE_VALUE = 9.0             # 字段的值
-SIZE_FOOT = 7.6              # 元信息 / 页脚
+SIZE_FOOT = 7.6              # 元信息 / 页脚（来源链接、捕获时间这些）
 
-# --------------------------------------------------------------------- 行高
-LEADING_TITLE = 24.0
-LEADING_HEADING = 17.5
-LEADING_BODY = 14.0          # 9.5pt 正文的行高
-LEADING_VALUE = 12.6         # 字段值的行高（比正文紧一点，但仍留呼吸）
-LEADING_FIELD = 10.6         # 字段名那行的行高
-LEADING_FOOT = 10.6
+# ----------------------------------------------------- 行高 = 字号 × 一个系数
+# 每个字号配一个固定行高，系数彼此接近（1.16–1.5），这样「这段文字自己密不密」
+# 是一致的；行与行之间「留多少空」则一律走 :data:`GAP_AFTER_FIELD`（见下）。
+#   实测老版式的问题：卡片里的相邻行出现了 12.20 / 12.60 / 15.60 / 16.60 /
+#   19.60 / 20.60 七种间距，看着就是不齐 —— 现在字段名→值 全是 13.6、
+#   值→下一个字段名 全是 15.6（量了 80 + 40 处），只剩两个字号各自的行高差。
+LEADING_TITLE = 25.5         # 17.0 × 1.5
+LEADING_HEADING = 16.8       # 12.5 × 1.34
+LEADING_BODY = 13.3          # 9.5 × 1.4
+LEADING_VALUE = 12.0         # 9.0 × 1.33
+LEADING_FIELD = 10.0         # 8.6 × 1.16（下面紧跟的是值，不需要整行行高）
+LEADING_FOOT = 10.26         # 7.6 × 1.35
 
 # --------------------------------------------------------------- 块间距
-GAP_AFTER_TITLE = 6.0
-GAP_AFTER_META = 12.0
-GAP_BEFORE_ENTRY = 16.0      # 词条之间
-GAP_AFTER_HEADING = 7.0      # 词条标题 → 第一个字段
-GAP_AFTER_FIELD = 7.0        # 字段与字段之间
-GAP_LABEL_TO_VALUE = 1.6     # 字段名 → 它自己的值
+# 一个「模数」管三件事：字段名 → 它自己的值、值 → 下一个字段名、标题 → 第一个
+# 字段。所以整张卡片里任意两组内容之间的空隙都是同一个数。
+GAP_AFTER_FIELD = 3.6        # 字段名→值、值→下一个字段名、标题→第一个字段（都是它）
+GAP_LABEL_TO_VALUE = GAP_AFTER_FIELD   # 名字留着，老代码读它
+GAP_AFTER_HEADING = GAP_AFTER_FIELD    # 同上
+GAP_AFTER_TITLE = 6.0        # 大标题 → 元信息那一行（两者基线差 25.5）
+GAP_AFTER_META = 2.0         # 元信息 → 下面那行小字说明（基线差 13.9）
+GAP_AFTER_NOTE = 2.6         # 小字说明 → 抬头那条横线（基线差 14.0）
+GAP_AFTER_RULE = 2.0         # 抬头横线 → 第一条词条（和词条间的分隔线同一个数）
+GAP_BEFORE_ENTRY = 15.1      # 词条与词条之间（上一条最后一行 → 下一条标题 30.0）
 
 INDENT = 0.0
 INDENT_VALUE = 0.0           # 卡片里的字段名与值同一条缩进线上
@@ -397,6 +406,10 @@ class PdfDoc:
 
         这样排的原因：字段名和值同处一行时，长句折行后会顶到页边、读起来
         分不清哪儿是名哪儿是值；分开排一眼就能扫到「释义」「例子」这些锚点。
+
+        间距全部走同一个模数（:data:`GAP_AFTER_FIELD`）：字段名 → 值、值 →
+        下一个字段名、标题 → 第一个字段，都是它 —— 这样一列字段看下来是
+        等距的，不会有的一行挤、有的隔得远。
         """
         value = str(value or "").strip()
         if not value:
@@ -498,7 +511,7 @@ class PdfDoc:
     # ------------------------------------------------------------- 量身
     @classmethod
     def measure(cls, render, *, start_y: float | None = None,
-                 height: float | None = None) -> tuple[float, int]:
+                 height: float | None = None, pad_top: float = 0.0) -> tuple[float, int]:
         """量一段内容从**页顶**铺下来要多高、要几页，但**什么都不画**。
 
         用法是「先量、再决定要不要翻页、最后真的画一遍」：一个词条如果放到
@@ -509,6 +522,12 @@ class PdfDoc:
         （拿 ``start_y`` 当起点去量的话，折行会随剩下的高度变化，量出来的
         高度也跟着变 —— 298 / 366 / 673 三个数都量出来过，判断就乱了）。
         返回 ``(高度, 页数)``；``height`` 给「一新页有多少空间」，默认一整页。
+
+        ``pad_top`` 补的是**第一条线落笔之前**那一格行高：游标指的是「第一条线
+        的基线」，可这段内容真正的上边界在基线之上一个行高。不补的话量出来的
+        高度会比实际占地少一格 —— 判定「刚刚好放得下」的内容真画时会从页底
+        溢出一行（踩过：词条的标题那格 18pt 没算，10 条词平白多出 4 个只有
+        一行字的页）。谁量谁负责把这一格报出来。
         """
         full = (height if height is not None else 0.0) or (PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM)
         doc = cls("")
@@ -517,11 +536,12 @@ class PdfDoc:
         doc._measured_pages = 0    # 上面这句不算翻页，别用 new_page() 免得记成 1 页
         doc._measured_used = 0.0
         doc._y = MARGIN_BOTTOM + float(full)
+        top = doc._y
         render(doc)
         # 内容从页顶铺下来多高：翻过去的那几页是整页，最后这页看游标走到哪儿。
         # 不能写成「起点减终点」—— 中途翻页后游标已经回到页顶，减出来是负数
         # （踩过：-466.99，于是「放不下」的判断全失灵）。
-        used = doc._measured_pages * float(full) + (MARGIN_BOTTOM + float(full) - doc._y)
+        used = doc._measured_pages * float(full) + (top - doc._y) + float(pad_top)
         pages = 1 + doc._measured_pages
         return used, pages
 
