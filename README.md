@@ -2724,3 +2724,79 @@ AssertionError: 1 not greater than or equal to 7.1875 : 有页面几乎是空的
 
 「词条本身是断字」（`assur-ances` / `resource-con-strained` / `high computationa`）**来自库里的原文**，
 八种格式都照原文导，§33.7 记着这件事 —— 要修得么在**导出时清理**、要么在**划词时**就别抓半截词，等你定。
+
+## 35. 批次 M8：PDF 的「间隔均匀」
+
+> 需求原话（2026-10-05）：**「排版要整齐，间隔均匀。」**
+
+### 35.1 先量「不齐」在哪
+
+`.tmp\measure_rhythm.py` 给 `PdfDoc.line` 挂钩子，把每行的
+`(text, size, indent, color, y, page)` 记下来，再算相邻两行的基线差。结果一张卡片里
+有 **七种间距**：
+
+| 相邻的两种行 | 基线差 |
+| --- | --- |
+| 字段名 → 它自己的值 | 12.20 |
+| 值里自己折行 | 12.60 |
+| 值 → 下一个字段名（按位置不同） | **15.60 / 16.60 / 19.60 / 20.60** |
+| 词条标题 → 第一个字段 | 42.10 |
+| 上一条最后一行 → 下一条标题 | 53.10 |
+
+### 35.2 一个模数管三件事
+
+`app\pdf_writer.py` 的常量整块重写：
+
+```python
+SIZE_FIELD = 8.6                 # 8.2 → 8.6，元信息不再单独用 7.6 当正文字号
+LEADING_HEADING = 16.8           # 12.5 × 1.34
+LEADING_BODY = 13.3              # 9.5 × 1.4
+LEADING_VALUE = 12.0             # 9.0 × 1.33
+LEADING_FIELD = 10.0             # 8.6 × 1.16（下面紧跟的是值，不需要整行行高）
+GAP_AFTER_FIELD = 3.6            # 字段名→值、值→下一个字段名、标题→第一个字段：都是它
+GAP_LABEL_TO_VALUE = GAP_AFTER_FIELD
+GAP_AFTER_HEADING = GAP_AFTER_FIELD
+```
+
+`app\export_service.py` 的 `_pdf_card()` 里，元信息字段不再自己一套
+（原来 `size=SIZE_FOOT, label_size=SIZE_FOOT-0.6, gap_after=3.0, gap_before=1.0`），
+改成和别的字段同字号同间距、**只靠颜色淡一档**。
+
+### 35.3 量出来的结果
+
+| 相邻的两种行 | 改前 | 改后 |
+| --- | --- | --- |
+| 字段名 → 值 | 12.20 | **13.6**（80 次全一样） |
+| 值 → 下一个字段名 | 15.60 / 16.60 / 19.60 / 20.60 | **15.6**（全一样） |
+| 正文折行 | 12.60 | 12.0（9.5pt 的行高） |
+| 值折行 | 12.60 | 15.6（9.0pt 的行高） |
+
+### 35.4 连带的好处：一页正好两条
+
+卡片从 332.6–345.2pt 瘦到 **305.2–317.2pt**，一页可用 735.89pt 正好装两条
+（原来 2 条要 707.5pt、可用只有 671.27pt，装不下，还多出一页只有一行的第 6 页）。
+真库 10 条词现在是 **5 页**：页 1 `[1,2]`、页 2 `[3,4]`、页 3 `[5,6]`、页 4 `[7,8]`、
+页 5 `[9,10]`，`PDF 98122 B`。
+
+### 35.5 `measure()` 的参照点（这一轮才彻底想明白）
+
+`used` 是「卡片真正的**上边界** → 下一条之前」的整段占地，而游标指的是第一条线的
+**基线**。所以：
+
+```python
+start_y = doc.y() - pdf_writer.MARGIN_BOTTOM        # 基线到页底，还剩多少
+used, pages = pdf_writer.PdfDoc.measure(
+    render_card,
+    pad_top=pdf_writer.LEADING_HEADING + pdf_writer.GAP_AFTER_RULE)   # 基线之上那一格
+```
+
+`pad_top` 补的是**基线之上**那一格（词条标题的行高 + 卡片前那条分隔线的空当），
+`start_y` 量的是**基线之下**还剩多少 —— 两边各管一头，合起来正好是整段。
+少算任何一笔，判定「刚刚好放得下」的卡片真画时都会从页底溢出一行，那行被甩到下一页。
+
+### 35.6 回归
+
+`tests.test_export_service` + `tests.test_ui_roundrect` = **Ran 290 OK**；
+逐字 19 模块白名单 **Ran 954 / failures=6**（`_check\batch_m8_whitelist.log`；
+6 条仍是 `test_reading_panel` 2 条 + `test_unified_action` 4 条，无新增）。
+
