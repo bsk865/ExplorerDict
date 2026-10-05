@@ -115,6 +115,10 @@ FORMATS_BY_KEY: dict[str, ExportFormat] = {item.key: item for item in FORMATS}
 DEFAULT_FORMAT = "csv"
 #: Anki 那一列用的制表符（Anki 的「导入文件」按制表符分列）
 ANKI_SEPARATOR = "\t"
+#: 一条词条在本页放不下时：这页剩下的空间少于「整条高度的这个比例」就整条挪到
+#: 下一页（免得只落下标题和一两行）；剩得还多就让它接着往下排 —— 页底空一大块
+#: 比断一下更难看。（HTML 那版是 ``break-inside: avoid``，PDF 得自己算。）
+SPLIT_IF_ROOM_RATIO = 0.52
 
 
 def format_for(key: str) -> ExportFormat:
@@ -477,45 +481,106 @@ a { color: #1C1C1C; }
     return "\n".join(parts)
 
 
+def _pdf_card(doc, index: int, cells, header, *, tag_index: int,
+              meta_labels: set) -> None:
+    """往 ``doc`` 上排一条词条（标题 + 标签药丸 + 字段表）。
+
+    单独抽出来是为了**能被量两次**：先量身（:meth:`app.pdf_writer.PdfDoc.measure`）
+    看看放不放在当前这页，放不下就整条挪到下一页 —— 免得一条词条被页码从
+    中间劈开、下半页空一大块。
+    """
+    from . import pdf_writer                                 # 延迟导入：省启动时间
+
+    inset = pdf_writer.CARD_INSET
+    card_w = pdf_writer.CARD_WIDTH
+    doc.heading(f"{index}. {str(cells[0] if cells else '').strip()}", indent=inset)
+    if tag_index >= 0:
+        tags = [tag for tag in str(cells[tag_index] or "").split("#") if tag.strip()]
+        if tags:
+            doc.tagline(tags, x=pdf_writer.MARGIN_X + inset)
+    for position, (label, value) in enumerate(zip(header, cells)):
+        if position == 0 or position == tag_index:
+            continue
+        text = str(value or "").strip()
+        if not text:
+            continue
+        if label in meta_labels:
+            doc.field(label, text, size=pdf_writer.SIZE_FOOT,
+                      label_size=pdf_writer.SIZE_FOOT - 0.6,
+                      color=pdf_writer.COLOR_MUTED,
+                      label_color=pdf_writer.COLOR_FAINT,
+                      indent=inset, width=card_w,
+                      gap_after=3.0, gap_before=1.0)
+        else:
+            doc.field(label, text, indent=inset, width=card_w,
+                      gap_after=pdf_writer.GAP_AFTER_FIELD)
+
+
 def pdf_bytes(header, body, *, scope_label: str = "全部词语",
               created_at: datetime | None = None) -> bytes:
     """PDF 字节（手写 PDF + 嵌入中文字体子集，见 :mod:`app.pdf_writer`）。
 
-    排版走 :class:`app.pdf_writer.PdfDoc`（自动折行 + 自动分页），build() 时
-    才把用到的字形收齐、嵌一份子集字体，所以整份文档只排一遍。
+    版式**照着 HTML 单页那版来**（用户认可它的排版）：标题一段、灰字元信息、
+    一行说明、然后一条词条一个「卡片块」—— 标题 + 标签药丸 + 字段表
+    （字段名一行、值挂在下面）。PDF 里没有卡片底色和圆角，就用「一条细横线
+    分隔词条 + 标题左侧一个小色块」来表达同样的分组感。
+
+    词条之间**不让分页把它劈开**：先量一下整条要多高，放不下就整条挪下一页
+    （HTML 那边的 ``break-inside: avoid`` 是同一个意思）。太长的词条（自己
+    就超过一页）还是只能顺着排，这是没办法的事。
     """
     from . import pdf_writer                                 # 延迟导入：省启动时间
 
     stamp = (created_at or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+    line_w = pdf_writer.CONTENT_WIDTH
+
     doc = pdf_writer.PdfDoc(f"{FILE_PREFIX} · 词条导出")
     doc.new_page()
+
+    # ---- 抬头 -------------------------------------------------------------
     doc.title(f"{FILE_PREFIX} · 词条导出")
-    doc.paragraph(f"范围：{scope_label}    条数：{len(body)}    导出时间：{stamp}",
-                  size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_MUTED)
+    doc.space(2.0)
+    doc.paragraph(f"范围：{scope_label}　｜　条数：{len(body)}　｜　导出时间：{stamp}",
+                  size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_MUTED,
+                  leading=pdf_writer.LEADING_FOOT, gap_after=2.0)
     doc.paragraph("上下文是划词当时原文里的那句话；来源是当时的窗口标题"
                   "（未做后台采集，也没有再联网）。",
-                  size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_FAINT)
+                  size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_FAINT,
+                  leading=pdf_writer.LEADING_FOOT, gap_after=4.0)
+    doc.rule(color=pdf_writer.COLOR_RULE_STRONG)
+
     tag_index = header.index("标签") if "标签" in header else -1
     meta_labels = {"来源链接", "来源应用", "捕获时间", "重复次数"}
+    one_page = pdf_writer.PAGE_HEIGHT - pdf_writer.MARGIN_TOP - pdf_writer.MARGIN_BOTTOM
+
     for index, cells in enumerate(body, start=1):
-        term = str(cells[0] if cells else "")
-        doc.heading(f"{index}. {term}")
-        for position, (label, value) in enumerate(zip(header, cells)):
-            if position == 0 or position == tag_index:
-                continue
-            text = str(value or "").strip()
-            if not text:
-                continue
-            if label in meta_labels:
-                doc.paragraph(f"{label}：{text}", size=pdf_writer.SIZE_FOOT,
-                              color=pdf_writer.COLOR_MUTED, gap_after=2.0)
-            else:
-                doc.paragraph(f"{label}：{text}")
-        if tag_index >= 0 and str(cells[tag_index] or "").strip():
-            doc.paragraph(str(cells[tag_index]).strip(),
-                          size=pdf_writer.SIZE_FOOT, color=pdf_writer.COLOR_MUTED,
-                          gap_after=2.0)
-        doc.space(pdf_writer.GAP_AFTER_BLOCK)
+        def render_card(target, index=index, cells=cells):
+            _pdf_card(target, index, cells, header,
+                      tag_index=tag_index, meta_labels=meta_labels)
+
+        # 先量整条从页顶铺下来要多高（量法固定从页顶起，所以同一个词条每次
+        # 量出来都是同一个数），再决定它落在哪一页。量完才画分隔线 —— 免得线
+        # 留在上一页页底、词条却翻到下一页去了。
+        start_y = doc.y() - pdf_writer.MARGIN_BOTTOM
+        used, pages = pdf_writer.PdfDoc.measure(render_card)
+        if used <= start_y:
+            moved = False                       # 这页放得下，整条留着
+        elif used <= one_page:
+            # 这页放不下，但自己装得下一页：还有一种情况是「这页剩得还不少」
+            # ——那就让它接着往下排（和 HTML 一样，正文该流就流），页底空一大块
+            # 比断一下更难受；只剩一点点时才整条挪走。
+            moved = start_y < used * SPLIT_IF_ROOM_RATIO
+        else:
+            moved = False                       # 自己就超过一页，只能顺着排
+        if index > 1:
+            doc.space(pdf_writer.GAP_BEFORE_ENTRY - 6.0)
+            # 要挪页时把「线 + 整条」的高度告诉 rule()，它会**先翻页再画线**
+            # （这样线落在新页页首，和词条待在一起）。翻页这件事就交给它，
+            # 下面别再自己 new_page() —— 两边都翻会翻出空白页（踩过）。
+            doc.rule(color=pdf_writer.COLOR_RULE, span=line_w,
+                     keep_with_next=(used + 10.0) if moved else 0.0)
+        doc.space(2.0)
+        render_card(doc)
     return doc.build()
 
 

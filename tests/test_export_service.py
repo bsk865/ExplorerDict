@@ -316,7 +316,10 @@ class TestExportFormats(unittest.TestCase):
                                     now=STAMP, fmt="pdf")
             raw = result.path.read_bytes()
 
-        match = re.search(rb"/W\s*\[(.*?)\]\s*/CIDToGIDMap", raw, re.S)
+        # 只认 CIDFont 里的那一个 /W：先用 /Subtype /CIDFontType2 锚定这个对象，
+        # 再用它后面必然跟着的 /DW 当右边界（字体流里也有一堆字节长得像 /W）。
+        match = re.search(rb"/Subtype\s*/CIDFontType2.*?/W\s*\[(.*?)\]\s*/DW",
+                          raw, re.S)
         self.assertIsNotNone(match, "CIDFont 里没有 /W 数组")
         body = match.group(1).decode("latin-1")
         groups = re.findall(r"\d+\s*\[([^\]]*)\]", body)
@@ -358,6 +361,77 @@ class TestExportFormats(unittest.TestCase):
                                  "这一行越过了右边界：%r" % match.group(4)[:60])
             checked += 1
         self.assertGreater(checked, 3, "没检查到几行，这条用例可能失效了")
+
+    def test_pdf_does_not_leave_blank_pages_between_entries(self):
+        """分隔线自己会翻页，外面就**不能再翻一次** —— 两边都翻会翻出空白页。
+
+        曾经 10 条词导出成 9 页，其中好几页只有页脚：``rule()`` 里的
+        ``keep_with_next`` 先翻了一页，紧接着外面那句 ``new_page()`` 又翻了一页，
+        中间那页就空了。这里的词条故意做成「一页放不下两条」，正是「想挪页」
+        和「守卫先翻页」会同时成立的那种尺寸。
+
+        判据不是「页数少」（字体不同折行就不同，页数会飘），而是**每一页都得有
+        相当多的正文** —— 空白页的文字段数是 0，怎么飘也躲不过。
+        """
+        count = 6
+        with temp_db() as db, tmp_dir("exp_") as tmp:
+            bid = db.create_batch("分页")
+            for _ in range(count):
+                db.add_entry(batch_id=bid, term="resource-con-strained environmen",
+                             context="Existing solutions often depend on "
+                                     "drift-detection methods that produce high "
+                                     "computational overhead for resource-constrained "
+                                     "environments " * 4,
+                             source_title="RCCDA: Adaptive Model Updates",
+                             source_url="https://arxiv.org/html/2505.24149v3",
+                             source_app="msedge.exe")
+            result = export_entries(_rows(db, bid), scope_label="分页",
+                                    directory=tmp, now=STAMP, fmt="pdf")
+            raw = result.path.read_bytes()
+
+        chunks = re.split(rb"/Type\s*/Page\b", raw)[1:]
+        self.assertGreaterEqual(len(chunks), 1)
+        per_page = [chunk.count(b" Tj") for chunk in chunks]
+        self.assertTrue(all(n > 0 for n in per_page),
+                        "有页面一段正文都没有：%r" % per_page)
+        average = sum(per_page) / float(len(per_page))
+        self.assertGreaterEqual(min(per_page), average * 0.25,
+                                "有页面几乎是空的（每页文字段数 %r）" % per_page)
+
+    def test_pdf_measures_a_card_from_the_top_of_a_page(self):
+        """量高必须**与当前位置无关**，固定从页顶起量。
+
+        曾经拿 ``start_y - 量完的 y`` 当高度 —— 中途翻页后游标已经回到页顶，
+        于是量出 ``-466.99``，「这条放不下」的判断整个失灵。
+        """
+        from app import pdf_writer
+
+        head = [h for _, h in export_service.COLUMNS]
+        labels = {"来源链接", "来源应用", "捕获时间", "重复次数"}
+        one_page = pdf_writer.PAGE_HEIGHT - pdf_writer.MARGIN_TOP - pdf_writer.MARGIN_BOTTOM
+
+        def card_of(context):
+            cells = ["resource-con-strained environmen", context,
+                     "RCCDA: Adaptive Model Updates in the Presence of Concept Drift",
+                     "https://arxiv.org/html/2505.24149v3", "msedge.exe",
+                     "资源受限环境，指系统在计算、存储、带宽等资源有限条件下运行的场景。",
+                     "The algorithm must operate under strict resource constraints.",
+                     "2026-10-03T15:35:33+08:00", "1"]
+            return lambda doc: export_service._pdf_card(
+                doc, 1, cells, head, tag_index=7, meta_labels=labels)
+
+        used, pages = pdf_writer.PdfDoc.measure(
+            card_of("Existing solutions often depend on drift-detection methods "
+                    "that produce high computational overhead for "
+                    "resource-constrained environments " * 2))
+        self.assertGreater(used, 0.0, "量出负数说明起点被当成了终点")
+        self.assertLess(used, one_page, "这条用例要的是「一页装得下」")
+        self.assertEqual(pages, 1)
+
+        # 自己就超过一页的卡片：照样不能是负数，页数要跟着涨。
+        used_big, pages_big = pdf_writer.PdfDoc.measure(card_of("啊" * 3000))
+        self.assertGreater(used_big, 0.0)
+        self.assertEqual(pages_big, 2)
 
     def test_pdf_falls_back_to_latin1_when_no_font_is_available(self):
         """找不到中文字体也不能崩：退化成只写拉丁字母，文件照样能开。"""
