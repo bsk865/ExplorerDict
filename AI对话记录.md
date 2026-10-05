@@ -520,13 +520,19 @@ oneway 26→8 / fishbone 17→8`，只有 `flow-s` 从 14 变 16 —— 净赚�
 
 **顺手排除掉一个假问题**：我自己看渲染图时以为 `因果` 与 `对照` 两个短标签叠在一起，
 量完发现 9 个模板 × 5 条标签**一对都没压上**（最近的一对隔 5px）—— 那是渲染脚本的
-PIL 字体比真机 Tk 字体大造成的假象。没有改产品代码，只在文档里如实写「大字号 / 高 DPI
-下这两对会显得挤」。**别拿一张自己画的调试图当证据。**
+PIL 字体比真机 Tk 字体大造成的假象。
 
-**测试**：`tests.test_map_templates + tests.test_ui_roundrect + tests.test_export_service`
-**Ran 342 / OK**；逐字 19 模块白名单 **Ran 966 / failures=7** —— 6 条是既定陈旧失败，
-第 7 条 `test_root_is_withdrawn_before_build_app` 是**环境**：你机器上正开着
-`探索词典.exe`，单实例闸门让 `app.main.main([])` 直接返回 5。
+**但 5px 本身还是要治的**：把「不压上」当成合格，等于允许两个标签贴到 0.1px。
+放置标签时改成「登记前先按 `LABEL_SEPARATION = 6px` 外扩」
+（新增纯函数 `_inflate_box`），最挤的一对 **5.03px → 10.73px**，
+而 9 个模板的折点数与交叉数**一格没变** —— 只挪标签、不动线。
+新增守卫 `test_two_relation_labels_never_hug_each_other`。
+**先把「假的 bug」和「真的小毛病」分开，再分别处理：前者写进文档，后者才动代码。**
+
+**测试**：`tests.test_map_templates + tests.test_map_export + tests.test_ui_roundrect +
+tests.test_export_service` **Ran 395 / OK**；逐字 19 模块白名单 **Ran 967 / failures=7**
+—— 6 条是既定陈旧失败，第 7 条 `test_root_is_withdrawn_before_build_app` 是**环境**：
+你机器上正开着 `探索词典.exe`（PID 64032），单实例闸门让 `app.main.main([])` 直接返回 5。
 
 ### 7.9 交付之后第四句：双击 exe 弹「启动失败」
 

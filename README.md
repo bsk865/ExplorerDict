@@ -3113,6 +3113,23 @@ flow-h 8/0 · flow-v 8/0 · flow-s 16/0`（`mindmap` 的 23 里大部分是弧�
 fixture 直接用**用户真看到的那份数据**；变异验证：把车道排序退回旧写法 ⇒ 守卫变红。
 
 **测试**：`tests.test_map_templates + tests.test_ui_roundrect + tests.test_export_service`
-**Ran 342 / OK**；逐字 19 模块白名单 **Ran 966 / failures=7**，6 条既定陈旧失败 + 1 条环境
+**Ran 342 / OK**；逐字 19 模块白名单 **Ran 967 / failures=7**，6 条既定陈旧失败 + 1 条环境
 （本机正开着 `探索词典.exe`，单实例闸门让 `app.main.main([])` 返回 5）。
 
+## 40. 批次 M12 补记：关系短标签之间留缝
+
+排线干净了，`auto` / `鱼骨` 上「因果」与「对照」两个短标签却只隔 5.03px，屏幕上糊成一片。
+
+- 原因在 `_label_position` 的调用方：标签放置只要求「不压上去」
+  （`_label_fits(box, blockers, pad=0.0)`），放过一个标签就把它**原尺寸**的框
+  登记进 `label_blockers`，后面那个自然可以贴着它 0.1px 放下。
+- 修法：登记时按新常量 `LABEL_SEPARATION = 6.0` 外扩（纯函数 `_inflate_box(box, pad)`）。
+  已放好的**标签**要求留缝；节点矩形那侧的净空不变（它们本来就带 `label_gap` 内边距）。
+  顺带让 `route_cost` 里的 `1e4 * label_overlap` 变严 —— 会贴到别人的走法先被换掉。
+- 实测（真主题 12 × 9 个模板）：最挤的一对 **5.03px → 10.73px**，
+  而折点数（8 / 23 / 10 / 10 / 8 / 8 / 8 / 8 / 16）与交叉数（全 0）**一格没变** ⇒ 只挪标签、不动线。
+- 守卫：`tests/test_ui_roundrect.py::TestMapRouteOrdering::test_two_relation_labels_never_hug_each_other`
+  （先断言 `LABEL_SEPARATION >= 4.0`「定得太小等于没留」，再逐模板逐对标签框按
+  `LABEL_SEPARATION - 0.05` 的容差断言不相交）。
+- 顺手修掉 `_segments_intersect` docstring 里 `.tmp\probe_m12_why.py` 的反斜杠转义告警
+  （Python 3.14 起是 `SyntaxWarning`）；`compileall` 现在零告警。
