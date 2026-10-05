@@ -6629,12 +6629,44 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
         self.assertAlmostEqual(pinned.find(1).y, 111.0, places=3)
         self.assertAlmostEqual(pinned.find(2).x, auto.find(2).x, places=3,
                                msg="固定一张卡不该动别的卡")
-        metrics = cm.metrics_for()
+        # ---- 批次 M13：**一个方向都不夹** ----
+        # 用户 2026-10-06 的原话：「导图画布无边界，请你不要自己加边界约束」。以前这
+        # 里把拖到左上留白外面的卡片夹回 ``pad + w/2``（他松手卡片就弹回来），现在
+        # 摆到负坐标也照摆，内容外框的四边跟着长。
         far = cm.layout_graph(labels, (), width=700.0, height=500.0,
                               pins={1: (-500.0, -500.0)})
-        self.assertAlmostEqual(far.find(1).x, metrics.pad + far.find(1).w / 2.0, places=3,
-                               msg="拖到左上角外面也只会被夹回留白里")
-        self.assertAlmostEqual(far.find(1).y, metrics.pad + far.find(1).h / 2.0, places=3)
+        self.assertAlmostEqual(far.find(1).x, -500.0, places=3,
+                               msg="拖到原点左上方也照摆，不许夹回来")
+        self.assertAlmostEqual(far.find(1).y, -500.0, places=3)
+        # 右 / 下界仍是老口径（没跟着改成宽度），左 / 上原点变负
+        self.assertLess(far.content_x0, -500.0, "内容外框的左界要跟到负数那边去")
+        self.assertLess(far.content_y0, -500.0)
+        self.assertAlmostEqual(far.content_w, auto.content_w, places=3)
+        self.assertAlmostEqual(far.content_h, auto.content_h, places=3)
+        # 首开自适应用的是同一份外框：少算一截就会一开图把左边那张卡裁掉
+        extent_w, extent_h = cm.layout_extent(labels, (), width=700.0, height=500.0,
+                                              pins={1: (-500.0, -500.0)})
+        self.assertGreaterEqual(extent_w, far.content_w - far.content_x0 - 1e-6)
+        self.assertGreaterEqual(extent_h, far.content_h - far.content_y0 - 1e-6)
+
+    def test_the_scroll_range_covers_content_left_of_the_origin(self):
+        """批次 M13：内容原点为负时，滚动范围的左 / 上界要跟着到负数那边去。
+
+        只改布局不改滚动范围的话，卡片画在 ``-500``、范围却从 ``-margin`` 起算 ——
+        用户根本滚不过去，看起来还是「被挡住了」。
+        """
+        from app.ui import concept_map as cm
+
+        layout = cm.layout_graph({1: "甲", 2: "乙"}, (), width=700.0, height=500.0,
+                                 pins={1: (-500.0, -500.0)})
+        win = cm.ConceptMapWindow.__new__(cm.ConceptMapWindow)
+        win._layout = layout
+        win._canvas_size = lambda: (700, 500)
+        left, top, right, bottom = win._region_box()
+        self.assertLess(left, -500.0, "拖到 -500 的卡片必须滚得到")
+        self.assertLess(top, -500.0)
+        self.assertGreaterEqual(right, layout.content_w)
+        self.assertGreaterEqual(bottom, layout.content_h)
 
     # ------------------------------------------------------- F3：双击连线
     def test_double_clicking_an_ai_edge_asks_whether_it_is_wrong(self):
@@ -7860,3 +7892,75 @@ class TestMapRouteOrdering(unittest.TestCase):
         for spec in templates.TEMPLATES:
             self.assertIn(spec.route_axis, ("x", "y"),
                           f"模板「{spec.key}」的主轴只能是 x / y")
+
+    # ---- 批次 M13：位置被用户拖散之后（真机那 5 张固定卡） --------------
+
+    #: 用户 2026-10-06 那张截图里被拖到四处的 5 张卡（世界坐标，抄自 node_pins）
+    PINS = {
+        26: (-162.4296662749423, 167.7682325114579),
+        27: (340.0144676499848, -40.856013656192175),
+        23: (46.57033372505765, 349.70316679723464),
+        31: (710.3565100000003, 331.119),
+        25: (2188.0650000000005, 303.0),
+    }
+    #: 真主题 12 现在有 6 条关系 —— 比上面多一条用户后来加的「shiftin 包含 model performanc」
+    RELS_WITH_CONTAINS = RELS + ((26, 27, "包含"),)
+
+    def _pinned_layout(self, key):
+        from app.map_service import MapRelation
+        from app.ui.concept_map import layout_graph
+
+        relations = [MapRelation(src, dst, rel_type, "依据", "片段")
+                     for src, dst, rel_type in self.RELS_WITH_CONTAINS]
+        return layout_graph(dict(self.LABELS), relations,
+                            width=1180, height=760, topic_label="资源受限计算",
+                            zoom=1.0, top_pad=6.0, template=key,
+                            pins=dict(self.PINS))
+
+    def test_cards_dragged_apart_still_get_straight_orthogonal_lines(self):
+        """批次 M13：位置怎么散，关系线都必须是**横平竖直**的。
+
+        用户 2026-10-06：「你生成的时候就是交叉的线条」—— 截图里那些斜线是兜底
+        候选（弧线 / 直连）在卡片被拖散之后胜出造成的。真机那 5 张固定卡的位置
+        原样照抄：改动前实测 2 条斜线，现在一条都不许有。
+        """
+        from app.ui import concept_map as cm
+
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._pinned_layout(key)
+                self.assertEqual(len(layout.edges), 6, "fixture 必须画出 6 条关系线")
+                for edge in layout.edges:
+                    self.assertEqual(
+                        cm._diagonal_segments(edge.points), 0,
+                        f"模板「{key}」上「{edge.label}」画成了斜线："
+                        f"{[(round(x, 1), round(y, 1)) for x, y in edge.points]}")
+
+    def test_cards_dragged_apart_do_not_make_relation_lines_cross(self):
+        """同上那张图：一条都不许交叉。
+
+        改动前这张图上有 7 处交叉 —— 主因是跨得最远的那条（``依赖``）排在最前面
+        挑线，等于先把一条「横贯全图的干线」铺好，后面每一条要上下穿过它的线都
+        躲不开；现在**短的先挑**、全部定下来之后再收尾重挑一遍。
+        """
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._pinned_layout(key)
+                self.assertEqual(self._crossings(layout), 0,
+                                 f"模板「{key}」在用户拖动过的位置上还是交叉了")
+
+    def test_a_group_is_drawn_as_a_name_not_a_filled_slab(self):
+        """用户 2026-10-06：「褐色背景应该是作为组标签才对」。
+
+        组现在带 ``label``（组名 = 组长那张卡的词）与 ``framed``：成员外接框里
+        混进了**别的**卡片时只写组名、不画框（不然框会把别人圈进去）。
+        """
+        layout = self._pinned_layout("auto")
+        self.assertTrue(layout.groups, "这张图上本来就该有分组")
+        for group in layout.groups:
+            node = layout.find(group.root_id)
+            self.assertIsNotNone(node, "组长必须在图上")
+            self.assertEqual(group.label, node.label, "组名必须是组长那张卡的词")
+            self.assertIsInstance(group.framed, bool)
+        self.assertIn(False, [group.framed for group in layout.groups],
+                      "这张图上有一组的框里混着别的卡片，那一组只该写组名、不画框")

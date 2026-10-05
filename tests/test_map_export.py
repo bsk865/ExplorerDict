@@ -412,6 +412,36 @@ class TestSvgDocument(unittest.TestCase):
         box = map_export.content_box(layout, style=style)
         return map_export.svg_document(layout=layout, style=style, box=box, meta=meta), box
 
+    def test_a_group_is_a_frame_with_its_name_not_a_filled_slab(self):
+        """用户 2026-10-06：「褐色背景应该是作为组标签才对」—— 导出这条也得跟。
+
+        分组画成**细框 + 左上角的组名**（``fill="none"`` + 边框色），不再铺一块
+        褐色底衬（``panel_alt``）；框里混进别的卡时只写组名、不画框。
+        """
+        panel = map_export.DEFAULT_STYLE["panel_alt"]
+        layout = _fake_layout()
+        old = layout.groups[0]
+        layout.groups = (SimpleNamespace(root_id=old.root_id, members=old.members,
+                                         x0=old.x0, y0=old.y0, x1=old.x1, y1=old.y1,
+                                         label="神经网络", framed=True),)
+        text, _box = self._svg(layout)
+        self.assertNotIn(f'fill="{panel}"', text, "分组不该再铺褐色底衬")
+        frame = next(line for line in text.splitlines()
+                     if "<rect" in line and 'fill="none"' in line)
+        self.assertIn(f'stroke="{map_export.DEFAULT_STYLE["border"]}"', frame,
+                      "组框是描边的细框")
+        self.assertIn("神经网络", text, "组名要写成真文字")
+
+        loose = layout.groups[0]
+        layout.groups = (SimpleNamespace(root_id=loose.root_id, members=loose.members,
+                                         x0=loose.x0, y0=loose.y0, x1=loose.x1, y1=loose.y1,
+                                         label="神经网络", framed=False),)
+        text, _box = self._svg(layout)
+        self.assertIn("神经网络", text, "框里混进别的卡时仍然写组名")
+        self.assertFalse([line for line in text.splitlines()
+                          if "<rect" in line and 'fill="none"' in line],
+                         "……但不画框，免得把别人圈进去")
+
     def test_is_well_formed_and_sized_like_the_content(self):
         text, box = self._svg()
         root = ET.fromstring(text)                     # 不是合法 XML 就直接抛

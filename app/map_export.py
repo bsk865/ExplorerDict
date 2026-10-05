@@ -96,6 +96,8 @@ DEFAULT_STYLE: dict = {
     "node_radius": 9.0,
     "topic_radius": 12.0,
     "group_radius": 10.0,
+    #: 组名字号（批次 M13：分组画成「细框 + 组名」，不再是褐色底衬）
+    "group_font": 8.0,
     "line_width": 1.0,
     "edge_fill": "#9B9993",
     "label_fill": "#6E6C67",
@@ -469,10 +471,30 @@ def svg_document(*, layout, style=None, box=None, meta=None) -> str:
     parts.append(f'  <rect x="{_num(x0)}" y="{_num(y0)}" width="{_num(width)}"'
                  f' height="{_num(total_h)}" fill="{st["bg"]}"/>')
 
-    # ① 分组底衬
+    # ① 分组：画成**组标签**（细边框 + 组名），不再是实心底衬（批次 M13）——
+    #    用户口径「这个褐色背景应该是作为组标签」。框里有别人的卡片时
+    #    （``framed=False``）只画组名、不画框，免得把不相干的词也圈进来。
     for group in groups:
-        parts.append("  " + _svg_rect(group.x0, group.y0, group.x1, group.y1,
-                                      fill=str(st["panel_alt"]), radius=float(st["group_radius"])))
+        framed = bool(getattr(group, "framed", True))
+        if framed:
+            parts.append("  " + _svg_rect(group.x0, group.y0, group.x1, group.y1,
+                                          fill="none", stroke=str(st["border"]),
+                                          width=float(st["line_width"]),
+                                          radius=float(st["group_radius"])))
+        label = str(getattr(group, "label", "") or "")
+        if not label:
+            continue
+        if framed:
+            left, top = group.x0 + 5.0, group.y0 + 4.0
+        else:
+            finder = getattr(layout, "find", None)
+            node = finder(group.root_id) if callable(finder) else None
+            left = (node.x - node.w / 2.0) if node is not None else group.x0
+            top = (node.y - node.h / 2.0 - 9.0) if node is not None else group.y0
+        group_px = float(st.get("group_font", 8.0))
+        parts.append("  " + _svg_text(left, top + group_px * 0.5, [label],
+                                      fill=str(st["muted"]), font_px=group_px,
+                                      anchor="start"))
     # ② 主题细线（词条标题 → 各分组）
     for link in links:
         parts.append("  " + _svg_polyline(link, stroke=str(st["border"]),

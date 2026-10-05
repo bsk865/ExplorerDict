@@ -193,6 +193,8 @@ LABEL_OFFSET_STEPS = (1.0, -1.0, 1.8, -1.8, 2.6, -2.6)
 LABEL_SEPARATION = 6.0
 #: 关系短标签自己的字号（逻辑像素）：比卡片文字（9）小一档
 LABEL_FONT_SIZE = 7
+#: 组标签（包含 / 属于那一组的组名）的字号：比关系短标签再小半档，别抢镜头。
+GROUP_LABEL_FONT_SIZE = 6
 #: 折线明暗：采样段数（每条边一致，真实画布与预览都是同一串点）
 CURVE_SEGMENTS = 12
 #: 跨层**正交三段线**（见 :func:`_orthogonal_routes`）的三个规则常量：
@@ -484,7 +486,18 @@ class LayoutEdge:
 
 @dataclass(frozen=True)
 class LayoutGroup:
-    """包含 / 属于形成的层级分组（画在节点后面的浅色底板）。"""
+    """包含 / 属于形成的层级分组 —— 画成一个**组标签**（批次 M13）。
+
+    以前这里是一整块 ``PANEL_ALT`` 褐色底衬。两组一旦重叠（用户在 2026-10-06 的
+    截图里正是如此），半张画布被糊住、连中心主题卡都压在底下。用户的口径是
+    「这个褐色背景应该是作为组标签」——所以现在只画两样东西：
+
+    * 左上角一枚**组名**（根词的名字，见 :attr:`label`）；
+    * 组的范围用一圈**很轻的描边**示意，没有底色。
+
+    描边只在「框里没有外人」的时候画（见 :attr:`framed`）：卡片被拖散之后组的
+    bbox 会把不相干的卡片一起圈进来，那个框就在说谎，此时只留组名。
+    """
 
     root_id: int
     members: tuple[int, ...]
@@ -492,6 +505,10 @@ class LayoutGroup:
     y0: float
     x1: float
     y1: float
+    #: 组名（根词的文字）；空字符串 = 没名字，只画框不写字。
+    label: str = ""
+    #: 这个框是否名副其实（框里只有本组成员）。``False`` 时只画组名、不画框。
+    framed: bool = True
 
 
 @dataclass(frozen=True)
@@ -507,6 +524,12 @@ class MapLayout:
     topic_links: tuple[tuple[tuple[float, float], ...], ...] = ()
     content_w: float = 0.0
     content_h: float = 0.0
+    #: 内容外框的**左上原点**（世界坐标；批次 M13「画布无边界」）。默认 0.0 就是
+    #: 老口径 —— 用户把卡片拖到原点左上方之后它变成负数。``content_w`` /
+    #: ``content_h`` **仍然是右 / 下边界的数**（没有跟着改成宽度），这样所有老的
+    #: 调用方与断言一个字都不用动。
+    content_x0: float = 0.0
+    content_y0: float = 0.0
     isolated_label_pos: tuple[float, float] | None = None
     #: 这一张图实际用的**布局骨架**（G1）：``""`` / ``"auto"`` = 默认的分层布局。
     #: 导出页脚要写它，窗口状态行也要写它（用户切了模板总得看见自己切成了什么）。
@@ -1684,7 +1707,133 @@ def _orthogonal_plans(base_edges, nodes, m: MapMetrics):
     return routes
 
 
-def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
+def _node_extent(nodes) -> tuple[float, float, float, float]:
+    """所有卡片的整体外接框 ``(left, top, right, bottom)``（纯函数）。
+
+    正交兜底要「绕到**所有卡片外面**」——跨很远的两个词走外圈，一条线都不碰。
+    """
+    left = min(node.x - node.w / 2.0 for node in nodes)
+    top = min(node.y - node.h / 2.0 for node in nodes)
+    right = max(node.x + node.w / 2.0 for node in nodes)
+    bottom = max(node.y + node.h / 2.0 for node in nodes)
+    return float(left), float(top), float(right), float(bottom)
+
+
+def _port_axis(node: LayoutNode, point) -> str:
+    """端点落在卡片哪条边上：上下边 ⇒ ``"v"``（竖着进出），左右边 ⇒ ``"h"``。
+
+    线得**先沿着出口的法线走**，不然会在卡片边缘立刻拐一个看不出道理的弯。
+    """
+    gap_v = abs(node.h / 2.0 - abs(float(point[1]) - float(node.y)))
+    gap_h = abs(node.w / 2.0 - abs(float(point[0]) - float(node.x)))
+    return "v" if gap_v <= gap_h else "h"
+
+
+def _tidy_route(points) -> list[tuple[float, float]]:
+    """去掉连续重合的点（纯函数）：``[(0,0),(0,0),(1,0)]`` ⇒ ``[(0,0),(1,0)]``。"""
+    out: list[tuple[float, float]] = []
+    for x, y in points:
+        spot = (float(x), float(y))
+        if (not out
+                or abs(out[-1][0] - spot[0]) > LAYOUT_EPS
+                or abs(out[-1][1] - spot[1]) > LAYOUT_EPS):
+            out.append(spot)
+    return out
+
+
+def _diagonal_segments(points) -> int:
+    """既不是水平也不是竖直的段数（纯函数）：直角走法 = 0，斜线 = 1 起步。"""
+    total = 0
+    for index in range(len(points) - 1):
+        dx = abs(float(points[index + 1][0]) - float(points[index][0]))
+        dy = abs(float(points[index + 1][1]) - float(points[index][1]))
+        if dx > LAYOUT_EPS and dy > LAYOUT_EPS:
+            total += 1
+    return total
+
+
+def _route_length(points) -> float:
+    """走线长度（曼哈顿度量，纯函数）：正交线就是它，斜线按两直角算。"""
+    total = 0.0
+    for index in range(len(points) - 1):
+        total += abs(float(points[index + 1][0]) - float(points[index][0]))
+        total += abs(float(points[index + 1][1]) - float(points[index][1]))
+    return total
+
+
+def _simple_orthogonal_routes(start, end, nodes, m: MapMetrics, *,
+                              src_node: LayoutNode, dst_node: LayoutNode):
+    """给一条关系补一组**直角**走法（批次 M13，纯函数）。
+
+    兜底候选（:func:`_route_candidates`）在卡片被用户拖散之后会给出**斜线**与
+    「横贯全图的扫线」—— 那正是用户 2026-10-06 截图里「你生成的时候就是交叉的
+    线条」的来源。位置怎么散，直角走法总是存在的：先试最近的 Z 形，再试**绕到
+    所有卡片外面**的走廊（跨很远的两个词走外圈，一条线都不碰），混合端口再补一条
+    绕全局外圈的五点兜底。
+
+    返回 ``[(points, None), ...]``，由近到远；选用仍由 :func:`route_edges` 的代价决定。
+    """
+    sx, sy = float(start[0]), float(start[1])
+    ex, ey = float(end[0]), float(end[1])
+    left, top, right, bottom = _node_extent(nodes)
+    out: list[list[tuple[float, float]]] = []
+    outer_top = top - m.route_margin - LAYOUT_EPS
+    outer_bottom = bottom + m.route_margin + LAYOUT_EPS
+    outer_left = left - m.route_margin - LAYOUT_EPS
+    outer_right = right + m.route_margin + LAYOUT_EPS
+
+    def add(points) -> None:
+        route = _tidy_route(points)
+        if len(route) >= 2 and route not in out:
+            out.append(route)
+
+    src_axis = _port_axis(src_node, start)
+    dst_axis = _port_axis(dst_node, end)
+    # 两段 L（出口法线对上的那个排前面）
+    l_v = [(sx, sy), (sx, ey), (ex, ey)]           # 先竖后横
+    l_h = [(sx, sy), (ex, sy), (ex, ey)]           # 先横后竖
+    # 车道**从障碍边缘推**（批次 M13 实测）：只给「正中 + 全局外圈」这几条时，
+    # 卡片一被拖散，每条车道上都恰好压着一张卡 ⇒ 十个正交候选全部 ``clear=False``
+    # ⇒ 斜线兜底胜出（用户截图里那条斜线就是这么来的）。每张别的卡片的上/下边缘
+    # 各让开一个 ``route_margin`` 就是一条天生的空车道；按离正中由近到远取前 8 条。
+    gap = m.route_margin + LAYOUT_EPS
+    others = [n for n in nodes
+              if int(n.entry_id) not in (int(src_node.entry_id), int(dst_node.entry_id))]
+    mid_y = (sy + ey) / 2.0
+    mid_x = (sx + ex) / 2.0
+    lanes_y = {mid_y, outer_top, outer_bottom}
+    lanes_x = {mid_x, outer_left, outer_right}
+    for node in others:
+        lanes_y.add(float(node.y - node.h / 2.0) - gap)
+        lanes_y.add(float(node.y + node.h / 2.0) + gap)
+        lanes_x.add(float(node.x - node.w / 2.0) - gap)
+        lanes_x.add(float(node.x + node.w / 2.0) + gap)
+    lanes_y = sorted(lanes_y, key=lambda lane: (abs(lane - mid_y), lane))[:8]
+    lanes_x = sorted(lanes_x, key=lambda lane: (abs(lane - mid_x), lane))[:8]
+    # 绕到所有卡片外面的那两条车道**永远留着**（批次 M13 实测）：一条跨得很远的
+    # 干线只有走最外圈才躲得开「另一条从上往下穿的线」，而外圈离正中最远，按近远
+    # 截前 8 条时每次都被截掉 —— flow-h / org 带 pins 那几处交叉全是这么来的。
+    for lane in (outer_top, outer_bottom):
+        if lane not in lanes_y:
+            lanes_y.append(lane)
+    for lane in (outer_left, outer_right):
+        if lane not in lanes_x:
+            lanes_x.append(lane)
+    # **两组 Z 形都试**（车道不一样）：出口法线对上的那组排前面，用哪一组由代价决定
+    # —— 卡片被拖散之后「横向那一跑」经常整条被一张卡挡住，这时只有竖-横-竖走得通。
+    v_first = [[(sx, sy), (sx, lane), (ex, lane), (ex, ey)] for lane in lanes_y]
+    h_first = [[(sx, sy), (lane, sy), (lane, ey), (ex, ey)] for lane in lanes_x]
+    wide = [[(sx, sy), (sx, outer_bottom), (outer_right, outer_bottom),
+             (outer_right, ey), (ex, ey)],
+            [(sx, sy), (outer_right, sy), (outer_right, outer_bottom),
+             (ex, outer_bottom), (ex, ey)]]
+    for points in ([l_v, l_h] if src_axis == "v" else [l_h, l_v]) + \
+            (v_first + h_first if src_axis == "v" else h_first + v_first) + wide:
+        add(points)
+    return [(tuple(points), None) for points in out]
+
+
+def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
     """给每条关系**选一条真实画得出来的线**，并放好它的类型标签（纯函数）。
 
     * 一条边绝不穿过**非端点**节点的矩形（含小间距：障碍按 ``route_margin`` 外扩）；
@@ -1693,17 +1842,25 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
       跨行走走廊；只要它本身干净就一定采用，脏了就退回候选搜索，**绝不硬穿**；
     * 反馈先试弧线（正反两个方向 + 多档弯曲），不行再折线绕行；
     * 兜底候选里跨边仍优先弧线（那是「横跨」的视觉语言）；
+    * 位置被用户拖散之后正交计划可能过不了避障 ⇒ 这时**先补一组直角走法**
+      （:func:`_simple_orthogonal_routes`），斜线只在连直角都无路可走时才出现；
+    * 代价里把「与已定的连线 / 主题母线**交叉**」和「斜线段」都算进去（批次 M13）
+      —— 用户口径「不要出现关系线交叉」。两项都是**按长度折算**的：绕开一处交叉
+      大约值 1100px 的额外路程（``4e2 / 0.35``），再远就宁可让它交叉一次，
+      也不画一条横贯全图的大回环；一条斜线段值 1400px，所以斜线只在连直角都
+      走不通时才出现；
     * 关系标签避开所有节点矩形与已放好的标签，同时仍然贴着它自己的那条边；
     * 同一对词之间的第二条线**不许和第一条重合**（重合会被读成一条粗线）；
     * ``对照`` 是对称关系：``symmetric=True``（两端都不画箭头）。
     节点位置与层级**一个字都不动** —— 这里只改连线怎么走。
     """
     by_id = {int(node.entry_id): node for node in nodes}
-    routed: list[LayoutEdge] = []
     label_blockers = [node_box(node, m.label_gap) for node in nodes]
     twins: dict[frozenset, list] = {}
+    # ① 先把每条边的**静态材料**备齐（候选只跟两端 / 障碍有关，跟谁先谁后无关）
+    plans: list[dict] = []
     for order, base in enumerate(base_edges):
-        src, dst, rel_type = _relation_parts(base.rel)
+        src, dst, _rel_type = _relation_parts(base.rel)
         src_node, dst_node = by_id.get(src), by_id.get(dst)
         if src_node is None or dst_node is None:
             continue
@@ -1714,13 +1871,48 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
         forced = None if ortho is None else (ortho[order] if order < len(ortho) else None)
         if forced is not None and not route_is_clear(forced, obstacles):
             forced = None                   # 正交线不干净 ⇒ 退回候选搜索
-        if forced is not None:
-            candidates = [(forced, None)]
-        else:
+        # 直角走法：位置被拖散之后，斜线只有在**连直角都无路可走**时才允许出现
+        # （批次 M13）。计划干净时它只是候选之一（代价说了算），计划脏了它就是主力。
+        ortho_alts = _simple_orthogonal_routes(start, end, nodes, m,
+                                               src_node=src_node, dst_node=dst_node)
+        if forced is None:
             preferred, fallback = _route_candidates(start, end, obstacles, m,
                                                     prefer_curve=prefer_curve)
-            candidates = list(preferred) + [fallback]
-        key = frozenset((int(src), int(dst)))
+            free = list(ortho_alts) + list(preferred) + [fallback]
+        else:
+            free = list(ortho_alts)
+        plans.append({"order": order, "base": base, "src": src, "dst": dst,
+                      "obstacles": obstacles, "prefer_curve": prefer_curve,
+                      "forced": forced, "free": free,
+                      "direct": (abs(float(start[0]) - float(end[0]))
+                                 + abs(float(start[1]) - float(end[1])))})
+    # ② 布线顺序：**短的先走**（批次 M13 实测出来的）。跨得最远的那条先走，等于先把
+    #    一条「横贯全图的干线」铺好，后面每一条要上下穿过它的线都躲不开 —— org /
+    #    oneway / flow-v / flow-s 上 `依赖` × `对照` 那 6 处交叉全是这么来的。
+    #    短线选择少、先钉住；长线选择多，后走时看一眼已定的走线就挑得到不交叉的。
+    routed: list[LayoutEdge] = []
+    placed: dict[int, LayoutEdge] = {}
+    placed_labels: dict = {}
+    for plan in sorted(plans, key=lambda item: (item["direct"], item["order"])):
+        base = plan["base"]
+        order = int(plan["order"])
+        obstacles = plan["obstacles"]
+        prefer_curve = bool(plan["prefer_curve"])
+        forced = plan["forced"]
+        if forced is not None:
+            # 计划本身干净就**照计划走**（那是 M12 的车道规范）；只有当它一定会跟
+            # 已定的连线 / 主题母线交叉时，才把直角备选放进来比价 —— 用户口径
+            # 「不要出现关系线交叉」。这样 9 个模板的既定排线一格不动。
+            candidates = [(forced, None)]
+            if routed or links:
+                plan_clashes = sum(_route_crossings(forced, other.points)
+                                   for other in routed)
+                plan_clashes += sum(_route_crossings(forced, link) for link in links)
+                if plan_clashes:
+                    candidates = candidates + list(plan["free"])
+        else:
+            candidates = list(plan["free"])
+        key = frozenset((int(plan["src"]), int(plan["dst"])))
         chosen = None
         for index, (points, control) in enumerate(candidates):
             # 标签净空：**标签自己的**半高 + 一条小缝（见 ``label_offset``）——
@@ -1761,10 +1953,20 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
             #   ⑤ 拐了几个弯（每点 2px，同层相邻的层级边因此优先直连）；
             #   ⑥ 文字压到节点 / 别的标签（只有极端拥挤时才允许折衷）。
             curve_last = 1e3 * (1.0 if prefer_curve and len(points) <= 2 else 0.0)
+            # 与**已经定下来的**连线、以及主题母线交叉几处（批次 M13）。母线以前
+            # 完全不参与选线，于是「横贯全图的扫线」可以一路撞过去没人管。
+            clashes = 0
+            for other in routed:
+                clashes += _route_crossings(points, other.points)
+            for link in links:
+                clashes += _route_crossings(points, link)
             route_cost = (1e6 * (0.0 if route_is_clear(points, obstacles) else 1.0)
                           + 1e5 * twin_overlap
+                          + 4e2 * clashes                # 交叉：见 docstring 的优先级
+                          + 5e2 * _diagonal_segments(points)     # 斜线段
                           + curve_last
                           + drift + 2.0 * max(0, len(points) - 2)
+                          + 0.35 * _route_length(points)
                           + 1e4 * label_overlap + index * 1e-3)
             if chosen is None or route_cost < chosen[0]:
                 chosen = (route_cost, points, label_pos)
@@ -1776,10 +1978,88 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None):
         # 不然两个短标签会贴在一起（只判「不重叠」时实测只隔 5px，实机看着糊）。
         label_blockers.append(_inflate_box(label_box(label_pos, str(base.label), m),
                                            LABEL_SEPARATION))
-        routed.append(LayoutEdge(base.rel, base.kind, tuple(points), base.label,
-                                 (float(label_pos[0]), float(label_pos[1])),
-                                 bool(base.symmetric)))
-    return tuple(routed)
+        edge = LayoutEdge(base.rel, base.kind, tuple(points), base.label,
+                          (float(label_pos[0]), float(label_pos[1])),
+                          bool(base.symmetric))
+        routed.append(edge)
+        placed[order] = edge
+        placed_labels[order] = label_box(label_pos, str(base.label), m)
+    # ③ 收尾重挑（批次 M13 实测）：按顺序贪心挑时，后面的线只看得到**前面已定的**，
+    #    于是两条线会互相挡 —— 各自单独看都躲得开，合起来却撞上（org / oneway /
+    #    flow-h / flow-s 带 pins 各剩 1 处交叉，而「对照」那条拿去跟全部线比一遍
+    #    就有 0 交叉的走法）。全部定下来之后再逐条拿**它的全部候选**跟其它所有线
+    #    比一遍，交叉数严格变少才换 —— 已经 0 交叉的布局因此一格不动。
+    for _round in range(2):
+        changed = False
+        for plan in plans:
+            order = int(plan["order"])
+            edge = placed.get(order)
+            if edge is None or order not in placed_labels:
+                continue
+            others = [other.points for other_order, other in placed.items()
+                      if other_order != order]
+            others.extend(links)
+            here = sum(_route_crossings(edge.points, other) for other in others)
+            if not here:
+                continue
+            label = str(edge.label)
+            label_offset = label_gap_px(m)
+            blockers = [node_box(node, m.label_gap) for node in nodes]
+            blockers.extend(_inflate_box(box, LABEL_SEPARATION)
+                            for other_order, box in placed_labels.items()
+                            if other_order != order)
+            key = frozenset((int(plan["src"]), int(plan["dst"])))
+            best = None
+            for points, control in list(plan["free"]) + [(edge.points, None)]:
+                if not route_is_clear(points, plan["obstacles"]):
+                    continue
+                clashes = sum(_route_crossings(points, other) for other in others)
+                if clashes >= here:
+                    continue            # 只有**更少**才要，一样多还不如不动
+                twin = 0.0
+                for other_order, other in placed.items():
+                    if other_order == order:
+                        continue
+                    parts = _relation_parts(other.rel)
+                    if (frozenset((int(parts[0]), int(parts[1]))) == key
+                            and _same_path(points, other.points)):
+                        twin = 1.0
+                        break
+                if twin:
+                    continue            # 同一对词的第二条线不许跟第一条重合
+                if plan["forced"] is not None:
+                    if len(points) >= 4:
+                        base_pos = ((points[1][0] + points[2][0]) / 2.0,
+                                    points[1][1] - label_offset)
+                    else:
+                        center, tangent = _route_midpoint(points)
+                        base_pos = _normal(center, tangent, label_offset)
+                elif control is not None:
+                    base_pos = (control[0], control[1] - label_offset)
+                else:
+                    center, tangent = _route_midpoint(points)
+                    base_pos = _normal(center, tangent, label_offset)
+                spot, _drift = _label_position(points, label, m, base=base_pos,
+                                               blockers=blockers, offset=label_offset)
+                overlap = 0.0 if _label_fits(label_box(spot, label, m), blockers,
+                                             pad=0.0) else 1.0
+                cost = (4e2 * clashes
+                        + 5e2 * _diagonal_segments(points)
+                        + 2.0 * max(0, len(points) - 2)
+                        + 0.35 * _route_length(points)
+                        + 1e4 * overlap)
+                if best is None or cost < best[0]:
+                    best = (cost, tuple(points), (float(spot[0]), float(spot[1])))
+            if best is None:
+                continue
+            _cost, points, label_pos = best
+            placed[order] = LayoutEdge(edge.rel, edge.kind, points, edge.label,
+                                       label_pos, bool(edge.symmetric))
+            placed_labels[order] = label_box(label_pos, label, m)
+            changed = True
+        if not changed:
+            break
+    return tuple(placed[key] for key in sorted(placed))
 
 
 def _fit_columns(canvas_w: float, card_w: float, m: MapMetrics) -> int:
@@ -2023,20 +2303,19 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
         # ---- 用户固定过位置的卡片（F2）：把这几张卡搬到他摆的地方，剩下的仍然
         #      自动排。位置是**世界坐标里的卡片中心**（``zoom = 1``；:meth:`pin_node`
         #      已经替我们把画布坐标除过缩放了 —— 这里在世界坐标下摆，缩放由
-        #      `_scaled_layout` 最后统一乘）。只夹一个下限（别越出左上角的留白），
-        #      不夹上限 —— 他想摆多远就摆多远，内容外框会跟着长。
-        #      连线、分组底衬、内容外框都在下面才计算，所以全都跟着新位置走。
+        #      `_scaled_layout` 最后统一乘）。
+        #      **一个方向都不夹**（批次 M13）：以前夹了左上角的下限，用户把卡片拖到
+        #      左上留白外面、松手就被弹回来 —— 他的原话是「导图画布无边界，请你不要
+        #      自己加边界约束」。现在他就是摆到负坐标也照摆，内容外框的四边跟着长
+        #      （见下面 ``content_x0`` / ``content_y0``），滚动范围一起变大。
+        #      连线、组标签、内容外框都在下面才计算，所以全都跟着新位置走。
         wanted = {int(key): (float(value[0]), float(value[1]))
                   for key, value in pins.items()}
         for index, node in enumerate(nodes):
             spot = wanted.get(int(node.entry_id))
             if spot is None:
                 continue
-            nodes[index] = replace(
-                node,
-                x=max(m.pad + node.w / 2.0, spot[0]),
-                y=max(top + node.h / 2.0, spot[1]),
-            )
+            nodes[index] = replace(node, x=spot[0], y=spot[1])
         by_id = {int(node.entry_id): node for node in nodes}
     # 主题 → 顶层词的**母线**：主题底边先垂直下到母线，再水平走，最后垂直落进
     # 每张卡片顶边的**正中**。所有连线共用同一条母线（``topic_gap`` 正中），
@@ -2077,28 +2356,42 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
     # ∩∪ 绕行、相邻行走车道、跨行走走廊；只有反馈边仍走弧线。节点位置一个字不动。
     edges = route_edges(
         base_edges, nodes, m,
+        links=tuple(topic_links),
         ortho=_orthogonal_routes(
             base_edges, nodes, m,
             axis=map_templates.route_axis_of(template_used)))
 
     # ---- 内容外框：节点 / 连线 / 标签 / 孤立词标题全部包住，再加一圈留白 ----
+    # 四边都要跟踪：卡片可以被拖到原点**左上角**（世界坐标为负），只记右 / 下界
+    # 的话滚动范围会从左界 ``-margin`` 起算，拖到负数去的卡片根本滚不过去
+    # （批次 M13；用户口径「导图画布无边界，请你不要自己加边界约束」）。
     right = content_left + inner_w
     bottom = max(top + topic_h, y - m.v_gap)
+    left = content_left
+    upper = top
     for node in [topic, *nodes]:
         right = max(right, node.x + node.w / 2.0)
         bottom = max(bottom, node.y + node.h / 2.0)
+        left = min(left, node.x - node.w / 2.0)
+        upper = min(upper, node.y - node.h / 2.0)
     for edge in edges:
         for x, py in edge.points:
             right = max(right, float(x))
             bottom = max(bottom, float(py))
+            left = min(left, float(x))
+            upper = min(upper, float(py))
         box = label_box(edge.label_pos, edge.label, m)
         right = max(right, box[2])
         bottom = max(bottom, box[3])
+        left = min(left, box[0])
+        upper = min(upper, box[1])
     if isolated_label_pos is not None:
         right = max(right, float(isolated_label_pos[0])
                     + text_px(ISOLATED_TEXT, m.em * 7.0 / 9.0))
     content_w = right + m.pad
     content_h = bottom + m.pad
+    content_x0 = left - m.pad
+    content_y0 = upper - m.pad
 
     groups: list[LayoutGroup] = []
     children: dict[int, list[int]] = {}
@@ -2124,18 +2417,34 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
         member_nodes = [by_id[member] for member in members if member in by_id]
         if len(member_nodes) < 2:
             continue
+        root_node = by_id.get(int(root))
+        box_x0 = min(node.x - node.w / 2.0 for node in member_nodes) - m.group_pad
+        box_y0 = min(node.y - node.h / 2.0 for node in member_nodes) - m.group_pad
+        box_x1 = max(node.x + node.w / 2.0 for node in member_nodes) + m.group_pad
+        box_y1 = max(node.y + node.h / 2.0 for node in member_nodes) + m.group_pad
+        # 框里有没有外人？（卡片被拖散之后 bbox 会圈进一堆不相干的卡）
+        joined = set(int(x.entry_id) for x in member_nodes)
+        framed = True
+        for other in [topic, *nodes]:
+            if other is None or int(other.entry_id) in joined:
+                continue
+            if (other.x + other.w / 2.0 > box_x0 and other.x - other.w / 2.0 < box_x1
+                    and other.y + other.h / 2.0 > box_y0 and other.y - other.h / 2.0 < box_y1):
+                framed = False
+                break
         groups.append(LayoutGroup(
             root_id=int(root), members=tuple(sorted(int(x.entry_id) for x in member_nodes)),
-            x0=min(node.x - node.w / 2.0 for node in member_nodes) - m.group_pad,
-            y0=min(node.y - node.h / 2.0 for node in member_nodes) - m.group_pad,
-            x1=max(node.x + node.w / 2.0 for node in member_nodes) + m.group_pad,
-            y1=max(node.y + node.h / 2.0 for node in member_nodes) + m.group_pad,
+            x0=box_x0, y0=box_y0, x1=box_x1, y1=box_y1,
+            label=str(getattr(root_node, "label", "") or ""),
+            framed=framed,
         ))
 
     return MapLayout(
         width=canvas_w, height=canvas_h, topic=topic, nodes=tuple(nodes),
         edges=tuple(edges), groups=tuple(groups), topic_links=tuple(topic_links),
-        content_w=content_w, content_h=content_h, isolated_label_pos=isolated_label_pos,
+        content_w=content_w, content_h=content_h,
+        content_x0=content_x0, content_y0=content_y0,
+        isolated_label_pos=isolated_label_pos,
         template=template_used, template_note=template_note,
     )
 
@@ -2172,6 +2481,8 @@ def _scaled_layout(layout: MapLayout, factor: float) -> MapLayout:
                           for link in layout.topic_links),
         content_w=layout.content_w * f,
         content_h=layout.content_h * f,
+        content_x0=layout.content_x0 * f,
+        content_y0=layout.content_y0 * f,
         isolated_label_pos=(None if layout.isolated_label_pos is None
                             else point(layout.isolated_label_pos)),
     )
@@ -2211,7 +2522,10 @@ def layout_extent(labels, relations, *, width: int, height: int, topic_label: st
     core = _layout_core(labels, relations, width=width, height=height,
                         topic_label=topic_label, metrics=metrics, top_pad=top_pad,
                         pins=pins, template=template)
-    return (float(core.content_w), float(core.content_h))
+    # 内容被拖到原点左上角时（``content_x0 < 0``）自然需要的是**整段跨度**：
+    # 只回 ``content_w`` 会让首开自适应少算一截，一开图左边的卡片就被裁掉。
+    return (float(core.content_w) - min(0.0, float(core.content_x0)),
+            float(core.content_h) - min(0.0, float(core.content_y0)))
 
 # ===================================================================== 窗口
 class ConceptMapWindow:
@@ -4852,11 +5166,15 @@ class ConceptMapWindow:
         margin_y = view_h * PAN_MARGIN_VIEWPORTS
         if layout is None:
             return (0.0, 0.0, view_w, view_h)   # 还没有内容：范围就是一屏
-        left = -margin_x
-        top = -margin_y
+        # 内容原点可以是负的（卡片被拖到原点左上角）：``content_x0`` / ``content_y0``
+        # 是内容外框的左 / 上界。两个数默认 0.0 —— 此时下面四行与老代码**逐字等价**。
+        x0 = min(0.0, float(layout.content_x0))
+        y0 = min(0.0, float(layout.content_y0))
+        left = x0 - margin_x
+        top = y0 - margin_y
         # 内容比视口小时也要留够一个视口的余量（小图同样能往四个方向自由挪）
-        right = max(float(layout.content_w), view_w) + margin_x
-        bottom = max(float(layout.content_h), view_h) + margin_y
+        right = max(float(layout.content_w), x0 + view_w) + margin_x
+        bottom = max(float(layout.content_h), y0 + view_h) + margin_y
         # 取整：``scrollregion`` 落到 Tk 里是整数像素，视图偏移与 ``canvasx``
         # 必须用**同一个数**，否则锚定会差出亚像素（见 ``_view_left``）。
         return (float(int(round(left))), float(int(round(top))),
@@ -5234,10 +5552,30 @@ class ConceptMapWindow:
         if fitted:
             self._reset_view()               # 首开缩过：回到世界原点（主题与第一层可见）
 
-        # ① 层级分组底板（包含 / 属于的子树）——只是结构提示，不含语义判断
+        # ① 层级分组 = **组标签**（包含 / 属于的子树；只是结构提示，不含语义判断）。
+        #    用户口径（2026-10-06）：「这个褐色背景应该是作为组标签」——以前那一整块
+        #    ``PANEL_ALT`` 褐色底衬两组一重叠就糊住半张画布、连主题卡都压在底下。
+        #    现在只画一圈很轻的描边 + 左上角的组名；没有底色，卡片与连线照常压在上面。
+        #    框里混进了别的卡片（卡片被拖散之后）就只画组名 —— 那个框在说谎。
         for group in layout.groups:
-            self._round(group.x0, group.y0, group.x1 - group.x0, group.y1 - group.y0,
-                        theme.px(10), fill=theme.PANEL_ALT, outline="", _kind="group")
+            if group.framed:
+                self._round(group.x0, group.y0, group.x1 - group.x0, group.y1 - group.y0,
+                            theme.px(10), fill="", outline=theme.BORDER,
+                            width=max(1, theme.px(1)), _kind="group")
+            label = str(getattr(group, "label", "") or "")
+            if not label:
+                continue
+            if group.framed:
+                anchor_x, anchor_y = group.x0 + theme.px(5), group.y0 + theme.px(4)
+            else:
+                root_node = layout.find(group.root_id)
+                if root_node is None:
+                    continue
+                anchor_x = root_node.x - root_node.w / 2.0
+                anchor_y = root_node.y - root_node.h / 2.0 - theme.px(9)
+            self._text(anchor_x, anchor_y, text=label, fill=theme.TEXT_MUTED,
+                       font=theme.font_at(GROUP_LABEL_FONT_SIZE, self._zoom),
+                       anchor="nw", _kind="group-label")
         # ② 主题 → 顶层词的细线：分类结构（**不是** AI 语义关系）。
         #    走线是**折线**：主题底边 → 母线（``topic_gap`` 正中）→ 水平 → 下层卡片
         #    顶边；所有连线共用同一条母线，因此不再是从主题斜射出去的扇形交叉。
