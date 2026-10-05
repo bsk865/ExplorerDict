@@ -354,15 +354,18 @@ class PdfDoc:
         ]
         cmap_stream = b"\n".join(to_unicode)
 
-        # 宽度数组：只有一种字体的连续区间，按 100 个一组分开写
+        # 宽度数组：**一个字形一条** `gid [宽度]`。
+        #
+        # 别图省事把连号的字形打包成 ``起始CID [w1 w2 …]`` —— PDF 的语法是
+        # 「从这个 CID 开始**连续**这么多个宽度」，中间没被列到的 CID 会掉进
+        # ``/DW``（1000 = 1em）。一开始就是这么写的：60 个宽度塞进一个组里，
+        # 第 61 个字形之后全部按两倍宽度推进，**每行写到第 60 个字就被推出
+        # 纸边裁掉**（2026-10-05 用户看到的「乱码」就是它）。
         glyphs = sorted(self._used_glyphs)
-        widths_parts: list[bytes] = []
-        for start in range(0, len(glyphs), 100):
-            chunk = glyphs[start:start + 100]
-            values = " ".join(f"{self.font.advance(g) * 1000 // self.font.units_per_em}"
-                              for g in chunk)
-            widths_parts.append(b"%d [%s]" % (chunk[0], values.encode("ascii")))
-        widths = b" ".join(widths_parts) or b"0 []"
+        widths = b" ".join(
+            b"%d [%d]" % (g, self.font.advance(g) * 1000 // self.font.units_per_em)
+            for g in glyphs
+        ) or b"0 []"
 
         scale = 1000.0 / self.font.units_per_em
         upem = int(self.font.units_per_em * scale)

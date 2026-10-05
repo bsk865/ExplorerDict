@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import unittest
 from datetime import datetime
 from unittest import mock
@@ -295,6 +296,68 @@ class TestExportFormats(unittest.TestCase):
             font = ttf_subset.load_ttf(str(out))
             self.assertGreater(font.num_glyphs, 10)
             self.assertIsNotNone(pdf_writer.find_font(), "这台机器上找得到中文字体")
+
+    def test_pdf_width_array_has_one_entry_per_glyph(self):
+        """``/W`` 得一个字形一条。
+
+        曾经把连号的 100 个字形打包成一个 ``起始CID [w1 w2 …]`` —— 而 PDF 的
+        语法是「从这个 CID 起**连续**这么多个」，中间没列到的字形会掉进 ``/DW``
+        （1000 = 1em），于是第 61 个字形之后按两倍宽度推进，**每行写到第 60 个
+        字就被推出纸边裁掉**。这条盯数组本身，下一条盯「行有没有越界」。
+        """
+        from app import pdf_writer
+        with temp_db() as db, tmp_dir("exp_") as tmp:
+            bid = db.create_batch("宽度数组")
+            eid = db.add_entry(batch_id=bid, term="卷积神经网络与池化层",
+                               context="".join(chr(0x4E00 + i) for i in range(210)),
+                               source_app="msedge.exe")
+            result = export_entries(_rows(db, bid), scope_label="宽度数组",
+                                    directory=tmp, tags_map=db.tags_for_entries([eid]),
+                                    now=STAMP, fmt="pdf")
+            raw = result.path.read_bytes()
+
+        match = re.search(rb"/W\s*\[(.*?)\]\s*/CIDToGIDMap", raw, re.S)
+        self.assertIsNotNone(match, "CIDFont 里没有 /W 数组")
+        body = match.group(1).decode("latin-1")
+        groups = re.findall(r"\d+\s*\[([^\]]*)\]", body)
+        self.assertGreater(len(groups), 50, "这条用例得用到足够多的字形才有意义")
+        for group in groups:
+            self.assertEqual(len(group.split()), 1,
+                             "一个 /W 条目只能带一个宽度，出现了范围组：%r" % group)
+
+    def test_no_pdf_line_runs_past_the_right_margin(self):
+        """照阅读器的方式（按 /W 推进）算一遍：没有一行该越过右边界。"""
+        from app import pdf_writer
+        with temp_db() as db, tmp_dir("exp_") as tmp:
+            bid = db.create_batch("版式")
+            eid = db.add_entry(batch_id=bid, term="边际效用",
+                               context="Existing solutions often depend on "
+                                       "drift-detection methods that produce high "
+                                       "computational overhead for resource-constrained "
+                                       "environments, and fail to provide strict "
+                                       "guarantees on resource usage or theoretical "
+                                       "performance assurances.",
+                               source_app="msedge.exe")
+            result = export_entries(_rows(db, bid), scope_label="版式",
+                                    directory=tmp, tags_map=db.tags_for_entries([eid]),
+                                    now=STAMP, fmt="pdf")
+            raw = result.path.read_bytes()
+
+        widths = {int(a): int(b) for a, b in
+                  re.findall(rb"(\d+)\s*\[\s*(\d+)\s*\]", raw)}
+        self.assertGreater(len(widths), 20, "没读到 /W 宽度表")
+        right = pdf_writer.PAGE_WIDTH - pdf_writer.MARGIN_X
+        checked = 0
+        for match in re.finditer(rb"/F1 ([\d.]+) Tf 1 0 0 1 ([\d.-]+) ([\d.-]+) Tm "
+                                 rb"<([0-9A-Fa-f]*)> Tj", raw):
+            size, x = float(match.group(1)), float(match.group(2))
+            codes = bytes.fromhex(match.group(4).decode())
+            end = x + sum(widths.get(int.from_bytes(codes[i:i + 2], "big"), 1000)
+                          / 1000.0 * size for i in range(0, len(codes), 2))
+            self.assertLessEqual(round(end, 1), round(right, 1),
+                                 "这一行越过了右边界：%r" % match.group(4)[:60])
+            checked += 1
+        self.assertGreater(checked, 3, "没检查到几行，这条用例可能失效了")
 
     def test_pdf_falls_back_to_latin1_when_no_font_is_available(self):
         """找不到中文字体也不能崩：退化成只写拉丁字母，文件照样能开。"""
