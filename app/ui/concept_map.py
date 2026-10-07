@@ -50,6 +50,12 @@ FALLBACK_H = 320
 ZOOM_MIN = 0.6
 ZOOM_MAX = 2.0
 ZOOM_STEP = 1.1
+#: 滚轮缩放的**重画间隔**（毫秒）。一次「滚一下」在 Windows 上会连着送来好几个
+#: ``<MouseWheel>``（手快时 5 个刻度挤在 30ms 里），每个事件都整套重排 + 重画，
+#: 手一快就是 5 帧的工作挤在一帧里 —— 用户报的「缩放有卡顿」就是这个。
+#: 现在 ``_zoom`` 与视图锚点**每个事件都立刻生效**（纯算术），只有重画合并成
+#: 每这么多毫秒最多一次（一帧的预算，60fps）。
+ZOOM_REDRAW_MS = 16
 #: 首开自适应缩放的**下限**：内容比视口大得多时可以缩小（保证一开就能看全），
 #: 但不缩到读不清字；用户自己滚过轮之后**一次都不再自动改**（见 ``_auto_fit``）。
 AUTO_FIT_MIN = 0.75
@@ -2701,6 +2707,9 @@ class ConceptMapWindow:
         #: 重画会把卡片按布局位置摆回去（手指底下的卡片会「跳」），更会把
         #: :meth:`_clear` 里的手势状态一起擦掉 —— 拖动当场失效。
         self._draw_retry = None
+        #: 滚轮缩放那次「合并后的重画」定时器 id（见 :meth:`_schedule_wheel_redraw`）。
+        #: 不是 None 就说明已经排过一次，后来的滚轮事件并进那一次，不再重复排。
+        self._wheel_redraw = None
         #: 首开自适应缩放是否还没做过（换主题 / 首次拿到真实画布尺寸时才做一次；
         #: 用户一旦自己滚过轮就再也不自动改缩放与位置）
         self._fit_pending = True
@@ -2788,6 +2797,9 @@ class ConceptMapWindow:
         self.chrome = widgets.BorderlessChrome(
             self.win, title="参考关系图", on_close=self.close, resizable=True,
             min_w=640, min_h=460, bg=theme.PANEL, on_resized=self._on_resized,
+            # 「—」/「□」= 普通 Windows 窗口的缩到任务栏 / 窗口↔大屏
+            on_minimize=lambda: widgets.minimize_window(self.win),
+            on_maximize=lambda: widgets.toggle_maximize_window(self.win),
         )
 
         head = tk.Frame(self.win, bg=theme.BG)
@@ -5445,13 +5457,19 @@ class ConceptMapWindow:
         self._move_view_to(float(world_x) * float(ratio) - float(anchor_px),
                            float(world_y) * float(ratio) - float(anchor_py))
 
-    def zoom_by(self, factor: float, *, anchor: tuple[float, float] | None = None) -> bool:
+    def zoom_by(self, factor: float, *, anchor: tuple[float, float] | None = None,
+                coalesce: bool = False) -> bool:
         """缩放（滚轮 / Ctrl+滚轮 / 程序调用）：**仿射缩放整张逻辑布局**。
 
         逻辑布局只在 zoom = 1 下算一次（列数 / 行数 / 绕行形状都不变），缩放
         只把所有坐标乘以 ``ratio``。``anchor`` 是**指针的屏幕坐标**：给出时，
         缩放前后指针底下还是同一个画布点；不给就锚在画布中心。缩放被限幅在
         :data:`ZOOM_MIN` – :data:`ZOOM_MAX`，并在同一处停掉首开自适应。
+
+        ``coalesce=True`` 时**只把重画推迟、合并**（滚轮专用，见
+        :meth:`_schedule_wheel_redraw`）：``_zoom`` 与视图锚点照旧立刻生效，
+        因此「缩了多少」与调用方读到的状态完全一致，只是不必每个滚轮刻度都
+        整套重排 + 重画一次。
         """
         try:
             current = float(self._zoom)
@@ -5469,6 +5487,12 @@ class ConceptMapWindow:
         world_y = self._canvas_coord("canvasy", spot[1])
         self._fit_pending = False               # 用户自己动过镜头：不再自动复位
         self._zoom = zoomed
+        if coalesce:
+            # 滚轮：缩放与锚点**立刻**落位（纯算术，不碰任何图元），重画合并。
+            self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
+            self._set_feedback(f"缩放 {int(round(self._zoom * 100))}%（滚轮）")
+            self._schedule_wheel_redraw()
+            return True
         self._draw(force=True)
         self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
         self._set_feedback(f"缩放 {int(round(self._zoom * 100))}%（滚轮）")
@@ -5481,7 +5505,12 @@ class ConceptMapWindow:
             return 0
 
     def _on_zoom_wheel(self, event) -> None:
-        """滚轮 = **直接**缩放（以鼠标所在位置为锚）；Ctrl+滚轮走同一条路。"""
+        """滚轮 = **直接**缩放（以鼠标所在位置为锚）；Ctrl+滚轮走同一条路。
+
+        ``coalesce=True``：一次「滚一下」常有 3–5 个 ``<MouseWheel>`` 挤在几十
+        毫秒里，每个都整套重排 + 重画就是卡顿的来源。缩放本身照旧每个事件都
+        立刻生效，只有重画合并成每 :data:`ZOOM_REDRAW_MS` 毫秒一次。
+        """
         delta = self._wheel_delta(event)
         if not delta:
             return
@@ -5490,7 +5519,30 @@ class ConceptMapWindow:
             anchor = (float(event.x), float(event.y))
         except (AttributeError, TypeError, ValueError):  # pragma: no cover
             anchor = None
-        self.zoom_by(ZOOM_STEP if delta > 0 else 1.0 / ZOOM_STEP, anchor=anchor)
+        self.zoom_by(ZOOM_STEP if delta > 0 else 1.0 / ZOOM_STEP, anchor=anchor,
+                     coalesce=True)
+
+    def _schedule_wheel_redraw(self) -> None:
+        """排一次「滚轮合并后的重画」；已经排过就不重复排。
+
+        定时器用的是**画布**的 ``after``：画布没了（关窗）回调自然也不跑。
+        排不上（极简替身没有 ``after``）就当场画，行为退回改动以前。
+        """
+        if self._wheel_redraw is not None:
+            return
+        after = getattr(self.canvas, "after", None)
+        if not callable(after):                 # pragma: no cover - 极简替身
+            self._draw(force=True)
+            return
+        try:
+            self._wheel_redraw = after(ZOOM_REDRAW_MS, self._flush_wheel_redraw)
+        except tk.TclError:                     # pragma: no cover - 画布已销毁
+            self._wheel_redraw = None
+
+    def _flush_wheel_redraw(self) -> None:
+        """滚轮那一串事件结束后的补画：把这一段时间攒下的缩放一次性画出来。"""
+        self._wheel_redraw = None
+        self._draw(force=True)
 
     def _cancel_deferred_draw(self) -> None:
         """取消还没到点的「手离开后补画」——这次已经在画了。"""

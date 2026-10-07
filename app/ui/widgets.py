@@ -25,6 +25,8 @@ from __future__ import annotations
 import math
 import tkinter as tk
 
+from .. import win32util as w32
+
 from . import glyph_text
 from . import panel_geometry as geo
 from . import theme
@@ -247,8 +249,148 @@ def round_rect_points(x: float, y: float, w: float, h: float, radius: float) -> 
     return points
 
 
+#: 圆角框贴位图时的超采样倍数（批次 M17）。Tk 画布**不做抗锯齿**：原来那种
+#: 「每个角 4 段折线」的多边形在圆角处是肉眼可见的阶梯，描边在折点处还厚薄
+#: 不匀。改成 PIL 画一张超采样位图再缩回来就干净了。2 倍 = 每像素 4 个样本，
+#: 实测一个 200x63 的框 0.33 ms（3 倍 0.68 ms、4 倍 1.09 ms），导图一帧十来个
+#: 框 4 ms 出头 —— 再多就吃掉拖动的手感了。
+AA_SUPERSAMPLE = 2
+
+#: 位图缓存的条目上限（每个画布一份）。淘汰时**只丢图元已经全没了的**条目：
+#: Tk 的 PhotoImage 一旦没人引用，画布上那张图会当场变空白。
+AA_CACHE_MAX = 160
+
+
+def _aa_color(widget, color):
+    """Tk 颜色名 → RGBA 四元组；空串 / 解析不出来 → ``None``（= 不填充）。"""
+    text = str(color or "").strip()
+    if not text:
+        return None
+    try:
+        red, green, blue = widget.winfo_rgb(text)
+    except Exception:
+        return None
+    return (int(red) >> 8, int(green) >> 8, int(blue) >> 8, 255)
+
+
+def _aa_alive(canvas, item) -> bool:
+    """这个图元还在画布上吗（用来判断缓存条目能不能淘汰）。"""
+    try:
+        return bool(canvas.type(item))
+    except Exception:
+        return False
+
+
+def _aa_photo(canvas, width, height, radius, fill, outline, stroke):
+    """圆角矩形的抗锯齿位图（超采样后缩回来）。拿不到 Pillow 就返回 ``None``。"""
+    try:
+        from PIL import Image, ImageDraw, ImageTk
+    except Exception:                        # pragma: no cover - 没有 Pillow
+        return None
+    scale = max(1, int(AA_SUPERSAMPLE))
+    try:
+        big = Image.new("RGBA", (width * scale, height * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(big)
+        box = (0, 0, width * scale - 1, height * scale - 1)
+        # 描边**从外框往里**画：外圆弧半径 = 路径半径 + 半个描边，跟 Tk「描边骑在
+        # 路径两侧」的观感一致，边框粗细不会变。
+        outer = (max(0.0, float(radius)) + stroke / 2.0) * scale
+        outer = min(outer, min(box[2] - box[0], box[3] - box[1]) / 2.0)
+        draw.rounded_rectangle(box, radius=outer, fill=fill, outline=outline,
+                               width=max(1, int(stroke)) * scale)
+        if scale > 1:
+            big = big.reduce(scale)
+        return ImageTk.PhotoImage(big, master=canvas)
+    except Exception:                        # pragma: no cover - 画不出来就退回折线
+        return None
+
+
+def _aa_store(canvas) -> dict:
+    """画布自己的位图缓存。
+
+    **不能用模块级全局**：``PhotoImage`` 属于某一个 Tk 解释器，测试里反复新建
+    root，全局缓存会拿到已销毁解释器的图（``image "pyimage1" doesn't exist``）。
+    """
+    store = getattr(canvas, "_aa_images", None)
+    if isinstance(store, dict):
+        return store
+    store = {}
+    try:
+        canvas._aa_images = store
+    except Exception:                        # pragma: no cover - 画布不让挂属性
+        return {}
+    return store
+
+
+def _aa_trim(canvas, store) -> None:
+    """缓存超上限时淘汰**图元已经全部消失**的条目（正在显示的绝不丢）。"""
+    if len(store) <= AA_CACHE_MAX:
+        return
+    for key in list(store):
+        if len(store) <= AA_CACHE_MAX:
+            break
+        entry = store.get(key) or ()
+        items = entry[1] if len(entry) > 1 else ()
+        if not any(_aa_alive(canvas, item) for item in items):
+            store.pop(key, None)
+
+
+def _draw_round_rect_image(canvas, x, y, w, h, radius, kw):
+    """位图路径：取一张（或画一张）抗锯齿圆角框贴上去。做不到就返回 ``None``。"""
+    if not callable(getattr(canvas, "create_image", None)):
+        return None
+    if not callable(getattr(canvas, "winfo_rgb", None)):
+        return None
+    fill = _aa_color(canvas, kw.get("fill"))
+    outline = _aa_color(canvas, kw.get("outline"))
+    if fill is None and outline is None:
+        return None
+    stroke = max(1, int(round(float(kw.get("width") or 1))))
+    width = int(round(float(w))) + stroke
+    height = int(round(float(h))) + stroke
+    if width < 3 or height < 3:
+        return None
+    key = (width, height, round(float(radius), 3), fill, outline, stroke)
+    store = _aa_store(canvas)
+    entry = store.get(key)
+    if entry is None:
+        photo = _aa_photo(canvas, width, height, float(radius), fill, outline, stroke)
+        if photo is None:
+            return None
+        entry = (photo, [])
+        store[key] = entry
+    options = {name: value for name, value in kw.items()
+               if name not in ("fill", "outline", "width")}
+    try:
+        # 位图比路径外扩半个描边（描边骑在路径两侧），贴图位置也外扩同样的量。
+        # **往外取整**（floor）：Tk 贴图会落到整数像素上，向上取整时那半个像素
+        # 的描边覆盖率会被丢掉 —— 窗口最外一圈就只剩底色（近白），看起来就是
+        # 用户说的「边框旁边一条白色的边线」。floor 之后外缘那半个像素照常画，
+        # 描边在窗口边缘是接上的（实测最外像素 249 → 225）。
+        item = canvas.create_image(math.floor(float(x) - stroke / 2.0),
+                                   math.floor(float(y) - stroke / 2.0),
+                                   image=entry[0], anchor="nw", **options)
+    except Exception:                        # pragma: no cover - 画布不认识这个图
+        return None
+    entry[1].append(int(item))
+    if len(entry[1]) > 32:                   # 只留还活着的 id，别无限长
+        entry[1][:] = [one for one in entry[1] if _aa_alive(canvas, one)]
+    _aa_trim(canvas, store)
+    return item
+
+
 def draw_round_rect(canvas, x, y, w, h, radius, **kw):
-    """在 Canvas 上画一个圆角矩形（返回 item id，便于悬停改色）。"""
+    """在 Canvas 上画一个圆角矩形（返回 item id，便于悬停改色）。
+
+    批次 M17：**优先贴一张抗锯齿位图**（PIL 超采样后缩回来），因为 Tk 画布不做
+    抗锯齿 —— 折线圆角在圆角处是肉眼可见的阶梯，描边在折点处还厚薄不匀（用户
+    2026-10-07 报「所有的线框都要检查是否有锯齿边缘」）。拿不到位图（测试替身
+    画布没有 ``create_image``、没有 Pillow、颜色解析不出来）时**原样退回折线
+    路径**，两条路的几何与颜色完全一致。
+    """
+    item = _draw_round_rect_image(canvas, x, y, w, h, radius, kw)
+    if item is not None:
+        return item
     return canvas.create_polygon(round_rect_points(x, y, w, h, radius), **kw)
 
 
@@ -304,9 +446,8 @@ class TermCard:
 
         self.canvas = tk.Canvas(parent, bg=theme.PANEL, highlightthickness=0, bd=0,
                                 width=self.width, height=self.height, cursor="hand2")
-        self._shape = draw_round_rect(self.canvas, 0.5, 0.5, self.width - 1, self.height - 1,
-                                      self.radius, fill=self._card_bg,
-                                      outline=theme.CARD_BORDER, width=1)
+        self._shape = None
+        self._redraw_shape()
         self.label = tk.Label(self.canvas, text=self.term, bg=self._card_bg, fg=theme.TEXT,
                               font=theme.font(geo.CARD_TERM_PT), anchor="nw", justify="left",
                               bd=0, highlightthickness=0,
@@ -333,6 +474,27 @@ class TermCard:
             return body
         return max(1, body - self._summary_height() - 2)
 
+    def _redraw_shape(self, *, fill: str | None = None, border: str | None = None) -> None:
+        """重画卡片底那一圈圆角框（批次 M17 起它是一张抗锯齿位图）。
+
+        位图图元**没有** ``-fill`` / ``-outline`` 选项，``itemconfigure`` 改不了
+        颜色，尺寸变了也得换一张图；所以统一「删掉再画一张新的」。位图有缓存，
+        重画本身几乎不花时间，也不闪（只重画画布上的一个图元，不重建控件）。
+        """
+        old = getattr(self, "_shape", None)
+        if old is not None:
+            try:
+                self.canvas.delete(old)
+            except tk.TclError:              # pragma: no cover - 控件已销毁
+                return
+        self._shape = draw_round_rect(
+            self.canvas, 0.5, 0.5, self.width - 1, self.height - 1, self.radius,
+            fill=fill or (theme.CARD_BG_HOVER if self._hover else self._card_bg),
+            outline=border or (theme.CARD_BORDER_HOVER if self._hover
+                               else theme.CARD_BORDER),
+            width=1)
+
+
     def _layout(self) -> None:
         inner = self._inner_width()
         # ``wraplength`` = 卡片内宽（设备像素）：宽度变了就跟着换行，不是截断。
@@ -357,8 +519,7 @@ class TermCard:
         self.width, self.height = w, h
         try:
             self.canvas.configure(width=w, height=h)
-            self.canvas.coords(self._shape,
-                               *round_rect_points(0.5, 0.5, w - 1, h - 1, self.radius))
+            self._redraw_shape()
         except tk.TclError:  # pragma: no cover - 控件已销毁
             return False
         self._layout()
@@ -395,7 +556,7 @@ class TermCard:
         bg = theme.CARD_BG_HOVER if value else self._card_bg
         border = theme.CARD_BORDER_HOVER if value else theme.CARD_BORDER
         try:
-            self.canvas.itemconfigure(self._shape, fill=bg, outline=border)
+            self._redraw_shape(fill=bg, border=border)
             self.label.configure(bg=bg)
             if self.summary_label is not None:
                 self.summary_label.configure(bg=bg)
@@ -625,9 +786,9 @@ class ScrollRail:
         color = self._active_color if (self._active_now or self._dragging) \
             else self._thumb_color
         inset = max(1, (self.width - self.radius * 2) // 2)
-        self.canvas.create_polygon(
-            round_rect_points(inset, top + 1, max(2, self.width - 2 * inset),
-                              max(2, height - 2), self.radius),
+        draw_round_rect(
+            self.canvas, inset, top + 1, max(2, self.width - 2 * inset),
+            max(2, height - 2), self.radius,
             fill=color, outline=color, tags="rail",
         )
 
@@ -1224,6 +1385,52 @@ class Chevron:
         self.draw_calls += 1
 
 
+# --------------------------------------------------- 无框窗口的窗口按钮（批次 M17）
+def window_hwnd(win) -> int:
+    """Tk 窗口的原生句柄（拿不到就 0）。
+
+    ``win.frame()`` 给出形如 ``"0x1a2b3c"`` 的十六进制串 —— 就是 Tk 那侧真实
+    窗口的句柄（真机探针实测：无框 + 置顶的 Toplevel / Tk 根窗都能拿到）。
+    """
+    try:
+        return int(str(win.frame()), 16)
+    except (AttributeError, TypeError, ValueError, tk.TclError):  # pragma: no cover
+        return 0
+
+
+def minimize_window(win) -> None:
+    """「—」：把窗口缩到任务栏。
+
+    不能直接 ``win.iconify()``：无框窗口带 ``override-redirect`` 标记，Tk 会抛
+    ``TclError: can't iconify ...: override-redirect flag is set``（真机探针实测）。
+    改走 Win32 ``ShowWindow(SW_MINIMIZE)``；拿不到句柄再退回 ``iconify``
+    并把 TclError 吞掉。
+    """
+    hwnd = window_hwnd(win)
+    if hwnd and w32.minimize_window(hwnd):
+        return
+    try:                                    # pragma: no cover - 非 Windows 兜底
+        win.iconify()
+    except (tk.TclError, AttributeError):
+        pass
+
+
+def toggle_maximize_window(win) -> None:
+    """「□」：窗口 ↔ 大屏来回切（大屏 = 铺满当前显示器工作区）。
+
+    走 Tk 的 ``state("zoomed")`` / ``state("normal")``：真机探针实测无框 + 置顶的
+    窗口切得动（1707x1067+0+0），切回来尺寸分毫不差。
+    """
+    try:
+        zoomed = str(win.state()) == "zoomed"
+    except (tk.TclError, AttributeError):   # pragma: no cover
+        return
+    try:
+        win.state("normal" if zoomed else "zoomed")
+    except tk.TclError:                     # pragma: no cover
+        pass
+
+
 class BorderlessChrome:
     """自绘无框 chrome：主界面 / 导图 / 设置 / 手动录入**共用同一份**。
 
@@ -1234,18 +1441,22 @@ class BorderlessChrome:
     * **×**：调用宿主给的 ``on_close`` —— 主窗口是「只收起、后台继续」，
       子窗口是「关掉本窗」，**都不退出程序**；
     * **Esc / Alt+F4**：与「×」同一语义（``on_close`` 由宿主决定）；
+    * **—** / **□**（可选）：缩到任务栏 / 窗口↔大屏互切，和普通 Windows
+      窗口一样；只有 ``on_minimize`` / ``on_maximize`` 是可调用对象时才画
+      这两个按钮（十个子对话框仍然只有一个「×」）；
     * **缩放**（可选）：右下角 :class:`ResizeGrip`，不小于 ``min_w × min_h``；
     * 拿不到 ``overrideredirect`` 的替身窗口（假 Tk 测试环境）自动跳过这一步，
       因此本类可以在零真实窗口的回归测试里跑。
     """
 
     def __init__(self, win, *, title: str, on_close, on_minimize=None,
-                 resizable: bool = False, min_w: int = CHROME_MIN_W,
-                 min_h: int = CHROME_MIN_H, bg: str | None = None,
-                 on_resized=None):
+                 on_maximize=None, resizable: bool = False,
+                 min_w: int = CHROME_MIN_W, min_h: int = CHROME_MIN_H,
+                 bg: str | None = None, on_resized=None):
         self.win = win
         self.on_close = on_close
         self.on_minimize = on_minimize
+        self.on_maximize = on_maximize
         self.on_resized = on_resized
         self.title_text = str(title or "")
         self.min_w = theme.px(min_w)
@@ -1267,6 +1478,12 @@ class BorderlessChrome:
         self.btn_close = FlatButton(self.bar, "×", self.close, font_size=9, padx=7, pady=1)
         self.btn_close.pack(side="right", padx=(theme.px(2), theme.px(6)),
                             pady=theme.px(3))
+        # 右侧按钮从右到左排：× | □ | —（和原生 Windows 窗口同序，— 在最左）
+        self.btn_max = None
+        if callable(on_maximize):
+            self.btn_max = FlatButton(self.bar, "□", self.maximize, font_size=9,
+                                      padx=7, pady=1)
+            self.btn_max.pack(side="right", padx=theme.px(2), pady=theme.px(3))
         self.btn_min = None
         if callable(on_minimize):
             self.btn_min = FlatButton(self.bar, "—", self.minimize, font_size=9,
@@ -1493,6 +1710,16 @@ class BorderlessChrome:
         if not self._enabled:
             return
         callback = self.on_minimize
+        if callable(callback):
+            try:
+                callback()
+            except Exception:  # pragma: no cover
+                pass
+
+    def maximize(self, _event=None) -> None:
+        if not self._enabled:
+            return
+        callback = self.on_maximize
         if callable(callback):
             try:
                 callback()

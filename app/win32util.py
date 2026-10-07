@@ -26,10 +26,12 @@ GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_TOPMOST = 0x00000008
+WS_EX_APPWINDOW = 0x00040000
 
 SW_HIDE = 0
 SW_SHOWNOACTIVATE = 4
 SW_SHOW = 5
+SW_MINIMIZE = 6
 
 HWND_TOPMOST = -1
 HWND_NOTOPMOST = -2
@@ -457,6 +459,41 @@ def hide_window(hwnd: int) -> None:
 
 def is_window_visible(hwnd: int) -> bool:
     return bool(hwnd) and bool(user32.IsWindowVisible(wt.HWND(hwnd)))
+
+
+def show_in_taskbar(hwnd: int) -> bool:
+    """让窗口在任务栏上占一个按钮（``WS_EX_APPWINDOW``）。
+
+    无框窗口带 ``WS_EX_TOOLWINDOW``，任务栏把它当工具窗**不给按钮** ——
+    缩下去就再也点不回来。所以缩之前先把这枚标记换掉。真机探针实测：
+    换完任务栏按钮立刻出现，``overrideredirect`` 与置顶状态都没丢。
+    """
+    if not hwnd:
+        return False
+    style = _get_window_long(hwnd, GWL_EXSTYLE)
+    wanted = (style | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+    if wanted == style:
+        return True
+    _set_window_long(hwnd, GWL_EXSTYLE, wanted)
+    return bool(_get_window_long(hwnd, GWL_EXSTYLE) & WS_EX_APPWINDOW)
+
+
+def minimize_window(hwnd: int) -> bool:
+    """缩到任务栏：``ShowWindow(SW_MINIMIZE)``。
+
+    无框窗口不能走 Tk 的 ``iconify`` —— ``override-redirect`` 会让 Tk
+    直接抛 ``TclError: can\'t iconify ...: override-redirect flag is
+    set``（真机探针实测），所以这里直接跟 ``user32`` 说话；
+    顺带保证任务栏上留一个能点回来的按钮。
+    """
+    if not hwnd:
+        return False
+    show_in_taskbar(hwnd)
+    try:
+        user32.ShowWindow(wt.HWND(hwnd), SW_MINIMIZE)
+        return True
+    except OSError:  # pragma: no cover - 窗口已销毁
+        return False
 
 
 def work_area_for_point(x: int, y: int) -> tuple[int, int, int, int]:

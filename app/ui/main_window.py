@@ -224,6 +224,8 @@ class MainWindow:
         self.chrome = widgets.BorderlessChrome(
             root, title="探索词典", on_close=self.app.on_main_close,
             resizable=True, min_w=860, min_h=520, bg=theme.PANEL,
+            on_minimize=lambda: widgets.minimize_window(root),
+            on_maximize=lambda: widgets.toggle_maximize_window(root),
         )
 
         self._build_alerts(root)

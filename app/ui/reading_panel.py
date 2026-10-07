@@ -540,8 +540,8 @@ class ReadingPanel(FloatingWindow):
         try:
             self.border_canvas.delete("border")
             x, y, w, h, r = widgets.window_border_box(width, height, radius)
-            self._border_shape = self.border_canvas.create_polygon(
-                widgets.round_rect_points(x, y, w, h, r), fill="", outline=theme.OUTLINE,
+            self._border_shape = widgets.draw_round_rect(
+                self.border_canvas, x, y, w, h, r, fill="", outline=theme.OUTLINE,
                 width=max(1, theme.px(geo.WINDOW_BORDER)), tags="border")
         except tk.TclError:  # pragma: no cover - 控件已销毁
             return False

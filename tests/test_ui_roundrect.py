@@ -8194,3 +8194,109 @@ class TestMapTextNeverCoversACard(unittest.TestCase):
         self.assertIn("            if edge.label_pos is None:\n                continue",
                       source,
                       "_draw 里关系标签少了「没有落点就不画」的保护")
+class _StubWindow:
+    """只为验分派逻辑的最小替身（**不是** Tk 控件）。
+
+    真窗行为由 ``.tmp/probe_m17c.py`` / ``.tmp/probe_m17c_root.py`` 两条探针负责：
+    「假 Tk 比真 Tk 更能干」在这个项目里骗过三次，交互不许拿替身背书。
+    """
+
+    def __init__(self, *, hwnd=0x1234, state="normal"):
+        self._hwnd = hwnd
+        self._state = state
+        self.iconified = 0
+        self.states: list = []
+
+    def frame(self):
+        if self._hwnd is None:
+            raise AttributeError("frame")
+        return hex(self._hwnd)
+
+    def state(self, value=None):
+        if value is None:
+            return self._state
+        self.states.append(value)
+        self._state = value
+
+    def iconify(self):
+        self.iconified += 1
+
+
+class TestWindowButtons(unittest.TestCase):
+    """「—」缩到任务栏 / 「□」窗口↔大屏（批次 M17-C）。"""
+
+    def setUp(self):
+        self.env = _FakeTkEnv()
+        self.env.__enter__()
+
+    def tearDown(self):
+        self.env.__exit__(None, None, None)
+
+    def _chrome(self, **kw):
+        import tkinter as tk
+
+        win = tk.Toplevel(None)
+        win.winfo_w = 800
+        win.winfo_h = 600
+        return win, widgets.BorderlessChrome(win, title="按钮",
+                                             on_close=lambda: None, **kw)
+
+    def test_a_plain_dialog_still_has_only_a_close_button(self):
+        """十个子对话框只给「×」—— 主窗加了按钮不能顺带把它们也加上。"""
+        _win, chrome = self._chrome()
+        self.assertIsNotNone(chrome.btn_close)
+        self.assertIsNone(chrome.btn_min)
+        self.assertIsNone(chrome.btn_max)
+
+    def test_two_callbacks_add_two_buttons_in_windows_order(self):
+        hits: list = []
+        _win, chrome = self._chrome(on_minimize=lambda: hits.append("min"),
+                                    on_maximize=lambda: hits.append("max"))
+        chrome.btn_min.invoke()
+        chrome.btn_max.invoke()
+        self.assertEqual(hits, ["min", "max"], "两个按钮各走自己的回调")
+        packed = [item for item, _kw in self.env.pack_calls]
+        self.assertLess(packed.index(chrome.btn_close), packed.index(chrome.btn_max),
+                        "pack 顺序 = 从右到左：□ 必须在 × 左边")
+        self.assertLess(packed.index(chrome.btn_max), packed.index(chrome.btn_min),
+                        "「—」必须在最左（和原生 Windows 窗口同序）")
+
+    def test_the_minus_button_uses_win32_while_there_is_a_handle(self):
+        calls: list = []
+        original = widgets.w32.minimize_window
+        widgets.w32.minimize_window = lambda hwnd: (calls.append(hwnd), True)[1]
+        self.addCleanup(lambda: setattr(widgets.w32, "minimize_window", original))
+        stub = _StubWindow()
+        widgets.minimize_window(stub)
+        self.assertEqual(calls, [0x1234], "有句柄就必须走 Win32（Tk 的 iconify 会抛 TclError）")
+        self.assertEqual(stub.iconified, 0, "走通 Win32 就不该再调 iconify")
+
+    def test_the_minus_button_falls_back_to_iconify_without_a_handle(self):
+        stub = _StubWindow(hwnd=None)
+        self.assertEqual(widgets.window_hwnd(stub), 0)
+        widgets.minimize_window(stub)
+        self.assertEqual(stub.iconified, 1, "拿不到句柄时退回 Tk")
+
+    def test_the_square_button_toggles_zoomed_and_back(self):
+        stub = _StubWindow(state="normal")
+        widgets.toggle_maximize_window(stub)
+        widgets.toggle_maximize_window(stub)
+        self.assertEqual(stub.states, ["zoomed", "normal"], "窗口 ↔ 大屏来回切")
+
+    def test_both_windows_really_pass_the_callbacks(self):
+        """主界面与导图窗必须真的把两个回调交进去（否则按钮根本不会画出来）。"""
+        from tests.support import headless_app
+
+        with headless_app(overlays="panel", main_window="real") as app:
+            self.assertIsNotNone(app.main.chrome.btn_min, "主界面少了「—」按钮")
+            self.assertIsNotNone(app.main.chrome.btn_max, "主界面少了「□」按钮")
+            self.assertTrue(callable(app.main.chrome.on_minimize))
+            self.assertTrue(callable(app.main.chrome.on_maximize))
+            app.open_concept_map()
+            conmap = app._map_win
+            self.assertIsNotNone(conmap.chrome.btn_min, "导图窗少了「—」按钮")
+            self.assertIsNotNone(conmap.chrome.btn_max, "导图窗少了「□」按钮")
+            # 点一下：假 Tk 里 state()/frame() 都没有 ⇒ 分派逻辑必须自己吞掉，
+            # 绝不能把 AttributeError 冒到 Tk 的回调里（实机上就是点了没反应 + 报错）
+            conmap.chrome.btn_max.invoke()
+            conmap.chrome.btn_min.invoke()
