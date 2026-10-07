@@ -2718,6 +2718,8 @@ class ConceptMapWindow:
         #: 绑定（``add="+"``），因此「点一下 = 选中 / 看依据」的老行为一个字都不变。
         for sequence, handler in (("<Button-1>", self._on_canvas_press),
                                   ("<B1-Motion>", self._on_canvas_motion),
+                                  #: 划过（没按键）：只换光标，让「框内都能拖」看得见。
+                                  ("<Motion>", self._on_canvas_hover),
                                   ("<ButtonRelease-1>", self._on_canvas_release),
                                   # 按住 Alt + 左键 = 建关系。
                                   #
@@ -3943,6 +3945,52 @@ class ConceptMapWindow:
             return (float(event.x), float(event.y))
         except (AttributeError, TypeError, ValueError):  # pragma: no cover
             return None
+
+    def _hover_cursor(self, event) -> None:
+        """鼠标划过词卡时把光标换成四向箭头 —— 「框内都能拖」得让人看得出来。
+
+        判定用的还是**同一个** :meth:`MapLayout.node_at`（同一次按下的那条路），
+        所以光标变箭头的地方 = 按下真的能抓住的地方，不会两套口径。
+
+        开销上只做两件事：一次 ``node_at``（几十个矩形，跟按下时一样）和**换了目标才**
+        ``configure`` —— 每一帧都 configure 会拖慢空闲时的鼠标移动。替身画布没有
+        ``configure(cursor=…)``，整段跳过，不让测试替身的缺口替产品背书。
+        """
+        layout = self._layout
+        if layout is None:
+            return
+        try:
+            x = self._canvas_coord("canvasx", float(event.x))
+            y = self._canvas_coord("canvasy", float(event.y))
+        except (AttributeError, TypeError, ValueError):  # pragma: no cover
+            return
+        try:
+            over = layout.node_at(x, y, pad=theme.px(NODE_HIT_PAD)) is not None
+        except Exception:  # pragma: no cover - 布局替身缺方法时别影响拖动
+            return
+        wanted = "fleur" if over else ""
+        if wanted == getattr(self, "_hover_cursor_name", None):
+            return
+        try:
+            self.canvas.configure(cursor=wanted)
+        except Exception:  # pragma: no cover - 替身画布 / 极简 Tk
+            return
+        self._hover_cursor_name = wanted
+
+    def _on_canvas_hover(self, event) -> None:
+        """只是**划过**（一个键都没按）：更新「这里能不能抓」的光标。
+
+        与 :meth:`_on_canvas_motion` 分开是**故意的**：那条路里 ``_bg_pan_last``
+        一非空就会平移整张图，让不按键的划过走进去，等于给「上一轮手势没收尾」
+        再开一条把图挪走的路。这条只碰光标。
+
+        拖动进行中一律不动光标（那时候已经有更明确的反馈），右键平移期间也不动。
+        """
+        if self._pan_guard():
+            return
+        if self._link_from is not None or self._drag_node is not None:
+            return
+        self._hover_cursor(event)
 
     def _on_canvas_motion(self, event) -> None:
         """左键拖动中：平移整张图（抓的是空白）/ 画临时线（Alt 建关系）/ 搬卡片。

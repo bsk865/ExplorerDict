@@ -8013,3 +8013,43 @@ class TestMapRouteOrdering(unittest.TestCase):
             self.assertIsInstance(group.framed, bool)
         self.assertIn(False, [group.framed for group in layout.groups],
                       "这张图上有一组的框里混着别的卡片，那一组只该写组名、不画框")
+
+
+class TestMapHoverCursorShowsWhatIsGrabbable(unittest.TestCase):
+    """批次 M16-A：鼠标划过词卡时，光标要变成四向箭头。
+
+    用户第十一句 #2：「边框同时也作为用户对词语的抓取边界，只要在词语标签的边界内，
+    他就可以进行拖拽。」真机探针 ``.tmp/probe_m16_border.py`` 证明这条**本来就成立**：
+    zoom 1.0 / 0.75 / 1.35 三个缩放下，卡片正中心、四条边框内侧 3px、左上角内侧 4px、
+    文字左侧空白 —— 八个位置全部认到这张卡，框外 4px 正确地落回「抓空白」。所以这一刀
+    不是修判定，是让这件事**看得见**。
+
+    这条守卫特意盯**源码里的绑定**：第一版把 ``_hover_cursor(event)`` 写在
+    ``_on_canvas_motion`` 的空转分支里，而画布只绑了 ``<B1-Motion>`` —— 鼠标不按键
+    划过时 Tk 一条绑定都不跑（``.tmp/probe_m16_cursor.py`` 四个位置读到的 ``cursor``
+    全是 ``''``）。只断言 ``node_at`` 的返回值，是测不出这个的。
+    """
+
+    def test_the_canvas_binds_plain_motion_to_the_hover_handler(self):
+        import pathlib
+
+        from app.ui import concept_map as cm
+
+        source = pathlib.Path(cm.__file__).read_text(encoding="utf-8")
+        self.assertIn('("<Motion>", self._on_canvas_hover)', source,
+                      "画布必须绑 <Motion>，不然不按键划过时光标那条路永远没人调")
+        self.assertIn("def _on_canvas_hover(self, event) -> None:", source)
+
+    def test_the_hover_path_only_touches_the_cursor(self):
+        """悬停那条路**只碰光标** —— 不许把不按键的划过接到会平移整张图的
+        ``_on_canvas_motion``：那条路里 ``_bg_pan_last`` 一非空就挪图，
+        万一哪一轮手势没收尾，鼠标划过也会把图带走。"""
+        import pathlib
+
+        from app.ui import concept_map as cm
+
+        source = pathlib.Path(cm.__file__).read_text(encoding="utf-8")
+        body = source.split("def _on_canvas_hover(self, event) -> None:")[1]
+        body = body.split("\n    def ")[0]
+        self.assertIn("self._hover_cursor(event)", body)
+        self.assertNotIn("_pan_by_drag", body)
