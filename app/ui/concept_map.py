@@ -186,6 +186,11 @@ CANDIDATE_OUTSET = LAYOUT_EPS
 #: 顺序就是优先级：先「贴着线、靠中间」，再往另一侧 / 更远找空位。
 LABEL_SLIDE_STEPS = (0.0, 0.08, -0.08, 0.16, -0.16, 0.24, -0.24)
 LABEL_OFFSET_STEPS = (1.0, -1.0, 1.8, -1.8, 2.6, -2.6)
+#: **兜底**候选（批次 M16-B，排在上面两档之后）：离得更远 / 滑得更开。加这几档是因为
+#: 「第一个放得下的就是结果」—— 老候选该选谁还选谁，只有原本要退回「压得最少」
+#: 的情况（实机 9 个模板里实测有 5 条标签在压卡片）才会走到这里。
+LABEL_OFFSET_FAR = (3.6, -3.6, 4.8, -4.8)
+LABEL_SLIDE_FAR = (0.32, -0.32, 0.40, -0.40)
 #: 两个关系短标签之间**至少**留出的空白（设备像素）。以前只要求「不压上去」，
 #: 于是 auto 模板上「因果」和「对照」只隔 5px —— 实机看着就是糊成一片
 #: （用户报「关系线不是很整齐，看着很乱」）。放过一个标签时把它的框按这个值外扩
@@ -476,7 +481,8 @@ class LayoutEdge:
     kind: str                      # hierarchy / direction / cross / feedback
     points: tuple[tuple[float, float], ...]
     label: str
-    label_pos: tuple[float, float]
+    #: 标签落点；``None`` = 一个不压卡片的落点都找不到，**这条标签不画**（批次 M16-B）。
+    label_pos: tuple[float, float] | None
     symmetric: bool = False
 
     def segments(self):
@@ -509,6 +515,10 @@ class LayoutGroup:
     label: str = ""
     #: 这个框是否名副其实（框里只有本组成员）。``False`` 时只画组名、不画框。
     framed: bool = True
+    #: 组名落点（**左上角**锚点）；``None`` = 哪儿都压卡片，那个组名不画（批次 M16-B）。
+    #: 由 :func:`_layout_core` 挑好，``_draw`` 只照着画 —— 组名以前钉在框的左上角，
+    #: 而组框是**在卡片之前**画的，卡片一压过来组名就被整个盖掉（用户第十二句）。
+    label_pos: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -1042,22 +1052,36 @@ def _label_cost(box, blockers) -> float:
 
 
 def _label_position(points, label: str, m: MapMetrics, *, base: tuple[float, float],
-                    blockers, offset: float) -> tuple[tuple[float, float], float]:
+                    blockers, offset: float, hard=()
+                    ) -> tuple[tuple[float, float] | None, float]:
     """关系标签落点：贴着**它自己那条线**，并且不压卡片 / 不压别的标签。
 
     搜索顺序是固定的（先近后远、先上后下、先中间后两边），**第一个放得下的候选就是
     结果** —— 这比「取代价最小」可预测：实机上标签不会忽左忽右地跳到整条线的另一头
-    （用户报「线标注的文本位置不对」）。真的哪儿都放不下时，才退回「压得最少」的那个，
-    此时它仍然贴着自己的线。
+    （用户报「线标注的文本位置不对」）。
+
+    ``blockers`` 是**软约束**：已经放好的别的标签，尽量别挤；只有在没有硬约束的调用里
+    才退回「压得最少」的那个。
+
+    ``hard`` 是**硬约束** —— 批次 M16-B 起调用方把卡片本身（含主题胶囊）传进来，
+    用户第十二句：「我禁止你把文字盖在关键词方框后面」。候选只要碰到 ``hard`` 里任何
+    一个框就作废；**有硬约束却一个候选都不干净时返回 ``None``**，那条边的标签干脆不画
+    —— 宁缺勿压。
     """
     gap = _label_clearance(m)
     center, tangent = _route_midpoint(points)
     normal_offset = max(0.5, float(offset))
     base = (float(base[0]), float(base[1]))
     seen: list = []
+    hard_boxes = tuple(hard or ())
 
     def spots():
-        """候选落点：**先试调用方给的基准点**，再中间优先 / 另一侧 / 更远，最后沿路径挪。"""
+        """候选落点：**先试调用方给的基准点**，再中间优先 / 另一侧 / 更远，最后沿路径挪。
+
+        前面几档的顺序**一个字没改**；批次 M16-B 只在末尾补了三组兜底候选。「第一个
+        放得下的就是结果」不变，所以老落点该落哪儿还落哪儿，只有原本要退回「压得最少」
+        的情况才会用上新候选。
+        """
         yield base
         for fraction in LABEL_SLIDE_STEPS:
             point, turn = (center, tangent) if not fraction else _point_along(points, 0.5 + fraction)
@@ -1066,17 +1090,39 @@ def _label_position(points, label: str, m: MapMetrics, *, base: tuple[float, flo
                 if math.hypot(spot[0] - base[0], spot[1] - base[1]) <= 1e-6:
                     continue            # 和基准点重合的候选不用试第二遍
                 yield spot
+        # 兜底一：还是那几个滑移点，但离得更远
+        for fraction in LABEL_SLIDE_STEPS:
+            point, turn = (center, tangent) if not fraction else _point_along(points, 0.5 + fraction)
+            for scale in LABEL_OFFSET_FAR:
+                yield _normal(point, turn, normal_offset * float(scale))
+        # 兜底二：滑得更开，配原来的净空
+        for fraction in LABEL_SLIDE_FAR:
+            point, turn = _point_along(points, 0.5 + fraction)
+            for scale in LABEL_OFFSET_STEPS:
+                yield _normal(point, turn, normal_offset * float(scale))
+        # 兜底三：沿整条线细扫（每 2% 一个点），只配正常净空 —— 冷门几何也落得下来
+        for step in range(1, 50):
+            point, turn = _point_along(points, step / 50.0)
+            for scale in LABEL_OFFSET_STEPS:
+                yield _normal(point, turn, normal_offset * float(scale))
 
     for spot in spots():
         box = label_box(spot, label, m)
         if not _label_fits(box, blockers, pad=0.0):
+            continue
+        if any(rects_intersect(box, other) for other in hard_boxes):
             continue
         if any(rects_intersect(box, other, tol=gap) for other in seen):
             continue
         seen.append(box)
         return spot, math.hypot(spot[0] - base[0], spot[1] - base[1])
 
-    # 一个都不干净：取「压得最少」的那个（面积最小，其次离基准点最近）
+    if hard_boxes:
+        # 有硬约束（卡片）却一个候选都不干净：**不画**，绝不让文字压到卡片上。
+        return None, 0.0
+
+    # 一个都不干净（只在没有硬约束的调用里会走到）：取「压得最少」的那个
+    # （面积最小，其次离基准点最近）
     best_cost, best_spot, best_box = None, base, label_box(base, label, m)
     for spot in spots():
         box = label_box(spot, label, m)
@@ -2040,7 +2086,7 @@ def relation_curve(src_node, dst_node, blockers=()) -> list[tuple[float, float]]
     return points
 
 
-def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
+def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=(), guard=()):
     """给每条关系画一条线，并放好它的类型标签（纯函数）。
 
     批次 M14 起**照开源做法**：一条边 = 一条三次贝塞尔，见 :func:`relation_curve`。
@@ -2053,9 +2099,16 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
     只有一条线，走哪儿完全由两端卡片的位置决定 —— 这正是开源的行为。
 
     节点位置与层级**一个字都不动** —— 这里只决定线怎么走。
+
+    ``guard``（批次 M16-B）是**额外**的硬约束矩形（调用方把主题胶囊传进来）：关系标签
+    宁可这一条不画，也绝不许落在任何一张卡上（用户第十二句「我禁止你把文字盖在关键词
+    方框后面」）。``nodes`` 自己的卡片框自动算进硬约束，不用调用方操心。
     """
     by_id = {int(node.entry_id): node for node in nodes}
-    blockers = [node_box(node, m.label_gap) for node in nodes]
+    #: **硬约束**：任何一张卡片（含主题胶囊）都不许被标签压到。
+    hard = [node_box(node, m.label_gap) for node in nodes] + [box for box in guard]
+    #: **软约束**：已经放好的别的标签（尽量别挤，挤不下就退让）。
+    blockers: list = []
     out: list[LayoutEdge] = []
     for base in base_edges:
         src, dst, _rel_type = _relation_parts(base.rel)
@@ -2068,9 +2121,14 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
         base_pos = _normal(center, tangent, label_offset)
         label_pos, _drift = _label_position(points, str(base.label), m,
                                             base=base_pos, blockers=blockers,
-                                            offset=label_offset)
+                                            offset=label_offset, hard=hard)
         # 登记时按 ``LABEL_SEPARATION`` 外扩：下一个标签必须离这个**至少**这么远，
         # 不然两个短标签会贴在一起（只判「不重叠」时实测只隔 5px，实机看着糊）。
+        if label_pos is None:
+            # 一个不压卡片的落点都没有：这条边**只有线、没有字**（宁缺勿压）。
+            out.append(LayoutEdge(base.rel, base.kind, tuple(points), base.label,
+                                  None, bool(base.symmetric)))
+            continue
         blockers.append(_inflate_box(label_box(label_pos, str(base.label), m),
                                      LABEL_SEPARATION))
         out.append(LayoutEdge(base.rel, base.kind, tuple(points), base.label,
@@ -2369,12 +2427,37 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
         links=tuple(topic_links),
         ortho=_orthogonal_routes(
             base_edges, nodes, m,
-            axis=map_templates.route_axis_of(template_used)))
+            axis=map_templates.route_axis_of(template_used)),
+        guard=tuple(node_box(item, m.label_gap) for item in (topic,) if item is not None))
 
     # ---- 内容外框：节点 / 连线 / 标签 / 孤立词标题全部包住，再加一圈留白 ----
     # 四边都要跟踪：卡片可以被拖到原点**左上角**（世界坐标为负），只记右 / 下界
     # 的话滚动范围会从左界 ``-margin`` 起算，拖到负数去的卡片根本滚不过去
     # （批次 M13；用户口径「导图画布无边界，请你不要自己加边界约束」）。
+    # ---- 孤立词行标题：同样不许压在任何卡片上（批次 M16-B）----
+    #     这一行有 30 个字宽，卡片被钉到它头上就被压住了（副本库上 mindmap + 用户钉过
+    #     的位置实测压掉 1640px²）。候选依次往下让，最后一个是「所有卡片之下」——
+    #     那儿永远干净，也比让这行字消失强（它还是孤立词诊断的入口）。必须在这里改：
+    #     下面的内容外框会把 ``isolated_label_pos`` 算进去（批次 M16-B，用户第十二句
+    #     「我禁止你把文字盖在关键词方框后面」）。
+    if isolated_label_pos is not None and iso_order:
+        em_iso = label_em(m)
+        wide_iso, tall_iso = text_px(ISOLATED_TEXT, em_iso), em_iso * 1.35
+        card_boxes = [node_box(item, 0.0) for item in [topic, *nodes] if item is not None]
+        under_all = max(box[3] for box in card_boxes) + m.v_gap * 0.6
+
+        def _row_rect(spot):
+            return (float(spot[0]), float(spot[1]) - tall_iso / 2.0,
+                    float(spot[0]) + wide_iso, float(spot[1]) + tall_iso / 2.0)
+
+        for candidate in (isolated_label_pos,
+                          (float(isolated_label_pos[0]),
+                           float(isolated_label_pos[1]) - m.v_gap),
+                          (float(isolated_label_pos[0]), under_all)):
+            if not any(rects_intersect(_row_rect(candidate), box) for box in card_boxes):
+                isolated_label_pos = candidate
+                break
+
     right = content_left + inner_w
     bottom = max(top + topic_h, y - m.v_gap)
     left = content_left
@@ -2390,6 +2473,8 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
             bottom = max(bottom, float(py))
             left = min(left, float(x))
             upper = min(upper, float(py))
+        if edge.label_pos is None:
+            continue                    # 这条标签不画，也就不进外框
         box = label_box(edge.label_pos, edge.label, m)
         right = max(right, box[2])
         bottom = max(bottom, box[3])
@@ -2449,6 +2534,50 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
             framed=framed,
         ))
 
+    # ---- 组名落点：**不许压在任何卡片上**（批次 M16-B）----
+    #     组框是在卡片**之前**画的，组名一旦被卡片压到就被整个盖没 —— 用户第十二句
+    #     「我禁止你把文字盖在关键词方框后面」。这里跟关系标签同一个办法：挨个候选位
+    #     试，全压着卡片就**不写这个组名**（宁缺勿压；组框本身照画）。
+    card_rects = [node_box(item, 0.0) for item in [topic, *nodes] if item is not None]
+    taken_names: list = []
+    for index, group in enumerate(groups):
+        name = str(getattr(group, "label", "") or "")
+        if not name:
+            continue
+        # 文本外框按**关系标签**的字号估：组名字号（6）比它（7）还小半档，所以偏保守
+        em = label_em(m)
+        wide, tall = text_px(name, em), em * 1.35
+        if group.framed:
+            anchors = ((group.x0 + m.em * 0.55, group.y0 + m.em * 0.45),
+                       (group.x0 + m.em * 0.55, group.y0 - tall - m.em * 0.3),
+                       (group.x0 + m.em * 0.55, group.y1 + m.em * 0.3),
+                       (group.x1 - wide - m.em * 0.55, group.y1 + m.em * 0.3),
+                       (group.x0 + m.em * 0.55, (group.y0 + group.y1 - tall) / 2.0))
+        else:
+            root_node = by_id.get(int(group.root_id))
+            if root_node is None:
+                continue
+            anchors = ((root_node.x - root_node.w / 2.0,
+                        root_node.y - root_node.h / 2.0 - tall - m.em * 0.3),
+                       (root_node.x - root_node.w / 2.0,
+                        root_node.y + root_node.h / 2.0 + m.em * 0.3),
+                       (root_node.x - root_node.w / 2.0 - wide - m.em * 0.5,
+                        root_node.y - tall / 2.0),
+                       (root_node.x + root_node.w / 2.0 + m.em * 0.5,
+                        root_node.y - tall / 2.0),
+                       (group.x0 + m.em * 0.55, group.y0 + m.em * 0.45))
+        spot = None
+        for ax, ay in anchors:
+            rect = (float(ax), float(ay), float(ax) + wide, float(ay) + tall)
+            if any(rects_intersect(rect, other) for other in card_rects):
+                continue
+            if any(rects_intersect(rect, other, tol=m.em) for other in taken_names):
+                continue
+            spot = (float(ax), float(ay))
+            taken_names.append(rect)
+            break
+        groups[index] = replace(group, label_pos=spot)
+
     return MapLayout(
         width=canvas_w, height=canvas_h, topic=topic, nodes=tuple(nodes),
         edges=tuple(edges), groups=tuple(groups), topic_links=tuple(topic_links),
@@ -2482,10 +2611,14 @@ def _scaled_layout(layout: MapLayout, factor: float) -> MapLayout:
         topic=None if layout.topic is None else node(layout.topic),
         nodes=tuple(node(item) for item in layout.nodes),
         edges=tuple(replace(edge, points=tuple(point(item) for item in edge.points),
-                            label_pos=point(edge.label_pos))
+                            label_pos=(None if edge.label_pos is None
+                                       else point(edge.label_pos)))
                     for edge in layout.edges),
         groups=tuple(replace(group, x0=group.x0 * f, y0=group.y0 * f,
-                             x1=group.x1 * f, y1=group.y1 * f)
+                             x1=group.x1 * f, y1=group.y1 * f,
+                             label_pos=(None if group.label_pos is None
+                                        else (group.label_pos[0] * f,
+                                              group.label_pos[1] * f)))
                      for group in layout.groups),
         topic_links=tuple(tuple(point(item) for item in link)
                           for link in layout.topic_links),
@@ -5621,17 +5754,12 @@ class ConceptMapWindow:
                             theme.px(10), fill="", outline=theme.BORDER,
                             width=max(1, theme.px(1)), _kind="group")
             label = str(getattr(group, "label", "") or "")
-            if not label:
+            spot = getattr(group, "label_pos", None)
+            if not label or spot is None:
+                # 落点由 ``_layout_core`` 挑好：一个不压卡片的位子都没有时**不写组名**
+                # （批次 M16-B：组框画在卡片之前，压在卡上的组名会被卡片整个盖掉）。
                 continue
-            if group.framed:
-                anchor_x, anchor_y = group.x0 + theme.px(5), group.y0 + theme.px(4)
-            else:
-                root_node = layout.find(group.root_id)
-                if root_node is None:
-                    continue
-                anchor_x = root_node.x - root_node.w / 2.0
-                anchor_y = root_node.y - root_node.h / 2.0 - theme.px(9)
-            self._text(anchor_x, anchor_y, text=label, fill=theme.TEXT_MUTED,
+            self._text(spot[0], spot[1], text=label, fill=theme.TEXT_MUTED,
                        font=theme.font_at(GROUP_LABEL_FONT_SIZE, self._zoom),
                        anchor="nw", _kind="group-label")
         # ② 主题 → 顶层词的细线：分类结构（**不是** AI 语义关系）。
@@ -5691,9 +5819,13 @@ class ConceptMapWindow:
             self._bind_isolated_label(item)
         # ⑦ **关系短标签最后画**：直接从线上方的空白里落字，没有底板（用户要求：
         #    文字背景透明），也不带「人工·」前缀（用户要求）—— 人工关系与 AI 关系
-        #    在图上完全同款，要区分就看依据区或者双击这条线。放在最后是为了让标签
-        #    永远压在卡片之上：万一某一个真的没地方放，也还读得见，不会被卡片盖掉。
+        #    在图上完全同款，要区分就看依据区或者双击这条线。
+        #    批次 M16-B 起落点由 ``_layout_core`` 保证**不压任何卡片**（用户第十二句
+        #    「我禁止你把文字盖在关键词方框后面」）：一个位子都找不到的那条边，
+        #    这里就**只有线、没有字** —— 要看类型就点这条线，依据区里有。
         for edge in layout.edges:
+            if edge.label_pos is None:
+                continue
             self._text(edge.label_pos[0], edge.label_pos[1],
                        text=edge.label,
                        fill=EDGE_LABEL_FILL,

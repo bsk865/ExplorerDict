@@ -995,8 +995,9 @@ def render_concept_map(labels=None, relations=None, topic_label: str = "") -> Im
             _arrow(draw, edge.points[-2], edge.points[-1], offset=(ox, oy),
                    fill=style["fill"])
         # 标签**没有底色块**（用户口径：文字背景透明），颜色与线统一用一个灰
-        text(draw, (edge.label_pos[0] + ox, edge.label_pos[1] + oy), edge.label,
-             font=SANS(7), fill=cm.EDGE_LABEL_FILL, anchor="mm")
+        if edge.label_pos is not None:      # 一个不压卡片的落点都没有：不画（M16-B）
+            text(draw, (edge.label_pos[0] + ox, edge.label_pos[1] + oy), edge.label,
+                 font=SANS(7), fill=cm.EDGE_LABEL_FILL, anchor="mm")
     # ④ 节点：圆角矩形 + **完整词语**（换行，不砍成 6 个字）
     for node in layout.nodes:
         rounded(draw, (node.x - node.w / 2 + ox, node.y - node.h / 2 + oy,

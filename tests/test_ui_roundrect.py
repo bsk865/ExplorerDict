@@ -8053,3 +8053,144 @@ class TestMapHoverCursorShowsWhatIsGrabbable(unittest.TestCase):
         body = body.split("\n    def ")[0]
         self.assertIn("self._hover_cursor(event)", body)
         self.assertNotIn("_pan_by_drag", body)
+
+
+class TestMapTextNeverCoversACard(unittest.TestCase):
+    """批次 M16-B：**画布上的文字一个都不许落在卡片框里**。
+
+    用户第十二句：「并且我最看重的就是可读性和简洁性，我禁止你把文字盖在关键词方框
+    后面」。画布上写字的地方一共三处，这里三处都量：
+
+      1. 关系线旁边的类型标签（``LayoutEdge.label_pos``）；
+      2. 分组框的组名（``LayoutGroup.label_pos``，落点在 ``_layout_core`` 里挑）；
+      3. 孤立词那一行灰字（``MapLayout.isolated_label_pos``，`anchor="w"`，字号 7）。
+
+    这么做是有原因的：组框与它的组名是在**卡片之前**画的，落在卡上的字会被卡片整个
+    盖掉；关系标签则相反，它是最后画的、会**压在卡上**。两种在实机上一样读不了。
+
+    规矩是**宁缺勿压**：一个不压卡片的落点都找不到时，那处字就不画（落点为 ``None``）。
+    所以这里同时钉住相反的一面：今天这个 fixture 上**一处都不许丢** —— 不然「不压卡」
+    可以靠「什么都不画」作弊。
+    """
+
+    LABELS = {
+        23: "Machine learning (ML) algorithms",
+        24: "real-world environments",
+        25: "data distribution",
+        26: "shiftin",
+        27: "model performanc",
+        28: "adherenc",
+        29: "resource constraint",
+        30: "drift-detectio",
+        31: "high computationa",
+        32: "resource-con-strained environmen",
+    }
+    # 5 条关系线 + 1 条 `包含`（让 `_layout_core` 真的建出一个分组框来，组名才有得量）
+    RELS = ((23, 24, "属于"), (23, 25, "依赖"), (27, 23, "对照"),
+            (27, 25, "因果"), (27, 30, "对照"), (31, 32, "包含"))
+    KEYS = ("auto", "mindmap", "tree", "org", "oneway", "fishbone",
+            "flow-h", "flow-v", "flow-s")
+
+    def _layout(self, key):
+        from app.map_service import MapRelation
+        from app.ui.concept_map import layout_graph
+
+        relations = [MapRelation(src, dst, rel_type, "依据", "片段")
+                     for src, dst, rel_type in self.RELS]
+        return layout_graph(dict(self.LABELS), relations,
+                            width=1180, height=760, topic_label="资源受限计算",
+                            zoom=1.0, top_pad=6.0, template=key)
+
+    @staticmethod
+    def _overlap(first, second) -> float:
+        """两个矩形的交叠面积。"""
+        wide = min(first[2], second[2]) - max(first[0], second[0])
+        tall = min(first[3], second[3]) - max(first[1], second[1])
+        return max(0.0, wide) * max(0.0, tall)
+
+    def _cards(self, layout, cm):
+        items = [layout.topic, *layout.nodes]
+        return [(str(item.label), cm.node_box(item, 0.0))
+                for item in items if item is not None]
+
+    def test_no_text_lands_on_a_card_in_any_template(self):
+        from app.ui import concept_map as cm
+
+        m = cm.metrics_for(1.0)
+        label_em = cm.label_em(m)
+        for key in self.KEYS:
+            with self.subTest(template=key):
+                layout = self._layout(key)
+                cards = self._cards(layout, cm)
+                self.assertTrue(cards, "fixture 必须至少有主题胶囊")
+                drawn = 0
+
+                for edge in layout.edges:
+                    self.assertIsNotNone(
+                        edge.label_pos,
+                        f"模板「{key}」上关系「{edge.label}」被整条丢掉了 —— "
+                        f"不压卡不该退化成不画字")
+                    drawn += 1
+                    box = cm.label_box(edge.label_pos, str(edge.label), m)
+                    for name, card in cards:
+                        self.assertEqual(
+                            0.0, self._overlap(box, card),
+                            f"模板「{key}」上关系标签「{edge.label}」压在卡片「{name}」上")
+
+                groups = [group for group in layout.groups
+                          if str(getattr(group, "label", "") or "")]
+                self.assertTrue(groups, "fixture 必须建出至少一个分组框（包含 31→32）")
+                for group in groups:
+                    name = str(group.label)
+                    self.assertIsNotNone(
+                        group.label_pos,
+                        f"模板「{key}」上组名「{name}」被整条丢掉了")
+                    drawn += 1
+                    spot = group.label_pos
+                    box = (float(spot[0]), float(spot[1]),
+                           float(spot[0]) + cm.text_px(name, label_em),
+                           float(spot[1]) + label_em * 1.35)
+                    for card_name, card in cards:
+                        self.assertEqual(
+                            0.0, self._overlap(box, card),
+                            f"模板「{key}」上组名「{name}」压在卡片「{card_name}」上")
+
+                if layout.isolated_label_pos is not None:
+                    drawn += 1
+                    spot = layout.isolated_label_pos
+                    tall = label_em * 1.35
+                    box = (float(spot[0]), float(spot[1]) - tall / 2.0,
+                           float(spot[0]) + cm.text_px(cm.ISOLATED_TEXT, label_em),
+                           float(spot[1]) + tall / 2.0)
+                    for card_name, card in cards:
+                        self.assertEqual(
+                            0.0, self._overlap(box, card),
+                            f"模板「{key}」上孤立词那一行压在卡片「{card_name}」上")
+
+                self.assertGreaterEqual(drawn, 6, "画出来的文字太少了，量了个寂寞")
+
+    def test_a_label_with_nowhere_to_go_is_not_drawn_at_all(self):
+        """宁缺勿压：硬约束把整片地方都堵死时返回 None；没有硬约束时老行为不变。"""
+        from app.ui import concept_map as cm
+
+        m = cm.metrics_for(1.0)
+        points = ((0.0, 0.0), (50.0, 0.0), (100.0, 0.0))
+        wall = [(-5000.0, -5000.0, 5000.0, 5000.0)]     # 整块画布都是卡片
+        spot, _drift = cm._label_position(points, "对照", m, base=(50.0, 12.0),
+                                          blockers=[], offset=12.0, hard=wall)
+        self.assertIsNone(spot, "到处都是卡片时标签还是画出来了 —— 会盖在方框上")
+        spot, _drift = cm._label_position(points, "对照", m, base=(50.0, 12.0),
+                                          blockers=[], offset=12.0)
+        self.assertIsNotNone(spot, "没有硬约束时不该改变老行为（退回压得最少的那个）")
+
+    def test_the_drawer_skips_text_that_has_no_spot(self):
+        """源码级守卫：`_draw` 里那两处「没有落点就不画」的分支必须还在。"""
+        from app.ui import concept_map as cm
+
+        with open(cm.__file__, "r", encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn("if not label or spot is None:", source,
+                      "_draw 里组名少了「没有落点就不画」的保护")
+        self.assertIn("            if edge.label_pos is None:\n                continue",
+                      source,
+                      "_draw 里关系标签少了「没有落点就不画」的保护")
