@@ -539,10 +539,13 @@ class ReadingPanel(FloatingWindow):
         self._border_key = None
         try:
             self.border_canvas.delete("border")
-            x, y, w, h, r = widgets.window_border_box(width, height, radius)
+            # 描边宽度是**设备像素**（150% DPI 下 2px）：落点必须按它算，
+            # 否则描边的外缘会比窗口边缘内缩半个像素（见 window_border_box）。
+            stroke = max(1, theme.px(geo.WINDOW_BORDER))
+            x, y, w, h, r = widgets.window_border_box(width, height, radius, stroke)
             self._border_shape = widgets.draw_round_rect(
                 self.border_canvas, x, y, w, h, r, fill="", outline=theme.OUTLINE,
-                width=max(1, theme.px(geo.WINDOW_BORDER)), tags="border")
+                width=stroke, tags="border")
         except tk.TclError:  # pragma: no cover - 控件已销毁
             return False
         self._border_key = key

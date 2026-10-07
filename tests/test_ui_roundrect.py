@@ -8300,3 +8300,63 @@ class TestWindowButtons(unittest.TestCase):
             # 绝不能把 AttributeError 冒到 Tk 的回调里（实机上就是点了没反应 + 报错）
             conmap.chrome.btn_max.invoke()
             conmap.chrome.btn_min.invoke()
+
+
+class TestWindowBorderHugsTheWindowEdge(unittest.TestCase):
+    """批次 M17-D：浮窗描边的外缘必须压在窗口边缘上（用户黑底截图那条白线）。
+
+    病根：旧公式从 ``inset + 0.5`` 起笔，描边外缘落在窗口内半个像素 ⇒ 最右一列 /
+    最下一行没被画到，露出窗口自己的底色 ``theme.PANEL``(249,248,246)，在深色桌面上
+    就是一条近白细线。契约改成两条：**外缘 = 整块窗口**、**外弧半径 = radius**
+    （后者要和 Win32 region 的圆弧重合，region 的圆角半径就是 radius）。
+    """
+
+    def test_the_stroke_outer_edge_is_exactly_the_window_edge(self):
+        """描边外缘（路径 + 半个线宽）必须正好落在 0 与 width/height 上。"""
+        for width, height, radius, stroke in ((66, 66, 15, 2), (540, 690, 18, 2),
+                                              (44, 44, 10, 1), (360, 460, 12, 3),
+                                              (127, 89, 5, 4)):
+            x, y, w, h, _r = widgets.window_border_box(width, height, radius, stroke)
+            half = stroke / 2.0
+            tag = "%dx%d r=%d 线宽=%d" % (width, height, radius, stroke)
+            self.assertAlmostEqual(x - half, 0.0, places=9,
+                                   msg="%s：描边左外缘没贴在窗口左边" % tag)
+            self.assertAlmostEqual(y - half, 0.0, places=9,
+                                   msg="%s：描边上外缘没贴在窗口上边" % tag)
+            self.assertAlmostEqual(x + w + half, float(width), places=9,
+                                   msg="%s：描边右外缘没贴在窗口右边（就是那条白线）" % tag)
+            self.assertAlmostEqual(y + h + half, float(height), places=9,
+                                   msg="%s：描边下外缘没贴在窗口下边（就是那条白线）" % tag)
+
+    def test_the_outer_arc_radius_matches_the_region(self):
+        """外弧半径 = radius：region 也是按 radius 的圆角裁的，两边必须重合。"""
+        for width, height, radius, stroke in ((66, 66, 15, 2), (540, 690, 18, 2),
+                                              (44, 44, 10, 1)):
+            _x, _y, _w, _h, r = widgets.window_border_box(width, height, radius, stroke)
+            self.assertAlmostEqual(r + stroke / 2.0, float(radius), places=9,
+                                   msg="外弧半径和 region 的圆角对不上")
+
+    def test_a_squashed_window_never_returns_negative_geometry(self):
+        for width, height, radius, stroke in ((4, 4, 40, 2), (1, 1, 10, 4),
+                                              (12, 3, 6, 2)):
+            _x, _y, w, h, r = widgets.window_border_box(width, height, radius, stroke)
+            self.assertGreaterEqual(w, 1)
+            self.assertGreaterEqual(h, 1)
+            self.assertGreaterEqual(r, 0.0)
+            self.assertLessEqual(r, min(w, h) / 2.0, "半径不许超过半宽/半高（会自交）")
+
+    def test_the_exact_numbers_from_the_users_screenshot(self):
+        """150% DPI 下小方块就是 66x66、半径 15、线宽 2 —— 钉住实测那一组。"""
+        self.assertEqual(widgets.window_border_box(66, 66, 15, 2),
+                         (1.0, 1.0, 64, 64, 14.0))
+
+    def test_the_panel_really_hands_the_stroke_to_both_places(self):
+        """调用点也要钉住：光改函数、不给它传线宽，白线照样在。"""
+        from app.ui import reading_panel as panel
+
+        text = open(panel.__file__, encoding="utf-8").read()
+        self.assertIn("stroke = max(1, theme.px(geo.WINDOW_BORDER))", text,
+                      "浮窗没算出这一笔描边的实际线宽")
+        self.assertIn("widgets.window_border_box(width, height, radius, stroke)", text,
+                      "浮窗没把线宽交给 window_border_box")
+        self.assertIn("width=stroke", text, "浮窗没把同一个线宽交给画圆角的函数")

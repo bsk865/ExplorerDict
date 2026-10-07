@@ -869,17 +869,31 @@ def hairline(parent, **pack_kw) -> tk.Frame:
 
 
 # =========================================================== 窗口描边 / 手柄
-def window_border_box(width: int, height: int, radius: int, inset: int = geo.WINDOW_BORDER):
-    """窗口 1px 圆角描边的落点 ``(x, y, w, h, radius)``（**纯函数**）。
+def window_border_box(width: int, height: int, radius: int,
+                      stroke: int = 1) -> tuple[float, float, float, float, float]:
+    """窗口圆角描边的落点 ``(x, y, w, h, radius)``（**纯函数**，设备像素）。
 
     描边必须画成**圆角**、而不是方形 Frame 的 ``highlight``：方形边线被窗口
     region 裁掉之后，四个角上的线会突然断掉 —— 用户看到的就是「圆角像缺口」。
+
+    返回的是**路径**（Tk ``create_polygon`` 的 ``width`` 语义：描边骑在路径两侧），
+    算出来的路径保证两件事（批次 M17-D）：
+
+    * **描边的外缘正好落在窗口外缘上**：外缘 = 整块窗口（``0..width`` /
+      ``0..height``），于是四条直边最外那圈像素是**整格的描边色**。之前把外缘
+      放在窗口内 0.5px，最右一列 / 最下一行就有半个像素没被覆盖，露出窗口自己
+      的底色 ``theme.PANEL``（249,248,246）—— 用户拿深色背景截图指出的正是这
+      条近白细线（66x66 的方块上：左/上那两圈是 200，右/下是 249）；
+    * **外弧半径 = ``radius``**：与 ``CreateRoundRectRgn(0, 0, w+1, h+1, 2r, 2r)``
+      的圆弧**重合**，二值 region 因此不会咬掉弧上抗锯齿的过渡像素（外弧半径
+      比 region 大 1px 时，弧上只剩硬台阶）。
     """
-    inset = max(0, int(inset))
-    w = max(1, int(width) - 2 * inset)
-    h = max(1, int(height) - 2 * inset)
-    r = max(0, min(int(radius) - inset, w // 2, h // 2))
-    return (inset + 0.5, inset + 0.5, w - 1, h - 1, r)
+    stroke = max(1, int(stroke))
+    half = stroke / 2.0
+    w = max(1, int(width) - stroke)
+    h = max(1, int(height) - stroke)
+    r = max(0.0, min(float(radius) - half, w / 2.0, h / 2.0))
+    return (half, half, w, h, r)
 
 
 def grip_lines(width: int, height: int, *, inset: int | None = None,
