@@ -1840,11 +1840,11 @@ def _simple_orthogonal_routes(start, end, nodes, m: MapMetrics, *,
 # 不要只是学概念。」于是把开源的源码读了一遍（不是看概念）。逐行对照：
 #
 #   simple-mind-map/src/plugins/associativeLine/associativeLineUtils.js
-#     :11  ``computeCubicBezierPathPoints``  → :func:`bezier_controls`
-#     :174 ``getNodePoint``                  → :func:`side_anchor`
-#     :210 ``computeNodePoints``             → ``_RELATIVE_SIDES`` + :func:`relative_side`
+#     :11  ``computeCubicBezierPathPoints``  → 批次 M15 退役（改鼓一点点）
+#     :174 ``getNodePoint``                  → 批次 M15 退役（改边框交点）
+#     :210 ``computeNodePoints``             → 批次 M15 退役
 #     :274 ``getNodeLinePath``               → :func:`relation_curve`
-#     ``mm-utils.js:1378 getRectRelativePosition`` → :func:`relative_side` 的方向判定
+#     ``mm-utils.js:1378 getRectRelativePosition`` → 批次 M15 退役
 #
 # 同批还核对了另外五个项目（原文都在 ``D:\探索工具\survey\``）：
 #   * mind-elixir-core ``src/utils/generateBranch.ts``（``roundedVertical`` 圆角肘形 +
@@ -1866,81 +1866,72 @@ def _simple_orthogonal_routes(start, end, nodes, m: MapMetrics, *,
 #   y=-1 / y=146 / y=300 这几条公共走廊上，几条线并排横贯整张画布 —— 用户说的
 #   「太杂乱」正是这么来的。
 # ---------------------------------------------------------------------------
+# 批次 M15 补记：开源的「端点」算法是给树形布局写的，不能照抄到自由摆放的图上
+#
+# 用户口径：「可以有交叉，主要是你自己做的交叉效果不好。」（他并不要求零交叉 ——
+# 那是 M12/M13 我自己发明的判据，不是规格。）
+#
+# 于是把候选走线做成可渲染原型、用眼睛比（`改成哪个方案`这件事没有现成指标）：
+#
+#   变体        pinned  pinned-tree  default-tree  default
+#   M14 基线        2          4            5          1
+#   spread          7          9            4          4   ← 同边分摊锚点，反而更差
+#   normal          8          7            3          1   ← spread + 沿法线出入
+#   center          3          5            2          0   ← 边框交点 + 直线
+#   slim            4          8            3          0   ← 边框交点 + 一点点弧
+#
+# **交叉数不是用户要的指标**：spread / normal 交叉更多，看图也更差（几条线在卡片
+# 门口分成一束往下走）。看图定案：center 与 slim 都是干净利落的近直线，方向不同的线
+# 自然落在卡框的不同位置 —— 既没有结，也没有横贯画布的大弧；把 M14 与 slim 的同一张图
+# 上下叠起来比，M14 那些「绕到集群外面再兜回来」的大弧整片消失，变成贴着卡片列的短直线。
+#
+# ⇒ 定案 ``slim``：端点改「朝对面那张卡射过去的边框交点」，线改「就着这条弦鼓一点点」。
+#   实测它把 M14 最长的一条 1758 px 的弦、以及最锐的一处 18.8° 交叉一起消掉了。
+#   代价如实说：鼓包封顶 16 px 之后，同排 A→C 的线不再自动抬过中间那张卡 B
+#   （那属于「布局该避免的事」，见上一段）。
+# ---------------------------------------------------------------------------
 
-#: ``src`` 朝向对方那条边 → ``dst`` 朝向对方那条边（照抄开源 ``computeNodePoints``
-#: 的 switch）。方向名由 :func:`relative_side` 给出。
-_RELATIVE_SIDES = {
-    "left-top": ("right", "top"),
-    "right-top": ("left", "top"),
-    "right-bottom": ("left", "bottom"),
-    "left-bottom": ("right", "bottom"),
-    "left": ("right", "left"),
-    "right": ("left", "right"),
-    "top": ("right", "right"),
-    "bottom": ("left", "left"),
-    "overlap": ("right", "right"),
-}
+#: 曲线最多鼓多少（批次 M15）。``RATIO`` 是弦长的比例，``MAX`` 是硬上限。
+#: 开源那套在两端等高时故意鼓**半个跨度**（``Math.abs(x2-x1)/2``）；跨度一大就变成
+#: 横贯整张画布的大弧 —— 用户把卡片拖散之后，最长的一条实测鼓出 800+ px。
+#: 现在只鼓一点点：留下曲线的手感，不制造新的绕路。
+CURVE_SAG_RATIO = 0.10
+CURVE_SAG_MAX = 16.0
 
-#: 开源里的 ``const min = 5``：两端几乎同一竖线 / 同一横线时换一种控制点算法。
-BEZIER_MIN_GAP = 5.0
+#: 让开挡住路的那张卡时，线离卡片边框至少留这么多（批次 M15）。
+CURVE_CLEAR = 6.0
+#: 让路时鼓包最多这么高（弦长比例 / 绝对像素）—— 再高就变回 M14 那种大弧了。
+#: 比例定 0.65 是量出来的：``_blocked_cross_layout`` 那个 fixture（三张卡一字排开、
+#: 连线要跨过中间那张）里两端只隔 32px 的空档，线出卡之后必须在这 32px 内就抬到
+#: 卡片上沿以外 —— 比例给小了（0.22 / 0.35 都试过）就整条放弃、退回直穿卡片。
+CURVE_SAG_LIFT_RATIO = 0.65
+CURVE_SAG_LIFT_MAX = 110.0
+#: 抬高时依次试这几档（乘在 :data:`CURVE_SAG_MAX` 那个「细鼓包」上）。
+CURVE_SAG_STEPS = (2.0, 3.0, 4.0, 5.0, 6.5)
 
 
-def relative_side(src, dst) -> str:
-    """``src`` 落在 ``dst`` 的哪个方向（纯函数，照抄开源 ``getRectRelativePosition``）。
+def border_anchor(node, toward_x, toward_y) -> tuple[float, float]:
+    """从这张卡的中心朝 ``(toward_x, toward_y)`` 射一条线，落在**这张卡边框**上的点。
 
-    比的是两个矩形的**中心点**，返回 ``left-top`` / ``right-top`` / ``right-bottom`` /
-    ``left-bottom`` / ``left`` / ``right`` / ``top`` / ``bottom`` / ``overlap`` 之一。
-    开源里「正好相等」那一支用的是 ``===``（浮点精确相等）；这里同样用精确相等 ——
-    从 ``relative_side`` 拿到的方向决定了连接点落在哪条边上，对齐时给一个稳定的答案
-    比给一个抖动的答案好。
+    批次 M15 用它换掉了 M14 的「本条边的中点」（开源 ``getNodePoint``）。病根是量出来的：
+    M14 的连接点永远是边中点，一张卡的同一条边上挂 3 条关系时（用户把卡片拖散之后很常见，
+    实测 ``model performanc`` 的右边挂着 ``对照 / 因果 / 对照`` 三条），三条线从**同一个
+    像素**出发，一出卡就绞成一团 —— 这正是用户说的「交叉效果不好」。
+
+    换成「射向对面那张卡」之后，方向不同的线自然落在边框的不同位置；两点之间也回到最短的
+    那条路，不再横贯整张画布。
     """
-    dx = float(src.x) - float(dst.x)
-    dy = float(src.y) - float(dst.y)
-    if dx == 0.0:
-        if dy == 0.0:
-            return "overlap"
-        return "top" if dy < 0.0 else "bottom"
-    if dy == 0.0:
-        return "left" if dx < 0.0 else "right"
-    if dx < 0.0:
-        return "left-top" if dy < 0.0 else "left-bottom"
-    return "right-top" if dy < 0.0 else "right-bottom"
-
-
-def side_anchor(node, side: str) -> tuple[float, float]:
-    """一条边的**中点**（纯函数，照抄开源 ``getNodePoint``，``range=0``）。
-
-    开源是 ``left → (left, top + height/2)`` 等四个分支；我们的 ``LayoutNode`` 存的是
-    中心点 + 宽高，一一对应。
-    """
-    if side == "left":
-        return (float(node.x) - float(node.w) / 2.0, float(node.y))
-    if side == "right":
-        return (float(node.x) + float(node.w) / 2.0, float(node.y))
-    if side == "top":
-        return (float(node.x), float(node.y) - float(node.h) / 2.0)
-    return (float(node.x), float(node.y) + float(node.h) / 2.0)
-
-
-def bezier_controls(x1: float, y1: float, x2: float, y2: float):
-    """一条三次贝塞尔的两个控制点（纯函数，照抄开源 ``computeCubicBezierPathPoints``）。
-
-    默认「横着出发、横着进入」；两端几乎同一竖线就改成竖着出发；几乎同一横线就
-    改成向上鼓一下。三个分支的算式与开源逐字一致（包括那个 ``min``）。
-    """
-    cx1 = x1 + (x2 - x1) / 2.0
-    cy1 = y1
-    cx2 = cx1
-    cy2 = y2
-    if abs(x1 - x2) <= BEZIER_MIN_GAP:
-        cx1 = x1 + (y2 - y1) / 2.0
-        cx2 = cx1
-    if abs(y1 - y2) <= BEZIER_MIN_GAP:
-        cx1 = x1
-        cy1 = y1 - (x2 - x1) / 2.0
-        cx2 = x2
-        cy2 = cy1
-    return (cx1, cy1), (cx2, cy2)
+    hw = float(node.w) / 2.0
+    hh = float(node.h) / 2.0
+    dx = float(toward_x) - float(node.x)
+    dy = float(toward_y) - float(node.y)
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        # 两张卡中心重合：没有方向可言，给一个稳定的答案（开源的 ``overlap`` 也取右边）。
+        return float(node.x) + hw, float(node.y)
+    kx = hw / abs(dx) if abs(dx) > 1e-9 else float("inf")
+    ky = hh / abs(dy) if abs(dy) > 1e-9 else float("inf")
+    scale = min(kx, ky)
+    return float(node.x) + dx * scale, float(node.y) + dy * scale
 
 
 def _bezier_polyline(start, control_a, control_b, end, segments: int = CURVE_SEGMENTS):
@@ -1968,34 +1959,94 @@ def _bezier_polyline(start, control_a, control_b, end, segments: int = CURVE_SEG
     return out
 
 
-def relation_curve(src_node, dst_node) -> list[tuple[float, float]]:
-    """两张卡之间的一条关联线（纯函数，批次 M14，照开源做）。
+def _curve_polyline(x1, y1, x2, y2, sag) -> list[tuple[float, float]]:
+    """就着 ``(x1, y1) → (x2, y2)`` 这条弦鼓 ``sag`` 像素（负数就往另一边鼓）。"""
+    dx, dy = x2 - x1, y2 - y1
+    chord = math.hypot(dx, dy)
+    if chord < 1e-6:
+        return [(x1, y1), (x2, y2)]
+    normal_x, normal_y = -dy / chord, dx / chord
+    control_a = (x1 + dx / 3.0 + normal_x * sag, y1 + dy / 3.0 + normal_y * sag)
+    control_b = (x1 + dx * 2.0 / 3.0 + normal_x * sag,
+                 y1 + dy * 2.0 / 3.0 + normal_y * sag)
+    segments = int(max(CURVE_SEGMENTS, min(48, round(chord / 20.0))))
+    return _bezier_polyline((x1, y1), control_a, control_b, (x2, y2), segments)
 
-    三步，和开源 ``getNodeLinePath`` 一一对应：
 
-    1. :func:`relative_side` 看 ``src`` 在 ``dst`` 的哪一边；
-    2. 两端各取**朝向对方那条边的中点**当连接点（:func:`side_anchor`）——
-       线因此总是从卡片「面向对方」的那一侧进出，不会绕着卡片兜一圈；
-    3. :func:`bezier_controls` 给两个控制点，采样成折线。
+def _curve_is_clear(points, blockers, clear: float) -> bool:
+    """这条线有没有从任何一张**别的卡**身上压过去（端点那两张不在 ``blockers`` 里）。"""
+    for node in blockers:
+        box = node_box(node, 0.0)
+        rect = (box[0] - clear, box[1] - clear, box[2] + clear, box[3] + clear)
+        for a, b in zip(points, points[1:]):
+            if _segment_hits_rect(a[0], a[1], b[0], b[1], rect):
+                return False
+    return True
+
+
+def edge_curve(nodes, src_node, dst_node) -> list[tuple[float, float]]:
+    """:func:`relation_curve` 的「知道场上还有谁」版本 —— 产品与守卫都走这一个入口。
+
+    这样「这条线为什么长这样」永远只有一个答案，守卫也只需要比对它。
+    """
+    taken = {int(src_node.entry_id), int(dst_node.entry_id)}
+    return relation_curve(src_node, dst_node,
+                          blockers=[n for n in nodes if int(n.entry_id) not in taken])
+
+
+def relation_curve(src_node, dst_node, blockers=()) -> list[tuple[float, float]]:
+    """两张卡之间的一条关联线（纯函数，批次 M15）。
+
+    三步：
+
+    1. 两端各取「**朝对方那张卡射过去、落在自己边框上**」的那个点
+       （:func:`border_anchor`）—— 方向不同的线自然落在边框的不同位置，
+       不再从同一个像素炸开；
+    2. 就着这条弦鼓一点点（:data:`CURVE_SAG_RATIO` / :data:`CURVE_SAG_MAX`）：
+       两个控制点落在三等分处、朝同一边偏 ``sag``。有曲线的手感，又不绕路；
+    3. 采样成折线（:func:`_bezier_polyline`），整条链路只用点串。
+
+    ``blockers`` 是场上**别的卡片**：这条弦要是正好从谁身上压过去（同一排里隔着两三张
+    卡的关系最常见），就把鼓包加大到刚好让开它（:data:`CURVE_CLEAR`），两边都试着鼓、
+    谁先让开用谁。让不开就退回近直线，绝不没完没了地绕。
 
     **故意不做的三件事**（以前都做过，正是「横贯全图的扫线」的成因）：
-    避让障碍、判交叉、共用走廊。开源六家没有一家做，见文件上面那段对照。
+    查表避障、判交叉、共用走廊。开源六家没有一家做，见文件上面那段对照
+    —— ``blockers`` 不是路由：它不选路、不绕远、不并线，只把弧度抬高一点点。
+
+    批次 M15 为什么不逐字照抄开源了：开源那套（``getNodePoint`` 取边中点 +
+    ``computeCubicBezierPathPoints`` 永远水平出入 + 两端等高时鼓半个跨度）是给
+    **树形布局**写的 —— 树里每个节点只往左右两边连线、相邻节点离得很近。我们这张图是
+    **自由摆放**的关系图（用户能把任意一张卡拖到任意位置），照抄的结果就是同点炸开 +
+    大弧横扫。改的是「端点怎么取」，不是「要不要曲线」。
     """
-    from_side, to_side = _RELATIVE_SIDES[relative_side(src_node, dst_node)]
-    start = side_anchor(src_node, from_side)
-    end = side_anchor(dst_node, to_side)
-    control_a, control_b = bezier_controls(start[0], start[1], end[0], end[1])
-    span = math.hypot(end[0] - start[0], end[1] - start[1])
-    segments = int(max(CURVE_SEGMENTS, min(48, round(span / 20.0))))
-    return _bezier_polyline(start, control_a, control_b, end, segments)
+    x1, y1 = border_anchor(src_node, dst_node.x, dst_node.y)
+    x2, y2 = border_anchor(dst_node, src_node.x, src_node.y)
+    chord = math.hypot(x2 - x1, y2 - y1)
+    if chord < 1e-6:
+        return [(x1, y1), (x2, y2)]
+    slim = min(chord * CURVE_SAG_RATIO, CURVE_SAG_MAX)
+    points = _curve_polyline(x1, y1, x2, y2, slim)
+    if not blockers or _curve_is_clear(points, blockers, CURVE_CLEAR):
+        return points
+    # 弦从别的卡片身上压过去了：两边都试着鼓高一点，谁先让开就用谁。
+    limit = min(chord * CURVE_SAG_LIFT_RATIO, CURVE_SAG_LIFT_MAX)
+    for step in CURVE_SAG_STEPS:
+        sag = min(slim * step, limit)
+        for sign in (1.0, -1.0):
+            lifted = _curve_polyline(x1, y1, x2, y2, sign * sag)
+            if _curve_is_clear(lifted, blockers, CURVE_CLEAR):
+                return lifted
+    return points
 
 
 def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
     """给每条关系画一条线，并放好它的类型标签（纯函数）。
 
     批次 M14 起**照开源做法**：一条边 = 一条三次贝塞尔，见 :func:`relation_curve`。
-    不再避让障碍、不再判交叉、不再共用走廊 —— 出处与六家源码的对照写在
-    :func:`relation_curve` 上面的那段注释里。
+    批次 M15 起端点改成「朝对面射出去的边框交点」，并留下一条底线：线不许从别的卡片
+    身上压过去（:func:`edge_curve`）。出处与六家源码的对照写在 :func:`relation_curve`
+    上面的那段注释里。
 
     ``ortho`` / ``links`` 两个参数**保留但不再参与选线**：调用方与旧签名一个字不用改，
     M12/M13 那套正交排线的函数也留着（导出与守卫还在用里面的小工具）。现在一条边
@@ -2011,7 +2062,7 @@ def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
         src_node, dst_node = by_id.get(int(src)), by_id.get(int(dst))
         if src_node is None or dst_node is None:
             continue
-        points = relation_curve(src_node, dst_node)
+        points = edge_curve(nodes, src_node, dst_node)
         label_offset = label_gap_px(m)
         center, tangent = _route_midpoint(points)
         base_pos = _normal(center, tangent, label_offset)
@@ -2297,7 +2348,7 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
         node = by_id.get(int(entry_id))
         if node is None or node.isolated:
             continue
-        topic_links.append(tuple(relation_curve(topic, node)))
+        topic_links.append(tuple(edge_curve(nodes, topic, node)))
 
     # ---- 关系连线：只在这里决定「线怎么走」（避障 + 标签让位，节点位置不动） ----
     base_edges: list[LayoutEdge] = []

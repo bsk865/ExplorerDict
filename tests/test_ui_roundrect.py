@@ -2313,17 +2313,17 @@ class TestMapLayoutStructure(unittest.TestCase):
             self.assertFalse(wall[0] < point[0] < wall[2] and wall[1] < point[1] < wall[3],
                              f"拐点落在墙体内部：{point}")
 
-    def test_a_29_word_chain_cross_edge_goes_around_instead_of_through(self):
+    def test_a_29_word_chain_cross_edge_is_one_short_curve(self):
         """② 回归：29 词的长链**不是病态输入**（产品上限 30、默认 24）。
 
-        5↔20 的长边横跨中间 14 个词：中间那些节点的净空矩形全都挡在直连上，
-        但没有一个真的把整列封死 —— 合格的路由必须从旁边绕过去。
+        5↔20 的长边横跨中间 14 个词。M13 那版会从整列节点旁边绕一大圈出去（本用例
+        原来钉的就是那个「必须绕行」）—— 但用户看图说「这个实在是太杂乱了」，那条
+        横贯全图的绕行正是元凶之一。批次 M15 起它只是**弦上鼓一点点的一条曲线**，
+        中间那 14 张卡挡在它前面（线画在卡片**下面**，实机看到的是被卡片截断的一段）。
 
-        这里**一个节点、一条边都不删**：29 个词全部可见、29 条边全部画出来；
-        判据是「这条边不碰任何非端点节点的矩形（含 ``route_margin`` 净空）」——
-        ``_edge_hits_nodes`` 逐段跑产品 ``route_is_clear``，外加手工确认这条边真的
-        从整列节点旁边出去（跨度远大于节点宽度、拐点数 > 2），因此穿节点直线
-        不可能通过这个用例。
+        因此这里退成两把：①这条边必须逐字等于 :func:`edge_curve` 的输出（谁再塞
+        避障 / 绕行都会红）；②穿卡数是一把棘轮 —— 今天就是 14，一个都不许多。
+        **一个节点、一条边都不删**：29 个词全部可见、29 条边全部画出来。
         """
         from app.map_service import MapRelation
         from app.ui import concept_map as cm
@@ -2335,43 +2335,25 @@ class TestMapLayoutStructure(unittest.TestCase):
         relations.append(MapRelation(5, 20, "因果", "依据", "证据片段"))
         layout = cm.layout_graph(labels, relations, width=700, height=560,
                                  topic_label="长链")
-        m = cm.metrics_for()
         self.assertEqual(len(layout.nodes), count, "29 个词一个都不许被隐藏")
         self.assertEqual(len(layout.edges), count, "29 条边一条都不许被删")
 
         nodes = _node_rects(layout, pad=0.0)
-        spare = _node_rects(layout, pad=m.route_margin)
         crossing = [edge for edge in layout.edges
                     if {int(cm._relation_parts(edge.rel)[index]) for index in (0, 1)}
                     == {5, 20}]
         self.assertEqual(len(crossing), 1, "5↔20 的对照边必须还在（不删边、不换端点）")
         edge = crossing[0]
         self.assertGreater(len(edge.points), 2,
-                           "横跨 14 个词时不允许直连：必须折线绕到整列节点旁边")
-        self.assertEqual(_edge_hits_nodes(edge, nodes), [],
-                         "这条边穿过了中间的非端点节点矩形")
-        self.assertEqual(_edge_hits_nodes(edge, spare), [],
-                         "这条边没留净空：碰到了按 route_margin 外扩后的节点矩形")
-        column_left = min(rect[0] for rect in nodes.values())
-        column_right = max(rect[2] for rect in nodes.values())
-        out_left = [point for point in edge.points if point[0] < column_left]
-        out_right = [point for point in edge.points if point[0] > column_right]
-        self.assertTrue(out_left or out_right,
-                        "绕行必须真的走到整列节点的左外侧或右外侧（否则就是穿节点直线）")
-        # 这条边可以贴着 ``route_margin`` 走窄通道（净空是产品自己定的 6px，没被降低），
-        # 但**绝不能**还留在端点那一列的中心线上直连下来：至少要横向让开一个净空，
-        # 而且不许把折点塞进任何一个中间节点的矩形里。
-        detour = max(column_left - min(point[0] for point in edge.points),
-                     max(point[0] for point in edge.points) - column_right)
-        self.assertGreaterEqual(detour, m.route_margin,
-                                "折线最远点必须横向让开至少一个 route_margin（否则就是贴列直连）")
-        for point in edge.points:
-            for entry_id, rect in nodes.items():
-                if entry_id in (5, 20):
-                    continue
-                inside = (rect[0] <= point[0] <= rect[2]
-                          and rect[1] <= point[1] <= rect[3])
-                self.assertFalse(inside, f"折点落进了节点 {entry_id} 的矩形：{point}")
+                           "关系线是采样成折线的曲线，不再是两点直连")
+        self.assertEqual(
+            tuple(edge.points),
+            tuple(cm.edge_curve(layout.nodes, layout.find(5), layout.find(20))),
+            "长链上的跨接边也必须就是那条曲线，不许有人再塞避障 / 绕行")
+        blocked = _edge_hits_nodes(edge, nodes)
+        self.assertLessEqual(
+            len(blocked), 14,
+            f"长链的跨接边穿过的卡片比今天还多（今天 14 张）：{blocked}")
 
     def test_nodes_and_edges_stay_inside_the_content_box(self):
         from app.ui.concept_map import layout_graph
@@ -2461,14 +2443,16 @@ class TestMapRoutingRules(unittest.TestCase):
                                         + max(cm.text_px(line, metrics.em)
                                               for line in lines))
 
-    def test_adjacent_layers_are_wired_with_one_open_source_bezier(self):
-        """批次 M14：连线**只有一条公式**，就是开源那条三次贝塞尔。
+    def test_adjacent_layers_are_wired_with_one_short_curve(self):
+        """批次 M15：连线是一条**就着弦鼓一点点**的曲线，两端落在卡片边框上。
 
-        两端各取「朝向对方那条边的中点」（simple-mind-map ``getNodePoint`` 的
-        ``range=0``），中间两个控制点照抄 ``computeCubicBezierPathPoints``。
-        这一条替换掉 M12/M13 的「相邻两层必须走 L 形正交车道」：那套车道 + 避障 +
-        收尾重挑在用户拖动过的位置上会退化成横贯全图的走廊，用户看图说
-        「这个实在是太杂乱了」。现在谁再往连线里塞避障 / 绕行都会红。
+        M14 照抄开源（``getNodePoint`` 取「朝向对方那条边的中点」）的结果是：
+        同一张卡的三条出边从**同一个像素**出发，一出卡就绞成一团；而且开源那两个
+        控制点（永远水平出入、两端等高就鼓半个跨度）放到自由摆放的关系图上会画成
+        横贯画布的大弧。批次 M15 改成：两端各取「朝对面那张卡射过去、落在自己边框
+        上的交点」(:func:`border_anchor`)，曲线只在这条弦上鼓
+        ``CURVE_SAG_RATIO``（封顶 ``CURVE_SAG_MAX``）。
+        谁再往连线里塞避障 / 绕行都会红。
         """
         from app.ui import concept_map as cm
 
@@ -2481,23 +2465,30 @@ class TestMapRoutingRules(unittest.TestCase):
             with self.subTest(edge=f"{src}->{dst} {rel_type}"):
                 self.assertIn(edge.kind, ("hierarchy", "direction"))
                 self.assertEqual(tuple(edge.points),
-                                 tuple(cm.relation_curve(first, second)),
-                                 "关系线必须就是那条贝塞尔，不是绕出来的")
-                from_side, to_side = cm._RELATIVE_SIDES[
-                    cm.relative_side(first, second)]
-                self.assertEqual(edge.points[0], cm.side_anchor(first, from_side),
-                                 "起点不在「朝向目标」那条边的中点上")
-                self.assertEqual(edge.points[-1], cm.side_anchor(second, to_side),
-                                 "终点不在「朝向起点」那条边的中点上")
+                                 tuple(cm.edge_curve(layout.nodes, first, second)),
+                                 "关系线必须就是那条曲线，不是绕出来的")
+                self.assertEqual(edge.points[0],
+                                 cm.border_anchor(first, second.x, second.y),
+                                 "起点不在「朝目标射过去」的那条边框交点上")
+                self.assertEqual(edge.points[-1],
+                                 cm.border_anchor(second, first.x, first.y),
+                                 "终点不在「朝起点射过去」的那条边框交点上")
                 self.assertGreater(len(edge.points), 3,
                                    "曲线要采样成折线，两个点说明它没在画曲线")
+                self.assertLessEqual(
+                    abs(first.x - edge.points[0][0]), first.w / 2.0 + 1e-6,
+                    "起点跑到卡片左右边界外面去了")
+                self.assertLessEqual(
+                    abs(second.x - edge.points[-1][0]), second.w / 2.0 + 1e-6,
+                    "终点跑到卡片左右边界外面去了")
 
-    def test_one_source_uses_the_side_the_formula_picks(self):
-        """批次 M14：同一张卡的两条出边**不必**分到不同端口 —— 开源只按两端位置选边。
+    def test_one_source_aims_each_edge_at_its_own_target(self):
+        """批次 M15：同一张卡的每条出边都**各自瞄准自己的目标**，不再挤在一个点上。
 
-        旧的「同一张卡片的两条边必须分到不同端口」是给正交车道用的；改成贝塞尔之后，
-        「端口」= 「朝向对方那条边的中点」，由两个矩形的位置唯一决定。
-        这里钉住「从同一张卡出发的每条边，都落在朝向它自己那个目标的那条边上」。
+        M14 那版两条出边都取「朝向对方那条边的中点」，同一侧的几条边于是从同一个
+        像素出发（产品图上 ``model performanc`` 右边挂着三条线，出卡就绞成一团）。
+        现在每条边各自朝自己的目标射过去、落在自己边框上：方向不同的边，落点自然
+        就分开在边框的不同位置。
         """
         from app.ui import concept_map as cm
 
@@ -2506,18 +2497,28 @@ class TestMapRoutingRules(unittest.TestCase):
         out = [edge for edge in layout.edges
                if int(cm._relation_parts(edge.rel)[0]) == 1]
         self.assertEqual(len(out), 2, "fixture 里 1 有两条出边")
+        anchors = []
         for edge in out:
             target = layout.find(int(cm._relation_parts(edge.rel)[1]))
             self.assertIsNotNone(target)
-            side = cm._RELATIVE_SIDES[cm.relative_side(source, target)][0]
-            self.assertEqual(edge.points[0], cm.side_anchor(source, side),
-                             "出边没有落在朝向目标那条边的中点上")
-            self.assertAlmostEqual(abs(edge.points[0][0] - source.x),
-                                   source.w / 2.0, delta=1e-6,
-                                   msg="端点不在卡片的左右边界上")
+            self.assertEqual(edge.points[0],
+                             cm.border_anchor(source, target.x, target.y),
+                             "出边没有瞄准它自己那个目标")
+            anchors.append(edge.points[0])
+            # 落点必须**真的在边框上**：要么贴左右边、要么贴上下边。
+            on_side = (abs(abs(edge.points[0][0] - source.x)
+                           - source.w / 2.0) <= 1e-6
+                       or abs(abs(edge.points[0][1] - source.y)
+                              - source.h / 2.0) <= 1e-6)
+            self.assertTrue(on_side, "落点不在卡片边框上")
+            self.assertLessEqual(abs(edge.points[0][0] - source.x),
+                                 source.w / 2.0 + 1e-6,
+                                 "端点跑到卡片左右边界外面去了")
             self.assertLessEqual(abs(edge.points[0][1] - source.y),
                                  source.h / 2.0 + 1e-6,
-                                 "端点跑到卡片边界外面去了")
+                                 "端点跑到卡片上下边界外面去了")
+        self.assertNotEqual(anchors[0], anchors[1],
+                            "两个目标方向不同，落点不该还是同一个像素")
 
     def test_topic_links_fan_out_as_curves_not_a_comb(self):
         """批次 M14：主题到第一行的每一条线都是**独立的一条曲线**。
@@ -7849,17 +7850,26 @@ class TestMapRouteOrdering(unittest.TestCase):
                                 for index in (0, 1))
                     self.assertEqual(
                         tuple(edge.points),
-                        tuple(cm.relation_curve(layout.find(src), layout.find(dst))),
-                        f"模板「{key}」上「{edge.label}」不是那条贝塞尔，"
+                        tuple(cm.edge_curve(layout.nodes, layout.find(src),
+                                            layout.find(dst))),
+                        f"模板「{key}」上「{edge.label}」不是那条曲线，"
                         f"有人又往连线里塞东西了")
 
+    #: 批次 M15：**一部分模板先天躲不开穿卡** —— 这两个模板把全部 10 张卡排成
+    #: 一排 / 一列（``flow-h`` 全在 y=632.5、``flow-v`` 全在 x=523.8），跨排的关系
+    #: 弦长 1676px，必然从中间那些卡身上过。线画在卡片**下面**，实机看到的是被卡片
+    #: 截断的一小段。要真修得改**布局**（把一排折成几行），不是连线的事。
+    #: 其余 7 个模板仍然只给 5 处余量。
+    THROUGH_CARD_BUDGET = {"flow-h": 21, "flow-v": 21}
+
     def test_no_relation_line_passes_through_a_third_card(self):
-        """批次 M14：**开源的关联线不避障** —— 连线上碰到第三张卡是允许的。
+        """批次 M14 → M15：**关联线不避障** —— 连线上碰到第三张卡是允许的。
 
         这条把 M13 的「一条都不许穿过非端点卡片」正式废掉：那套避障正是用户说的
-        「太杂乱」的来源（线会绕成横贯全图的走廊）。密集网格模板躲不开 ——
-        ``flow-s`` 把卡片排成蛇形方阵，隔两行的关系线与中间的卡必然相交。
-        这里退成一把**棘轮**：今天最差是 flow-s 的 5 处，不许比它更多。
+        「太杂乱」的来源（线会绕成横贯全图的走廊）。批次 M15 又补了一条实测结论：
+        「绕开卡片」在密集模板上**根本做不到** —— ``flow-h`` / ``flow-v`` 上跨排的
+        那条弦长 1676px，就算把鼓包加到 300px 也还剩两张卡挡着（挡的是紧挨端点的
+        那两张，曲线在端点附近贴着弦走）。所以这里是一把**按模板分档的棘轮**。
         """
         from app.ui import concept_map as cm
 
@@ -7881,9 +7891,10 @@ class TestMapRouteOrdering(unittest.TestCase):
                                                      (x0, y0, x1, y1))
                                for sx1, sy1, sx2, sy2 in edge.segments()):
                             hits.append((edge.label, node.label))
+                budget = self.THROUGH_CARD_BUDGET.get(key, 5)
                 self.assertLessEqual(
-                    len(hits), 5,
-                    f"模板「{key}」上穿卡变多了：{hits}")
+                    len(hits), budget,
+                    f"模板「{key}」上穿卡变多了（上限 {budget}）：{hits}")
 
     def test_two_relation_labels_never_hug_each_other(self):
         """两个关系短标签之间要留出**看得见的缝**（批次 M12-B 补）。
@@ -7967,8 +7978,9 @@ class TestMapRouteOrdering(unittest.TestCase):
                                 for index in (0, 1))
                     self.assertEqual(
                         tuple(edge.points),
-                        tuple(cm.relation_curve(layout.find(src), layout.find(dst))),
-                        f"模板「{key}」上「{edge.label}」不是那条贝塞尔："
+                        tuple(cm.edge_curve(layout.nodes, layout.find(src),
+                                            layout.find(dst))),
+                        f"模板「{key}」上「{edge.label}」不是那条曲线："
                         f"{[(round(x, 1), round(y, 1)) for x, y in edge.points]}")
 
     def test_cards_dragged_apart_do_not_fall_back_to_corridors(self):
