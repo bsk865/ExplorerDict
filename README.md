@@ -3212,3 +3212,36 @@ fixture 直接用**用户真看到的那份数据**；变异验证：把车道�
 **测试**：`tests.test_map_templates + tests.test_map_export + tests.test_ui_roundrect + tests.test_export_service`
 **Ran 396 / OK**；逐字 19 模块白名单 **Ran 972 / failures=7**（6 条既定陈旧失败 + 1 条环境：
 本机正开着 `探索词典.exe`，单实例闸门返回 5）。
+
+## 42. 批次 M14：关系线照开源重做成一条三次贝塞尔
+
+用户口径：「请你参考开源的思维导图进行修正，这个实在是太杂乱了。」+「你现在只是参考技术文章，
+但是你不参考开源的实际的代码和效果？」
+
+### 42.1 先读源码（六家）
+
+`D:\探索工具\survey\`（仓库外）存着下载下来的原文。逐行对照表见 `改进清单.md` 的 M14 节。
+**结论**：六家里没有一家绕开卡片、没有一家躲交叉；每条连线的几何都只是两个端点的闭式函数，
+没有任何一个函数拿得到「第三个节点」。⇒ 交叉交给布局，不交给连线。
+
+### 42.2 落地
+
+`app/ui/concept_map.py`（batch M14 起点在 `:1838` 那段注释，`:1872` 起是代码）：
+
+* `_RELATIVE_SIDES` / `relative_side(src, dst)`：照抄 `getRectRelativePosition`，9 种方位。
+* `side_anchor(node, side)`：照抄 `getNodePoint`（`range=0`），取那条边的中点。
+* `bezier_controls(x1, y1, x2, y2)`：照抄 `computeCubicBezierPathPoints`，三个分支逐字一致
+  （包括 `abs(...) <= 5` 那个 `min`）。
+* `_bezier_polyline(...)`：`CURVE_SEGMENTS = 12` 段采样。整条链路（画布 / 标签 / 箭头 /
+  PNG / SVG / PDF）共用「一串点」，所以下游零改动。
+* `relation_curve(src_node, dst_node)`：上面三步串起来。
+
+**退役**：`_visual_rows` / `_corridor_routes` / `_plan_routes` / `_orthogonal_plans` 不再参与连线。
+
+### 42.3 守卫改写与实测
+
+29 条旧契约守卫逐条改写（名字与断言见 `改进清单.md` M14 节），
+`tests.test_map_templates + tests.test_map_export + tests.test_ui_roundrect + tests.test_export_service`
+= **Ran 400 / OK**；逐字 19 模块白名单 = **Ran 972 / failures=6**（6 条既定陈旧失败，无新增）。
+新守卫的口径：**每条边逐字等于 `relation_curve()`**（不是「像曲线」），
+再加两条棘轮（9 模板交叉 ≤ 2、穿卡 ≤ 5）。
