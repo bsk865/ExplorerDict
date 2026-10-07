@@ -3245,3 +3245,97 @@ fixture 直接用**用户真看到的那份数据**；变异验证：把车道�
 = **Ran 400 / OK**；逐字 19 模块白名单 = **Ran 972 / failures=6**（6 条既定陈旧失败，无新增）。
 新守卫的口径：**每条边逐字等于 `relation_curve()`**（不是「像曲线」），
 再加两条棘轮（9 模板交叉 ≤ 2、穿卡 ≤ 5）。
+
+## 43. 批次 M15：关系线改成「就着弦鼓一点点」
+
+用户口径：「可以有交叉，主要是你自己做的交叉效果不好。」——**零交叉这个指标当场作废**。
+
+### 43.1 病根
+
+M14 那套是给**树**写的（simple-mind-map `getNodePoint`）：树上一个父节点方位固定，「取朝向对方那条边的
+**中点**」永远够用。自由摆放的关系网里，`model performanc` 一次伸出三条线（对照 / 因果 / 对照），
+全落在右边中点**那一个像素**上，控制点又固定水平出入 ⇒ 三条线从同一点出发互相绞住。
+`.tmp/probe_m15.py` 实测：最尖交叉 **18.8°**、最长弦 **1758 px**。
+
+### 43.2 落地
+
+`app/ui/concept_map.py`：
+
+* `border_anchor(node, toward_x, toward_y)`：从自己中心朝对方中心射一条线，**落在自己边框上**
+  （方向不同 ⇒ 落点不同，守卫 `test_one_source_aims_each_edge_at_its_own_target` 钉死）。
+* `CURVE_SAG_RATIO = 0.10` / `CURVE_SAG_MAX = 16.0`：控制点只在弦上鼓一点点。
+* 段数自适应 `clamp(round(弦长 / 20), CURVE_SEGMENTS, 48)`。
+* **删除** `_RELATIVE_SIDES` / `BEZIER_MIN_GAP` / `relative_side` / `side_anchor` / `bezier_controls`。
+  `_bezier_polyline()` 与 `CURVE_SEGMENTS = 12` 原样保留。
+
+### 43.3 实测
+
+9 模板 × {默认排布, 拖散位置}：`pinned` 交叉 2→4 / 穿卡 2→1；`default-tree` 多绕 **+39.0% → +2.4%**；
+`flow-h` 多绕 **+39.4% → +23.8%**。**交叉数变多而线条变顺**——交叉数不是用户要的指标。
+回归 4 模块 **Ran 400 / OK**、白名单 **Ran 972 / failures=6**。还原点 `d699ff8`。
+
+## 44. 批次 M16：边界即抓取区 + 文字不许压卡
+
+用户口径：「1 太乱…我也暴露了我们一个问题，导图应该看上下文进行归纳总结。2 你这个边框优化一下，
+边框同时也作为用户对词语的抓取边界，只要在词语标签的边界内，他就可以进行拖拽。」
+
+### 44.1 M16-A：判定本来就是整张卡，缺的是光标
+
+`MapLayout.node_at(x, y, pad=theme.px(NODE_HIT_PAD))`（`NODE_HIT_PAD = 2`）一直按**整张卡片矩形**判定；
+真 Tk 探针在卡内点 8 个位置 **8/8 命中**。补的是悬停光标（`_hover_cursor` → `fleur`）。
+第一版误挂 `<B1-Motion>` 不生效——**测函数返回值测不出事件有没有接上**。
+
+### 44.2 M16-B：文字一个都不许落在卡片框里
+
+`_label_position()` 把卡片当**硬障碍**（关系标签 / 组名 / 孤立词行），无处可去就**不画**（`None`）。
+前后对照：`pinned` 压卡 **2 → 0**、`tree` **2 → 0**、`mindmap` **1 → 0**；真 Tk 复验卡外文字 9 处、
+压卡 **0 处**。新守卫 `TestMapTextNeverCoversACard`（3 条）。还原点 `9196e86`。
+
+### 44.3 M16-C：只做到侦查——「太乱」的病根在生成侧
+
+真文章（18 词）走产品管线：`app/api_client.py` 的 `MAP_SYSTEM_PROMPT` 只要**两两关系**⇒ 产出必然是网；
+同批词先归 4 个分支再画（分组树 / 放射思维导图）**交叉 0、穿卡 0**。⇒ 缺的是「会归纳」的生成侧。
+
+## 45. 批次 M17：②缩放去顿挫 ③标题栏三键 ④线框抗锯齿去白边
+
+用户口径：「继续学习，差太多了，无论是分辨率还是流畅度…我禁止你把文字盖在关键词方框后面」
++「缩放有卡顿…没有缩小模式，窗口模式，大屏模式…线框…锯齿边缘…边框附件没有裁剪干净存在白色的
+边线」+「包括浮窗方块。」拍板：按钮要「和一般的 windows 应用一样，窗口显示栏」；本批先做 ②③④。
+
+**「分辨率」先核实**：应用本来就声明了 per-monitor-v2 DPI 感知（`app/main.py` 启动时
+`enable_dpi_awareness()`；探针实测 dpi=144），窗口没被系统拉伸。真正的「看不清」是 **Tk 画布不抗锯齿**。
+
+### 45.1 M17-A：`draw_round_rect` 换成 2 倍超采样位图
+
+* 先试「PIL 超采样 2 倍 → `Image.reduce(2)` → `PhotoImage` → `create_image`」，**做不到就原样退回折线**
+  （假 Tk 画布没有 `create_image` ⇒ `tests/support.py` 的断言一条不改）。
+* 位图缓存在 `canvas._aa_images`（**不能挂模块级全局**：`PhotoImage` 属于某个 Tk 解释器），
+  `AA_CACHE_MAX = 160`，只淘汰「图元已全没了」的条目。
+* 成本 0.33 ms/框（13 框冷启 18.5 ms、**命中缓存 0 ms**）；`TermCard` 悬停改色改成 `_redraw_shape()`
+  （位图图元没有 `-fill`）；`ScrollRail` 滑块与阅读浮窗描边一起换过来；`round_rect_points()` 未动。
+* **像素级验收**：沿弧横扫，折线路径 **0 个中间灰**（硬台阶），位图路径 **7 个**（覆盖率像素）。
+* **白线**：位图贴图坐标原来被 Tk 向上取整，描边外缘半像素被丢 ⇒ 窗口最外像素是底色(249,248,246)。
+  改成 `math.floor` 往外取整后最外像素 **200/200 = 描边色**。
+  **未做**：浮窗最外圈是 Win32 region（二值、无 AA）裁的，那一圈永远是硬边；要平滑需换分层窗口。
+
+### 45.2 M17-B：滚轮只合并重画，不合并缩放
+
+`zoom_by(..., coalesce=True)`：`_zoom` 与锚点**立刻生效**，重画交给
+`after(ZOOM_REDRAW_MS = 16, self._flush_wheel_redraw)`。实测一次滚动的 5 个刻度
+**121.5 ms / 5 次重画 → 4.3 ms / 1 次重画**，指针底下的世界坐标漂移 < 1 px。
+cProfile：大头是 Tk 解释器调用（≈142 次/帧），不是纯 Python 布局。
+
+### 45.3 M17-C：标题栏三键
+
+* `app/win32util.py`：`show_in_taskbar()` / `minimize_window()`（`WS_EX_APPWINDOW` + `SW_MINIMIZE`）。
+  裸 `win.iconify()` 对 `overrideredirect` 窗口抛 `TclError`；先摘 `overrideredirect` 会闪原生标题栏。
+* `widgets.BorderlessChrome`：新增 `on_maximize` / `btn_max`（字形 `□` U+25A1），
+  从右到左 pack × □ —。「▢」走 `state("zoomed")` / `state("normal")`。
+* 只加**主窗口 + 导图窗**；其余 10 个小对话框仍只有一个 ×。
+* 坑：`is_window_visible()` 最小化时仍 True，判「缩下去了」要用 `is_iconic()`。
+
+### 45.4 回归
+
+`tests.test_ui_roundrect` **Ran 293 / OK**（新增 6 条标题栏守卫）；
+5 模块 **Ran 591 / failures=2**（两条既定陈旧失败）；逐字 19 模块白名单
+**Ran 983 / failures=6**（972 + M16-A 2 + M16-B 3 + M17-C 6 = 983，无新增失败）。
