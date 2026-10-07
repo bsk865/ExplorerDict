@@ -1833,233 +1833,199 @@ def _simple_orthogonal_routes(start, end, nodes, m: MapMetrics, *,
     return [(tuple(points), None) for points in out]
 
 
-def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
-    """给每条关系**选一条真实画得出来的线**，并放好它的类型标签（纯函数）。
+# ---------------------------------------------------------------------------
+# 批次 M14：关系线照开源做法 —— 一条三次贝塞尔「关联线」
+#
+# 用户口径：「请你参考开源的思维导图进行修正，这个实在是太杂乱了。」+「要看源码，
+# 不要只是学概念。」于是把开源的源码读了一遍（不是看概念）。逐行对照：
+#
+#   simple-mind-map/src/plugins/associativeLine/associativeLineUtils.js
+#     :11  ``computeCubicBezierPathPoints``  → :func:`bezier_controls`
+#     :174 ``getNodePoint``                  → :func:`side_anchor`
+#     :210 ``computeNodePoints``             → ``_RELATIVE_SIDES`` + :func:`relative_side`
+#     :274 ``getNodeLinePath``               → :func:`relation_curve`
+#     ``mm-utils.js:1378 getRectRelativePosition`` → :func:`relative_side` 的方向判定
+#
+# 同批还核对了另外五个项目（原文都在 ``D:\探索工具\survey\``）：
+#   * mind-elixir-core ``src/utils/generateBranch.ts``（``roundedVertical`` 圆角肘形 +
+#     侧向 ``Q``/``C``）、``src/arrow.ts``（``calcP`` 射线切矩形 + 一条 ``C``）；
+#   * mermaid ``mindmapDb.ts``（``curve: 'basis'``）+ ``rendering-elements/edges.js``
+#     （d3 ``curveBasis``）；
+#   * markmap ``packages/markmap-view/src/view.ts``（``linkHorizontal()``）；
+#   * jsmind ``src/jsmind.graph.js``（``bezierCurveTo(x1+((x2-x1)*2)/3, y1, x1, y2, x2, y2)``）；
+#   * freeplane ``edge/BezierEdgeView.java``（``curveTo`` + ``getControlPoint``）。
+#
+# **结论（源码实证）：六家里没有一家绕开卡片、没有一家躲交叉。** 每条连线的几何
+# 都只是「两个端点（或两个矩形）」的闭式函数 —— 没有可见性测试、没有 A*/正交路由、
+# 没有线段相交测试，也没有任何函数拿得到「第三个节点」。唯一沾边的是 mermaid 的
+# ``lineJump.ts``（检测交叉后把后画的那条改成小弧或断开），但它是「装饰已有的交叉」
+# 而不是避让，而且明确「不碰曲线路径」，mindmap 的 ``curve: 'basis'`` 正好被排除。
+#
+# ⇒ 交叉是**布局**该避免的事，不是连线该绕的事。我们以前那套「绕开卡片 / 躲开交叉 /
+#   走公共走廊」（:func:`route_edges` 的旧实现）为了让线不穿卡片，把它们全推到
+#   y=-1 / y=146 / y=300 这几条公共走廊上，几条线并排横贯整张画布 —— 用户说的
+#   「太杂乱」正是这么来的。
+# ---------------------------------------------------------------------------
 
-    * 一条边绝不穿过**非端点**节点的矩形（含小间距：障碍按 ``route_margin`` 外扩）；
-    * 层级 / 方向 / 跨边走**正交线**（``ortho`` 参数给出，见
-      :func:`_orthogonal_routes`）：这是排版规范 —— 同层直连或绕行、相邻行走车道、
-      跨行走走廊；只要它本身干净就一定采用，脏了就退回候选搜索，**绝不硬穿**；
-    * 反馈先试弧线（正反两个方向 + 多档弯曲），不行再折线绕行；
-    * 兜底候选里跨边仍优先弧线（那是「横跨」的视觉语言）；
-    * 位置被用户拖散之后正交计划可能过不了避障 ⇒ 这时**先补一组直角走法**
-      （:func:`_simple_orthogonal_routes`），斜线只在连直角都无路可走时才出现；
-    * 代价里把「与已定的连线 / 主题母线**交叉**」和「斜线段」都算进去（批次 M13）
-      —— 用户口径「不要出现关系线交叉」。两项都是**按长度折算**的：绕开一处交叉
-      大约值 1100px 的额外路程（``4e2 / 0.35``），再远就宁可让它交叉一次，
-      也不画一条横贯全图的大回环；一条斜线段值 1400px，所以斜线只在连直角都
-      走不通时才出现；
-    * 关系标签避开所有节点矩形与已放好的标签，同时仍然贴着它自己的那条边；
-    * 同一对词之间的第二条线**不许和第一条重合**（重合会被读成一条粗线）；
-    * ``对照`` 是对称关系：``symmetric=True``（两端都不画箭头）。
-    节点位置与层级**一个字都不动** —— 这里只改连线怎么走。
+#: ``src`` 朝向对方那条边 → ``dst`` 朝向对方那条边（照抄开源 ``computeNodePoints``
+#: 的 switch）。方向名由 :func:`relative_side` 给出。
+_RELATIVE_SIDES = {
+    "left-top": ("right", "top"),
+    "right-top": ("left", "top"),
+    "right-bottom": ("left", "bottom"),
+    "left-bottom": ("right", "bottom"),
+    "left": ("right", "left"),
+    "right": ("left", "right"),
+    "top": ("right", "right"),
+    "bottom": ("left", "left"),
+    "overlap": ("right", "right"),
+}
+
+#: 开源里的 ``const min = 5``：两端几乎同一竖线 / 同一横线时换一种控制点算法。
+BEZIER_MIN_GAP = 5.0
+
+
+def relative_side(src, dst) -> str:
+    """``src`` 落在 ``dst`` 的哪个方向（纯函数，照抄开源 ``getRectRelativePosition``）。
+
+    比的是两个矩形的**中心点**，返回 ``left-top`` / ``right-top`` / ``right-bottom`` /
+    ``left-bottom`` / ``left`` / ``right`` / ``top`` / ``bottom`` / ``overlap`` 之一。
+    开源里「正好相等」那一支用的是 ``===``（浮点精确相等）；这里同样用精确相等 ——
+    从 ``relative_side`` 拿到的方向决定了连接点落在哪条边上，对齐时给一个稳定的答案
+    比给一个抖动的答案好。
+    """
+    dx = float(src.x) - float(dst.x)
+    dy = float(src.y) - float(dst.y)
+    if dx == 0.0:
+        if dy == 0.0:
+            return "overlap"
+        return "top" if dy < 0.0 else "bottom"
+    if dy == 0.0:
+        return "left" if dx < 0.0 else "right"
+    if dx < 0.0:
+        return "left-top" if dy < 0.0 else "left-bottom"
+    return "right-top" if dy < 0.0 else "right-bottom"
+
+
+def side_anchor(node, side: str) -> tuple[float, float]:
+    """一条边的**中点**（纯函数，照抄开源 ``getNodePoint``，``range=0``）。
+
+    开源是 ``left → (left, top + height/2)`` 等四个分支；我们的 ``LayoutNode`` 存的是
+    中心点 + 宽高，一一对应。
+    """
+    if side == "left":
+        return (float(node.x) - float(node.w) / 2.0, float(node.y))
+    if side == "right":
+        return (float(node.x) + float(node.w) / 2.0, float(node.y))
+    if side == "top":
+        return (float(node.x), float(node.y) - float(node.h) / 2.0)
+    return (float(node.x), float(node.y) + float(node.h) / 2.0)
+
+
+def bezier_controls(x1: float, y1: float, x2: float, y2: float):
+    """一条三次贝塞尔的两个控制点（纯函数，照抄开源 ``computeCubicBezierPathPoints``）。
+
+    默认「横着出发、横着进入」；两端几乎同一竖线就改成竖着出发；几乎同一横线就
+    改成向上鼓一下。三个分支的算式与开源逐字一致（包括那个 ``min``）。
+    """
+    cx1 = x1 + (x2 - x1) / 2.0
+    cy1 = y1
+    cx2 = cx1
+    cy2 = y2
+    if abs(x1 - x2) <= BEZIER_MIN_GAP:
+        cx1 = x1 + (y2 - y1) / 2.0
+        cx2 = cx1
+    if abs(y1 - y2) <= BEZIER_MIN_GAP:
+        cx1 = x1
+        cy1 = y1 - (x2 - x1) / 2.0
+        cx2 = x2
+        cy2 = cy1
+    return (cx1, cy1), (cx2, cy2)
+
+
+def _bezier_polyline(start, control_a, control_b, end, segments: int = CURVE_SEGMENTS):
+    """把一条三次贝塞尔采样成折线（纯函数）。
+
+    整条链路（画布画线 / 标签让位 / 箭头 / PNG / SVG / PDF 导出）用的都是「一串点」，
+    所以在这里采样成点串，而不是让每个下游各自认识贝塞尔。采样段数按跨度自适应：
+    短曲线 12 段就够，跨几百像素的曲线多采几段，放大之后才看不出折角。
+    """
+    (x1, y1) = float(start[0]), float(start[1])
+    (cx1, cy1) = float(control_a[0]), float(control_a[1])
+    (cx2, cy2) = float(control_b[0]), float(control_b[1])
+    (x2, y2) = float(end[0]), float(end[1])
+    count = max(2, int(segments))
+    out = []
+    for index in range(count + 1):
+        t = index / float(count)
+        u = 1.0 - t
+        a = u * u * u
+        b = 3.0 * u * u * t
+        c = 3.0 * u * t * t
+        d = t * t * t
+        out.append((a * x1 + b * cx1 + c * cx2 + d * x2,
+                    a * y1 + b * cy1 + c * cy2 + d * y2))
+    return out
+
+
+def relation_curve(src_node, dst_node) -> list[tuple[float, float]]:
+    """两张卡之间的一条关联线（纯函数，批次 M14，照开源做）。
+
+    三步，和开源 ``getNodeLinePath`` 一一对应：
+
+    1. :func:`relative_side` 看 ``src`` 在 ``dst`` 的哪一边；
+    2. 两端各取**朝向对方那条边的中点**当连接点（:func:`side_anchor`）——
+       线因此总是从卡片「面向对方」的那一侧进出，不会绕着卡片兜一圈；
+    3. :func:`bezier_controls` 给两个控制点，采样成折线。
+
+    **故意不做的三件事**（以前都做过，正是「横贯全图的扫线」的成因）：
+    避让障碍、判交叉、共用走廊。开源六家没有一家做，见文件上面那段对照。
+    """
+    from_side, to_side = _RELATIVE_SIDES[relative_side(src_node, dst_node)]
+    start = side_anchor(src_node, from_side)
+    end = side_anchor(dst_node, to_side)
+    control_a, control_b = bezier_controls(start[0], start[1], end[0], end[1])
+    span = math.hypot(end[0] - start[0], end[1] - start[1])
+    segments = int(max(CURVE_SEGMENTS, min(48, round(span / 20.0))))
+    return _bezier_polyline(start, control_a, control_b, end, segments)
+
+
+def route_edges(base_edges, nodes, m: MapMetrics, *, ortho=None, links=()):
+    """给每条关系画一条线，并放好它的类型标签（纯函数）。
+
+    批次 M14 起**照开源做法**：一条边 = 一条三次贝塞尔，见 :func:`relation_curve`。
+    不再避让障碍、不再判交叉、不再共用走廊 —— 出处与六家源码的对照写在
+    :func:`relation_curve` 上面的那段注释里。
+
+    ``ortho`` / ``links`` 两个参数**保留但不再参与选线**：调用方与旧签名一个字不用改，
+    M12/M13 那套正交排线的函数也留着（导出与守卫还在用里面的小工具）。现在一条边
+    只有一条线，走哪儿完全由两端卡片的位置决定 —— 这正是开源的行为。
+
+    节点位置与层级**一个字都不动** —— 这里只决定线怎么走。
     """
     by_id = {int(node.entry_id): node for node in nodes}
-    label_blockers = [node_box(node, m.label_gap) for node in nodes]
-    twins: dict[frozenset, list] = {}
-    # ① 先把每条边的**静态材料**备齐（候选只跟两端 / 障碍有关，跟谁先谁后无关）
-    plans: list[dict] = []
-    for order, base in enumerate(base_edges):
+    blockers = [node_box(node, m.label_gap) for node in nodes]
+    out: list[LayoutEdge] = []
+    for base in base_edges:
         src, dst, _rel_type = _relation_parts(base.rel)
-        src_node, dst_node = by_id.get(src), by_id.get(dst)
+        src_node, dst_node = by_id.get(int(src)), by_id.get(int(dst))
         if src_node is None or dst_node is None:
             continue
-        start = boundary_point(src_node, (dst_node.x, dst_node.y))
-        end = boundary_point(dst_node, (src_node.x, src_node.y))
-        obstacles = _routing_obstacles(nodes, {int(src), int(dst)}, m)
-        prefer_curve = base.kind in ("cross", "feedback")
-        forced = None if ortho is None else (ortho[order] if order < len(ortho) else None)
-        if forced is not None and not route_is_clear(forced, obstacles):
-            forced = None                   # 正交线不干净 ⇒ 退回候选搜索
-        # 直角走法：位置被拖散之后，斜线只有在**连直角都无路可走**时才允许出现
-        # （批次 M13）。计划干净时它只是候选之一（代价说了算），计划脏了它就是主力。
-        ortho_alts = _simple_orthogonal_routes(start, end, nodes, m,
-                                               src_node=src_node, dst_node=dst_node)
-        if forced is None:
-            preferred, fallback = _route_candidates(start, end, obstacles, m,
-                                                    prefer_curve=prefer_curve)
-            free = list(ortho_alts) + list(preferred) + [fallback]
-        else:
-            free = list(ortho_alts)
-        plans.append({"order": order, "base": base, "src": src, "dst": dst,
-                      "obstacles": obstacles, "prefer_curve": prefer_curve,
-                      "forced": forced, "free": free,
-                      "direct": (abs(float(start[0]) - float(end[0]))
-                                 + abs(float(start[1]) - float(end[1])))})
-    # ② 布线顺序：**短的先走**（批次 M13 实测出来的）。跨得最远的那条先走，等于先把
-    #    一条「横贯全图的干线」铺好，后面每一条要上下穿过它的线都躲不开 —— org /
-    #    oneway / flow-v / flow-s 上 `依赖` × `对照` 那 6 处交叉全是这么来的。
-    #    短线选择少、先钉住；长线选择多，后走时看一眼已定的走线就挑得到不交叉的。
-    routed: list[LayoutEdge] = []
-    placed: dict[int, LayoutEdge] = {}
-    placed_labels: dict = {}
-    for plan in sorted(plans, key=lambda item: (item["direct"], item["order"])):
-        base = plan["base"]
-        order = int(plan["order"])
-        obstacles = plan["obstacles"]
-        prefer_curve = bool(plan["prefer_curve"])
-        forced = plan["forced"]
-        if forced is not None:
-            # 计划本身干净就**照计划走**（那是 M12 的车道规范）；只有当它一定会跟
-            # 已定的连线 / 主题母线交叉时，才把直角备选放进来比价 —— 用户口径
-            # 「不要出现关系线交叉」。这样 9 个模板的既定排线一格不动。
-            candidates = [(forced, None)]
-            if routed or links:
-                plan_clashes = sum(_route_crossings(forced, other.points)
-                                   for other in routed)
-                plan_clashes += sum(_route_crossings(forced, link) for link in links)
-                if plan_clashes:
-                    candidates = candidates + list(plan["free"])
-        else:
-            candidates = list(plan["free"])
-        key = frozenset((int(plan["src"]), int(plan["dst"])))
-        chosen = None
-        for index, (points, control) in enumerate(candidates):
-            # 标签净空：**标签自己的**半高 + 一条小缝（见 ``label_offset``）——
-            # 以前拿卡片行高算，标签被顶到离连线十几像素开外，看着像飘在空白里。
-            label_offset = label_gap_px(m)
-            if forced is not None:
-                # 正交线：标签落在**水平段中点上方**（基准点的法线就是画布上方）
-                if len(points) >= 4:
-                    base_pos = ((points[1][0] + points[2][0]) / 2.0,
-                                points[1][1] - label_offset)
-                else:
-                    center, tangent = _route_midpoint(points)
-                    base_pos = _normal(center, tangent, label_offset)
-            elif control is not None:
-                base_pos = (control[0], control[1] - label_offset)
-            else:
-                center, tangent = _route_midpoint(points)
-                base_pos = _normal(center, tangent, label_offset)
-            label_pos, drift = _label_position(points, str(base.label), m,
-                                               base=base_pos, blockers=label_blockers,
-                                               offset=label_offset)
-            box = label_box(label_pos, str(base.label), m)
-            label_overlap = 0.0 if _label_fits(box, label_blockers, pad=0.0) else 1.0
-            twin_overlap = 1.0 if any(_same_path(points, other)
-                                      for other in twins.get(key, ())) else 0.0
-            # 选线代价（严格优先级）：
-            #   ① **穿过非端点节点**（兜底直连才会发生）—— 那是会被读成「第三个词
-            #      也在这条关系里」的误读，权重远高于其它项；
-            #   ② 与同一对词的既有连线**完全重合**（会被读成一条粗线）；
-            #   ③ **跨边 / 反馈退化成直连**（那是层级边的视觉语言，见
-            #      :func:`_route_candidates`）：2 点直连只剩「弧线全都被挡住」这
-            #      最后一次机会。权重必须压过「拐点惩罚 + 标签位移」这些几十像素的
-            #      小账 —— 实测反馈边弧线 22.0 vs 直连 18.8，只差 3px 就会把反馈
-            #      画成一条直线（用户报的「布线杂乱」正是这类退化）；但必须低于
-            #      「标签压叠」（1e4）：弧线的标签真的没地方放时，宁可退回直连，
-            #      也不要把两个关系标签叠在一起；
-            #   ④ 关系文字被挤走的距离（保持原位最好）；
-            #   ⑤ 拐了几个弯（每点 2px，同层相邻的层级边因此优先直连）；
-            #   ⑥ 文字压到节点 / 别的标签（只有极端拥挤时才允许折衷）。
-            curve_last = 1e3 * (1.0 if prefer_curve and len(points) <= 2 else 0.0)
-            # 与**已经定下来的**连线、以及主题母线交叉几处（批次 M13）。母线以前
-            # 完全不参与选线，于是「横贯全图的扫线」可以一路撞过去没人管。
-            clashes = 0
-            for other in routed:
-                clashes += _route_crossings(points, other.points)
-            for link in links:
-                clashes += _route_crossings(points, link)
-            route_cost = (1e6 * (0.0 if route_is_clear(points, obstacles) else 1.0)
-                          + 1e5 * twin_overlap
-                          + 4e2 * clashes                # 交叉：见 docstring 的优先级
-                          + 5e2 * _diagonal_segments(points)     # 斜线段
-                          + curve_last
-                          + drift + 2.0 * max(0, len(points) - 2)
-                          + 0.35 * _route_length(points)
-                          + 1e4 * label_overlap + index * 1e-3)
-            if chosen is None or route_cost < chosen[0]:
-                chosen = (route_cost, points, label_pos)
-        if chosen is None:                 # 理论上不会发生（兜底直连一定在）
-            continue
-        _cost, points, label_pos = chosen
-        twins.setdefault(key, []).append(list(points))
+        points = relation_curve(src_node, dst_node)
+        label_offset = label_gap_px(m)
+        center, tangent = _route_midpoint(points)
+        base_pos = _normal(center, tangent, label_offset)
+        label_pos, _drift = _label_position(points, str(base.label), m,
+                                            base=base_pos, blockers=blockers,
+                                            offset=label_offset)
         # 登记时按 ``LABEL_SEPARATION`` 外扩：下一个标签必须离这个**至少**这么远，
         # 不然两个短标签会贴在一起（只判「不重叠」时实测只隔 5px，实机看着糊）。
-        label_blockers.append(_inflate_box(label_box(label_pos, str(base.label), m),
-                                           LABEL_SEPARATION))
-        edge = LayoutEdge(base.rel, base.kind, tuple(points), base.label,
-                          (float(label_pos[0]), float(label_pos[1])),
-                          bool(base.symmetric))
-        routed.append(edge)
-        placed[order] = edge
-        placed_labels[order] = label_box(label_pos, str(base.label), m)
-    # ③ 收尾重挑（批次 M13 实测）：按顺序贪心挑时，后面的线只看得到**前面已定的**，
-    #    于是两条线会互相挡 —— 各自单独看都躲得开，合起来却撞上（org / oneway /
-    #    flow-h / flow-s 带 pins 各剩 1 处交叉，而「对照」那条拿去跟全部线比一遍
-    #    就有 0 交叉的走法）。全部定下来之后再逐条拿**它的全部候选**跟其它所有线
-    #    比一遍，交叉数严格变少才换 —— 已经 0 交叉的布局因此一格不动。
-    for _round in range(2):
-        changed = False
-        for plan in plans:
-            order = int(plan["order"])
-            edge = placed.get(order)
-            if edge is None or order not in placed_labels:
-                continue
-            others = [other.points for other_order, other in placed.items()
-                      if other_order != order]
-            others.extend(links)
-            here = sum(_route_crossings(edge.points, other) for other in others)
-            if not here:
-                continue
-            label = str(edge.label)
-            label_offset = label_gap_px(m)
-            blockers = [node_box(node, m.label_gap) for node in nodes]
-            blockers.extend(_inflate_box(box, LABEL_SEPARATION)
-                            for other_order, box in placed_labels.items()
-                            if other_order != order)
-            key = frozenset((int(plan["src"]), int(plan["dst"])))
-            best = None
-            for points, control in list(plan["free"]) + [(edge.points, None)]:
-                if not route_is_clear(points, plan["obstacles"]):
-                    continue
-                clashes = sum(_route_crossings(points, other) for other in others)
-                if clashes >= here:
-                    continue            # 只有**更少**才要，一样多还不如不动
-                twin = 0.0
-                for other_order, other in placed.items():
-                    if other_order == order:
-                        continue
-                    parts = _relation_parts(other.rel)
-                    if (frozenset((int(parts[0]), int(parts[1]))) == key
-                            and _same_path(points, other.points)):
-                        twin = 1.0
-                        break
-                if twin:
-                    continue            # 同一对词的第二条线不许跟第一条重合
-                if plan["forced"] is not None:
-                    if len(points) >= 4:
-                        base_pos = ((points[1][0] + points[2][0]) / 2.0,
-                                    points[1][1] - label_offset)
-                    else:
-                        center, tangent = _route_midpoint(points)
-                        base_pos = _normal(center, tangent, label_offset)
-                elif control is not None:
-                    base_pos = (control[0], control[1] - label_offset)
-                else:
-                    center, tangent = _route_midpoint(points)
-                    base_pos = _normal(center, tangent, label_offset)
-                spot, _drift = _label_position(points, label, m, base=base_pos,
-                                               blockers=blockers, offset=label_offset)
-                overlap = 0.0 if _label_fits(label_box(spot, label, m), blockers,
-                                             pad=0.0) else 1.0
-                cost = (4e2 * clashes
-                        + 5e2 * _diagonal_segments(points)
-                        + 2.0 * max(0, len(points) - 2)
-                        + 0.35 * _route_length(points)
-                        + 1e4 * overlap)
-                if best is None or cost < best[0]:
-                    best = (cost, tuple(points), (float(spot[0]), float(spot[1])))
-            if best is None:
-                continue
-            _cost, points, label_pos = best
-            placed[order] = LayoutEdge(edge.rel, edge.kind, points, edge.label,
-                                       label_pos, bool(edge.symmetric))
-            placed_labels[order] = label_box(label_pos, label, m)
-            changed = True
-        if not changed:
-            break
-    return tuple(placed[key] for key in sorted(placed))
+        blockers.append(_inflate_box(label_box(label_pos, str(base.label), m),
+                                     LABEL_SEPARATION))
+        out.append(LayoutEdge(base.rel, base.kind, tuple(points), base.label,
+                              (float(label_pos[0]), float(label_pos[1])),
+                              bool(base.symmetric)))
+    return tuple(out)
 
 
 def _fit_columns(canvas_w: float, card_w: float, m: MapMetrics) -> int:
@@ -2317,28 +2283,21 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
                 continue
             nodes[index] = replace(node, x=spot[0], y=spot[1])
         by_id = {int(node.entry_id): node for node in nodes}
-    # 主题 → 顶层词的**母线**：主题底边先垂直下到母线，再水平走，最后垂直落进
-    # 每张卡片顶边的**正中**。所有连线共用同一条母线（``topic_gap`` 正中），
-    # 因此不再是从主题斜射出去的扇形 —— 那是用户说的「布线杂乱」的一半。
-    topic_bottom = topic.y + topic.h / 2.0
-    bus_y = topic_bottom + m.topic_gap / 2.0
+    # 主题 → 顶层词：批次 M14 起**也照开源做法**画一条贝塞尔（原来是「共用一条母线
+    # 再垂直落下」的梳子形）。梳子在主题底下拉一条几百像素的横杠，别的线一穿就是
+    # 交叉，线一多还在那条横杠上挤成一片 —— 那正是用户说的「太杂乱」。开源里根到
+    # 每个孩子就是一条曲线（simple-mind-map 的 ``renderLineCurve`` / markmap 的
+    # ``linkHorizontal``），几条曲线从主题的左右两侧扇形散开，谁也不挡谁。
     top_level = levels[0] if levels else None
     if hubs:
-        # 思维导图 / 鱼骨图：主题不在顶上、内容也不排在一条水平行里，母线没有意义
-        # —— 直接从主题的边界拉一条直线到这几个「一级节点」。
-        for entry_id in sorted(set(hubs)):
-            node = by_id.get(int(entry_id))
-            if node is None or node.isolated:
-                continue
-            topic_links.append((boundary_point(topic, (node.x, node.y)),
-                                boundary_point(node, (topic.x, topic.y))))
+        targets = sorted({int(item) for item in hubs})
     else:
-        for entry_id in sorted({n.entry_id for n in nodes if n.level == top_level}):
-            node = by_id[entry_id]
-            if node.isolated:
-                continue
-            topic_links.append(((topic.x, topic_bottom), (topic.x, bus_y),
-                                (node.x, bus_y), (node.x, node.y - node.h / 2.0)))
+        targets = sorted({int(n.entry_id) for n in nodes if n.level == top_level})
+    for entry_id in targets:
+        node = by_id.get(int(entry_id))
+        if node is None or node.isolated:
+            continue
+        topic_links.append(tuple(relation_curve(topic, node)))
 
     # ---- 关系连线：只在这里决定「线怎么走」（避障 + 标签让位，节点位置不动） ----
     base_edges: list[LayoutEdge] = []

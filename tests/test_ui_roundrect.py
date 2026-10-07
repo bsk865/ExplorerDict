@@ -2133,11 +2133,11 @@ class TestMapLayoutStructure(unittest.TestCase):
         self.assertEqual(edge.label, "对照", "跨边保留具体标签")
         self.assertEqual(layout.find(1).level, layout.find(2).level,
                          "对照不改变层级（同层跨边）")
-        # 批次 M12-B：同层两卡之间**没有别的卡挡着**时，跨边也走「一条直线」
-        # —— 弧线绕行正是用户说「关系线看着很乱」的来源。跨边与层级边
-        # 一眼看得出区别这件事，改由**线型 + 线上标签**承担（见 EDGE_STYLES）。
-        self.assertEqual(len(edge.points), 2,
-                         "同层跨边中间没东西挡，就该是一条干净的直线")
+        # 批次 M14：同层跨边和别的边走**同一条开源公式**（三次贝塞尔采样成点串）。
+        # 原来那条「中间没东西挡就该是两点直线」的正交契约，随着排线算法一起废了
+        # —— 用户 2026-10-07：「请你参考开源的思维导图进行修正，这个实在是太杂乱了。」
+        self.assertGreater(len(edge.points), 2,
+                           "关系线现在是采样成折线的贝塞尔，不再是两点直连")
         self.assertNotEqual(cm.EDGE_STYLES["cross"],
                             cm.EDGE_STYLES["hierarchy"],
                             "跨边仍要和层级边一眼分得开（线型不同）")
@@ -2397,7 +2397,7 @@ class TestMapRoutingRules(unittest.TestCase):
     ① ``_draw`` 曾经用固定字号（``theme.font(9)``）而节点框随 ``zoom`` 一起缩放
        ⇒ 缩小视图后文字撑出卡片边界；
     ② 层级 / 依赖边曾经在层与层之间斜线扇出、互相穿插，读不出层次。
-    所以下面既钉住「文字与框同源」，也钉住「相邻两层的层级 / 依赖边走 L 形正交线」。
+    所以下面既钉住「文字与框同源」，也钉住「每条关系线都是开源那条贝塞尔」。
     """
 
     #: 四个词的包含链：1 包含 2 / 1 包含 3 / 2 依赖 4（4 与 1 同层 ⇒ 依赖是**向上**的）
@@ -2461,7 +2461,15 @@ class TestMapRoutingRules(unittest.TestCase):
                                         + max(cm.text_px(line, metrics.em)
                                               for line in lines))
 
-    def test_adjacent_layers_are_wired_with_orthogonal_lanes(self):
+    def test_adjacent_layers_are_wired_with_one_open_source_bezier(self):
+        """批次 M14：连线**只有一条公式**，就是开源那条三次贝塞尔。
+
+        两端各取「朝向对方那条边的中点」（simple-mind-map ``getNodePoint`` 的
+        ``range=0``），中间两个控制点照抄 ``computeCubicBezierPathPoints``。
+        这一条替换掉 M12/M13 的「相邻两层必须走 L 形正交车道」：那套车道 + 避障 +
+        收尾重挑在用户拖动过的位置上会退化成横贯全图的走廊，用户看图说
+        「这个实在是太杂乱了」。现在谁再往连线里塞避障 / 绕行都会红。
+        """
         from app.ui import concept_map as cm
 
         layout = self._layout()
@@ -2472,49 +2480,52 @@ class TestMapRoutingRules(unittest.TestCase):
             first, second = nodes[int(src)], nodes[int(dst)]
             with self.subTest(edge=f"{src}->{dst} {rel_type}"):
                 self.assertIn(edge.kind, ("hierarchy", "direction"))
-                points = edge.points
-                self.assertIn(len(points), (2, 4),
-                              "层级 / 依赖边必须走正交线（2 点竖线或 4 点 L 形）")
-                if len(points) == 4:
-                    self.assertAlmostEqual(points[0][0], points[1][0], places=6,
-                                           msg="出卡片的一段必须是竖线")
-                    self.assertAlmostEqual(points[1][1], points[2][1], places=6,
-                                           msg="中间必须是一段水平车道")
-                    self.assertAlmostEqual(points[2][0], points[3][0], places=6,
-                                           msg="进卡片的一段必须是竖线")
-                    lane = points[1][1]
-                    upper, lower = ((first, second) if first.level < second.level
-                                    else (second, first))
-                    self.assertGreaterEqual(lane, upper.y + upper.h / 2 - 1e-6,
-                                            "车道跑到上行卡片的区域里了")
-                    self.assertLessEqual(lane, lower.y - lower.h / 2 + 1e-6,
-                                         "车道跑到下行卡片的区域里了")
-                # 点序从**源**到**目标**：否则 arrow="last" 的箭头会落在源卡片上
-                downward = first.level < second.level
-                start_y = first.y + (first.h / 2 if downward else -first.h / 2)
-                end_y = second.y + (-second.h / 2 if downward else second.h / 2)
-                self.assertAlmostEqual(points[0][1], start_y, places=6,
-                                       msg="连线没有从源卡片那一侧出发")
-                self.assertAlmostEqual(points[-1][1], end_y, places=6,
-                                       msg="连线的终点不在目标卡片那一侧")
-                self.assertEqual(_edge_hits_nodes(edge, _node_rects(layout, pad=0.0)),
-                                 [], "正交线穿过了非端点节点")
+                self.assertEqual(tuple(edge.points),
+                                 tuple(cm.relation_curve(first, second)),
+                                 "关系线必须就是那条贝塞尔，不是绕出来的")
+                from_side, to_side = cm._RELATIVE_SIDES[
+                    cm.relative_side(first, second)]
+                self.assertEqual(edge.points[0], cm.side_anchor(first, from_side),
+                                 "起点不在「朝向目标」那条边的中点上")
+                self.assertEqual(edge.points[-1], cm.side_anchor(second, to_side),
+                                 "终点不在「朝向起点」那条边的中点上")
+                self.assertGreater(len(edge.points), 3,
+                                   "曲线要采样成折线，两个点说明它没在画曲线")
 
-    def test_one_source_spreads_its_edges_over_several_ports(self):
+    def test_one_source_uses_the_side_the_formula_picks(self):
+        """批次 M14：同一张卡的两条出边**不必**分到不同端口 —— 开源只按两端位置选边。
+
+        旧的「同一张卡片的两条边必须分到不同端口」是给正交车道用的；改成贝塞尔之后，
+        「端口」= 「朝向对方那条边的中点」，由两个矩形的位置唯一决定。
+        这里钉住「从同一张卡出发的每条边，都落在朝向它自己那个目标的那条边上」。
+        """
         from app.ui import concept_map as cm
 
         layout = self._layout()
         source = layout.find(1)
-        bottom = source.y + source.h / 2
-        ports = sorted({round(edge.points[0][0], 3) for edge in layout.edges
-                        if int(cm._relation_parts(edge.rel)[0]) == 1
-                        and abs(edge.points[0][1] - bottom) < 1e-6})
-        self.assertEqual(len(ports), 2, "同一张卡片的两条边必须分到不同端口")
-        self.assertGreaterEqual(ports[1] - ports[0], 2.0, "两个端口几乎重合")
-        self.assertGreaterEqual(ports[0], source.x - source.w / 2)
-        self.assertLessEqual(ports[-1], source.x + source.w / 2)
+        out = [edge for edge in layout.edges
+               if int(cm._relation_parts(edge.rel)[0]) == 1]
+        self.assertEqual(len(out), 2, "fixture 里 1 有两条出边")
+        for edge in out:
+            target = layout.find(int(cm._relation_parts(edge.rel)[1]))
+            self.assertIsNotNone(target)
+            side = cm._RELATIVE_SIDES[cm.relative_side(source, target)][0]
+            self.assertEqual(edge.points[0], cm.side_anchor(source, side),
+                             "出边没有落在朝向目标那条边的中点上")
+            self.assertAlmostEqual(abs(edge.points[0][0] - source.x),
+                                   source.w / 2.0, delta=1e-6,
+                                   msg="端点不在卡片的左右边界上")
+            self.assertLessEqual(abs(edge.points[0][1] - source.y),
+                                 source.h / 2.0 + 1e-6,
+                                 "端点跑到卡片边界外面去了")
 
-    def test_topic_links_are_one_polyline_through_a_shared_bus(self):
+    def test_topic_links_fan_out_as_curves_not_a_comb(self):
+        """批次 M14：主题到第一行的每一条线都是**独立的一条曲线**。
+
+        旧实现是「一根横杠 + 一排竖线」的梳子 —— 所有支线共用一根母线，实机上就是
+        画布顶上那条横贯全图的长横线（用户说的「实在是太杂乱了」里有它一份）。
+        现在主题对每张卡各算一条贝塞尔，跟开源导图的中心节点一个做法。
+        """
         from app.ui import concept_map as cm
 
         layout = self._layout()
@@ -2523,20 +2534,13 @@ class TestMapRoutingRules(unittest.TestCase):
                      if not node.isolated and int(node.level) == 0]
         self.assertEqual(len(layout.topic_links), len(first_row),
                          "第一行每个词都要有一条母线支线")
-        bus_ys = set()
-        ends = set()
+        want = {tuple(cm.relation_curve(topic, node)) for node in first_row}
+        self.assertEqual(len(want), len(first_row), "fixture 里这些支线必须两两不同")
         for link in layout.topic_links:
-            self.assertGreaterEqual(len(link), 3, "母线支线必须是折线，不是斜直线")
-            self.assertAlmostEqual(link[0][0], topic.x, places=6)
-            self.assertAlmostEqual(link[0][1], topic.y + topic.h / 2, places=6)
-            self.assertAlmostEqual(link[1][1], link[2][1], places=6,
-                                   msg="母线支线必须在同一根横线上分叉")
-            bus_ys.add(round(link[1][1], 3))
-            ends.add((round(link[-1][0], 3), round(link[-1][1], 3)))
-        self.assertEqual(len(bus_ys), 1, "所有支线必须共用一根母线")
-        for node in first_row:
-            self.assertIn((round(node.x, 3), round(node.y - node.h / 2, 3)), ends,
-                          "支线没有接到第一行卡片的顶边")
+            self.assertIn(tuple(link), want,
+                          "支线就是主题到那张卡的一条贝塞尔，不是一根公用横杠")
+        self.assertEqual({tuple(link) for link in layout.topic_links}, want,
+                         "支线两两不同才叫扇形；全都一样就是梳子回来了")
 
     def test_zoom_keeps_the_whole_layout_proportional(self):
         base = self._layout()
@@ -2981,9 +2985,10 @@ class TestConceptMapWindow(unittest.TestCase):
                 self.assertTrue(win._items_matching("edge"))
                 self.assertEqual(str(win.btn_generate.cget("text")), "重新生成")
 
-                first, last = win._layout.edges[0].points[0], win._layout.edges[0].points[-1]
-                win._on_canvas_click(SimpleNamespace(x=(first[0] + last[0]) / 2,
-                                                     y=(first[1] + last[1]) / 2))
+                # 批次 M14：关系线是曲线，弦的中点**不在线上** —— 点曲线自己的采样点
+                curved = win._layout.edges[0].points
+                middle = curved[len(curved) // 2]
+                win._on_canvas_click(SimpleNamespace(x=middle[0], y=middle[1]))
                 self.assertIsNotNone(win._selected, "点连线要能选中")
                 shown = str(win.evidence.cget("text"))
                 self.assertIn("依据", shown)
@@ -4061,9 +4066,8 @@ class TestConceptMapFreshness(unittest.TestCase):
 
             # 点选一条连线：依据区 / 选中对象在无变化刷新后必须原样保留
             edge = win._layout.edges[0]
-            start, end = edge.points[0], edge.points[-1]
-            win._on_canvas_click(SimpleNamespace(x=(start[0] + end[0]) / 2,
-                                                 y=(start[1] + end[1]) / 2))
+            middle = edge.points[len(edge.points) // 2]
+            win._on_canvas_click(SimpleNamespace(x=middle[0], y=middle[1]))
             selected = win._selected
             self.assertIsNotNone(selected)
             snapshot = (win._state, str(win.feedback.cget("text")),
@@ -7822,16 +7826,41 @@ class TestMapRouteOrdering(unittest.TestCase):
                             width=1180, height=760, topic_label="资源受限计算",
                             zoom=1.0, top_pad=6.0, template=key)
 
-    def test_no_two_relation_lines_cross_in_any_template(self):
+    def test_relation_lines_stay_simple_in_every_template(self):
+        """批次 M14：**开源六家没有一家躲交叉** —— 交叉是布局该避免的事。
+
+        simple-mind-map / mind-elixir / markmap / jsmind / freeplane / mermaid 的关联线
+        全都只是「两个端点的闭式函数」，没有避障、没有判交叉（六家的源码原文与普查
+        记录存在本机 survey 目录）。所以我们不再钉「零交叉」，改钉一条更真的线：
+        **不许退回横贯全图的走廊** —— 每条边必须逐字等于 ``relation_curve`` 的输出
+        （谁再往连线里塞避障 / 绕行都会红），交叉数只留一点余量。
+        """
+        from app.ui import concept_map as cm
+
         for key in self.KEYS:
             with self.subTest(template=key):
                 layout = self._layout(key)
                 self.assertEqual(len(layout.edges), 5, "fixture 必须画出 5 条关系线")
-                self.assertEqual(self._crossings(layout), 0,
-                                 f"模板「{key}」上出现了交叉的关系线")
+                # 抄开源那天实测最多 1 处（M13 的走廊式排线在同一张图上是 7 处）
+                self.assertLessEqual(self._crossings(layout), 2,
+                                     f"模板「{key}」上关系线的交叉又多起来了")
+                for edge in layout.edges:
+                    src, dst = (int(cm._relation_parts(edge.rel)[index])
+                                for index in (0, 1))
+                    self.assertEqual(
+                        tuple(edge.points),
+                        tuple(cm.relation_curve(layout.find(src), layout.find(dst))),
+                        f"模板「{key}」上「{edge.label}」不是那条贝塞尔，"
+                        f"有人又往连线里塞东西了")
 
     def test_no_relation_line_passes_through_a_third_card(self):
-        """排线再好看也不许穿过**非端点**的词卡（含 route_margin 净空）。"""
+        """批次 M14：**开源的关联线不避障** —— 连线上碰到第三张卡是允许的。
+
+        这条把 M13 的「一条都不许穿过非端点卡片」正式废掉：那套避障正是用户说的
+        「太杂乱」的来源（线会绕成横贯全图的走廊）。密集网格模板躲不开 ——
+        ``flow-s`` 把卡片排成蛇形方阵，隔两行的关系线与中间的卡必然相交。
+        这里退成一把**棘轮**：今天最差是 flow-s 的 5 处，不许比它更多。
+        """
         from app.ui import concept_map as cm
 
         for key in self.KEYS:
@@ -7840,6 +7869,7 @@ class TestMapRouteOrdering(unittest.TestCase):
                 rects = [(node.x - node.w / 2.0, node.y - node.h / 2.0,
                           node.x + node.w / 2.0, node.y + node.h / 2.0)
                          for node in layout.nodes]
+                hits = []
                 for edge in layout.edges:
                     pair = {int(cm._relation_parts(edge.rel)[index])
                             for index in (0, 1)}
@@ -7847,11 +7877,13 @@ class TestMapRouteOrdering(unittest.TestCase):
                         if int(node.entry_id) in pair:
                             continue
                         x0, y0, x1, y1 = rects[index]
-                        for sx1, sy1, sx2, sy2 in edge.segments():
-                            self.assertFalse(
-                                cm._segment_hits_rect(sx1, sy1, sx2, sy2,
-                                                      (x0, y0, x1, y1)),
-                                f"模板「{key}」有条关系线穿过了「{node.label}」这张卡")
+                        if any(cm._segment_hits_rect(sx1, sy1, sx2, sy2,
+                                                     (x0, y0, x1, y1))
+                               for sx1, sy1, sx2, sy2 in edge.segments()):
+                            hits.append((edge.label, node.label))
+                self.assertLessEqual(
+                    len(hits), 5,
+                    f"模板「{key}」上穿卡变多了：{hits}")
 
     def test_two_relation_labels_never_hug_each_other(self):
         """两个关系短标签之间要留出**看得见的缝**（批次 M12-B 补）。
@@ -7917,12 +7949,12 @@ class TestMapRouteOrdering(unittest.TestCase):
                             zoom=1.0, top_pad=6.0, template=key,
                             pins=dict(self.PINS))
 
-    def test_cards_dragged_apart_still_get_straight_orthogonal_lines(self):
-        """批次 M13：位置怎么散，关系线都必须是**横平竖直**的。
+    def test_cards_dragged_apart_still_get_one_curve_each(self):
+        """批次 M13 → M14：位置再散，每条关系线也只是**一条贝塞尔**。
 
-        用户 2026-10-06：「你生成的时候就是交叉的线条」—— 截图里那些斜线是兜底
-        候选（弧线 / 直连）在卡片被拖散之后胜出造成的。真机那 5 张固定卡的位置
-        原样照抄：改动前实测 2 条斜线，现在一条都不许有。
+        M13 那版是「正交车道 + 避障 + 收尾重挑」，算法会赢过公式：用户拖动过的位置上
+        跨得最远的那条会变成一条横贯全图的干线。现在照开源只留公式，这条守卫钉住
+        「点串 == ``relation_curve`` 的输出」。
         """
         from app.ui import concept_map as cm
 
@@ -7931,23 +7963,28 @@ class TestMapRouteOrdering(unittest.TestCase):
                 layout = self._pinned_layout(key)
                 self.assertEqual(len(layout.edges), 6, "fixture 必须画出 6 条关系线")
                 for edge in layout.edges:
+                    src, dst = (int(cm._relation_parts(edge.rel)[index])
+                                for index in (0, 1))
                     self.assertEqual(
-                        cm._diagonal_segments(edge.points), 0,
-                        f"模板「{key}」上「{edge.label}」画成了斜线："
+                        tuple(edge.points),
+                        tuple(cm.relation_curve(layout.find(src), layout.find(dst))),
+                        f"模板「{key}」上「{edge.label}」不是那条贝塞尔："
                         f"{[(round(x, 1), round(y, 1)) for x, y in edge.points]}")
 
-    def test_cards_dragged_apart_do_not_make_relation_lines_cross(self):
-        """同上那张图：一条都不许交叉。
+    def test_cards_dragged_apart_do_not_fall_back_to_corridors(self):
+        """同上那张图：交叉最多两处。
 
-        改动前这张图上有 7 处交叉 —— 主因是跨得最远的那条（``依赖``）排在最前面
-        挑线，等于先把一条「横贯全图的干线」铺好，后面每一条要上下穿过它的线都
-        躲不开；现在**短的先挑**、全部定下来之后再收尾重挑一遍。
+        M13 之前这张图上有 7 处交叉，``包含`` 是一条从画布左边绕到顶上的折线、多绕
+        26.5% —— 那些「横贯全图的公共走廊」就是用户说的「太杂乱」。曲线本身已经由
+        ``test_cards_dragged_apart_still_get_one_curve_each`` 逐字钉住了。
         """
+        from app.ui import concept_map as cm
+
         for key in self.KEYS:
             with self.subTest(template=key):
                 layout = self._pinned_layout(key)
-                self.assertEqual(self._crossings(layout), 0,
-                                 f"模板「{key}」在用户拖动过的位置上还是交叉了")
+                self.assertLessEqual(self._crossings(layout), 2,
+                                     f"模板「{key}」在用户拖动过的位置上交叉又多起来了")
 
     def test_a_group_is_drawn_as_a_name_not_a_filled_slab(self):
         """用户 2026-10-06：「褐色背景应该是作为组标签才对」。
