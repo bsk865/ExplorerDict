@@ -24,6 +24,7 @@ import time
 from datetime import datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from . import article_source
 from . import source_enrich
 from . import win32util as w32
 from .gate import AccessGate
@@ -366,10 +367,13 @@ class CaptureService:
     """把「一次鼠标手势 / 一次手工录入」变成一条落库的词条。"""
 
     def __init__(self, db, config, bridge=None, on_event=None, gate=None,
-                 on_foreground_change=None):
+                 on_foreground_change=None, article_fetcher=None):
         """:param on_foreground_change: 回调 ``(src, kind)``：
         ``kind`` ∈ ``{"window", "title"}``。前台换成**另一个窗口**或同一个 HWND
         的**标题变化**（浏览器标签页切换）时触发，UI 据此收起旧浮条并作废旧选区。
+        :param article_fetcher: 取原文用的函数 ``(url, timeout=…) -> Article``；
+        默认是 :func:`app.article_source.fetch_article`（真联网）。测试注入假函数
+        即可**完全不联网**地验证这条链路。
         """
         self.db = db
         self.config = config
@@ -377,6 +381,10 @@ class CaptureService:
         self.gate = gate or AccessGate(config)
         self._on_event = on_event
         self._on_foreground_change = on_foreground_change
+        self._article_fetcher = article_fetcher or article_source.fetch_article
+        #: 正在取原文的 ``doc_key`` 集合（同一页只抓一次；抓失败也算抓过，
+        #: 结果落在 ``articles`` 表里，不在这里重试）。
+        self._article_pending: set[str] = set()
         self._lock = threading.RLock()
         self._current_batch_id: int | None = None
         self._current_doc_key: str = ""
@@ -786,6 +794,9 @@ class CaptureService:
                         "selection": sel,
                     },
                 )
+                # 老词条（重复划到同一处）也要保证这一页留过档 —— 可能用户是
+                # 升级到这个版本之后才第一次划它，之前从没抓过原文。
+                self.maybe_fetch_article(src, doc_key)
                 return int(existing["id"]), False
 
         # B4：同一个概念、**不同的上下文**再次被划到。
@@ -811,6 +822,7 @@ class CaptureService:
                         "selection": sel,
                     },
                 )
+                self.maybe_fetch_article(src, doc_key)
                 return int(same["id"]), False
 
         entry_id = self.db.add_entry(
@@ -841,7 +853,79 @@ class CaptureService:
                 "selection": sel,
             },
         )
+        self.maybe_fetch_article(src, doc_key)
         return entry_id, True
+
+    # --------------------------------------------------------- 原文留档
+    def maybe_fetch_article(self, src: SourceInfo, doc_key: str | None = None) -> bool:
+        """这一页还没留档就**在后台**去抓一次原文。返回是否真的起了线程。
+
+        为什么在划词这一刻抓：页面内容随时会变（新闻改稿、登录后才给全文），
+        事后再抓到的往往已经不是用户当时读的那一版。所以「第一次从这个页面
+        划词」就是唯一的正确时机。
+
+        刻意**不阻塞**：抓取在守护线程里做，用户不等它 —— 他要的是浮条马上
+        弹出来，原文到没到不影响这一次记录。抓不到也**不重试**（同一页只抓
+        一次，失败原因写进 ``articles.note``），免得反复捶别人的服务器。
+        """
+        key = (doc_key or "").strip() or self.page_doc_key(src)
+        if not key:
+            return False
+        if not self.config.fetch_article:
+            return False
+        url = (src.url or "").strip() if src is not None else ""
+        if not article_source.is_fetchable_url(url):
+            return False
+        if self.db.has_article(key):
+            return False
+        with self._lock:
+            if key in self._article_pending:
+                return False
+            self._article_pending.add(key)
+        thread = threading.Thread(
+            target=self._fetch_article_worker,
+            args=(key, url, src.title if src is not None else ""),
+            name="article-fetch", daemon=True,
+        )
+        thread.start()
+        return True
+
+    def _fetch_article_worker(self, doc_key: str, url: str, title: str) -> None:
+        """后台线程：抓原文 → 落库 → 发 ``article_ready`` 事件。
+
+        这个函数里**任何**异常都不许冒出来：它跑在独立线程，异常会把
+        「线程里未捕获」的噪音打进日志，而用户什么都没做错。
+        """
+        article = None
+        try:
+            article = self._article_fetcher(url)
+        except Exception as exc:  # pragma: no cover - 假 fetcher / 极端网络异常
+            log.debug("取原文失败（%s）：%s", url, exc)
+        if article is None:
+            article = article_source.Article(ok=False, url=url,
+                                             note="取原文时出错（详见日志）")
+        if not article.title and title:
+            article.title = title
+        try:
+            self.db.put_article(doc_key, article)
+        except Exception as exc:  # pragma: no cover - 库刚被关掉时可能发生
+            log.debug("原文留档写入失败（%s）：%s", doc_key, exc)
+        finally:
+            with self._lock:
+                self._article_pending.discard(doc_key)
+        if article.ok:
+            log.info("已留下原文 #%s 《%s》%d 字（%s）",
+                     doc_key, article.title or "-", article.chars, article.method)
+        else:
+            log.info("未取到原文 #%s：%s", doc_key, article.note)
+        self._emit("article_ready", {
+            "doc_key": doc_key,
+            "status": article.status,
+            "ok": bool(article.ok),
+            "title": article.title,
+            "chars": article.chars,
+            "note": article.note,
+        })
 
     def last_selection(self) -> CapturedSelection | None:
         with self._lock:

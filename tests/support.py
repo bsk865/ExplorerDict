@@ -173,11 +173,28 @@ def temp_db():
             db.close()
 
 
-def make_service(db: Database, bridge=None, **config_overrides) -> tuple[CaptureService, Config]:
+def offline_article_fetcher(url: str, **_kwargs):
+    """测试默认的「取原文」实现：**绝不联网**。
+
+    ``CaptureService`` 在新词条落库后会顺手去抓这一页的原文
+    （``app/capture_service.py`` 的 ``maybe_fetch_article``）。测试里如果不去
+    替换它，每个用例都会往 example.com 发真请求 —— 那既慢又不可复现，还违背
+    本仓库「测试零联网」的约定。默认注进去的这个函数只说明「没抓」，
+    需要验证链路的用例自己传 ``article_fetcher``。
+    """
+    from app.article_source import Article, STATUS_SKIP
+
+    return Article(ok=False, url=url, status=STATUS_SKIP,
+                   note="测试环境不联网取原文")
+
+
+def make_service(db: Database, bridge=None, article_fetcher=None,
+                 **config_overrides) -> tuple[CaptureService, Config]:
     cfg = Config(db)
     for k, v in config_overrides.items():
         cfg.set(k.replace("__", "."), str(v))
-    svc = CaptureService(db, cfg, bridge)
+    svc = CaptureService(db, cfg, bridge,
+                         article_fetcher=article_fetcher or offline_article_fetcher)
     return svc, cfg
 
 

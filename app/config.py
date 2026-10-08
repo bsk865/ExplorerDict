@@ -28,6 +28,11 @@ DEFAULTS: dict[str, str] = {
     # 见 Config.duplicate_action / app/capture_service.py 的 bookmark()。
     "capture.duplicate_action": "new",
     "capture.notify_on_failure": "0",
+    # 取词时顺手把**这一页的原文**抄一份留下来（导图要「按原文归纳」，只拿每个词
+    # 240 字上下文是归纳不出文章脉络的）。默认开：抓取在后台线程做，不挡划词、
+    # 不挡解释；同一页只抓一次，抓不到就如实记「未取到原文」。
+    # 关掉它 = 完全不联网取原文，导图退回「词与词的关系」那一套。
+    "capture.fetch_article": "1",
     # 前台环境门控：默认放开普通窗口，只挡「手动游戏模式 / 已知游戏进程 / 全屏」。
     "gate.game_mode": "0",
     # 界面
@@ -382,6 +387,15 @@ class Config:
     @property
     def notify_on_failure(self) -> bool:
         return self.get_bool("capture.notify_on_failure", False)
+
+    @property
+    def fetch_article(self) -> bool:
+        """取词时要不要顺手把这一页的原文抓下来（默认开）。
+
+        关掉它是**唯一**能让本应用完全不联网取原文的开关；导图随之退回
+        「按词条关系生成」，界面上会如实写明没取到原文。
+        """
+        return self.get_bool("capture.fetch_article", True)
 
     # ---------------------------------------------------------- 门控
     @property
