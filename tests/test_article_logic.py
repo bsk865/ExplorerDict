@@ -27,13 +27,15 @@ import json
 import unittest
 
 from app.api_client import (
-    ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, ApiError,
-    build_article_logic_payload, build_article_material, parse_article_logic,
+    ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, ARTICLE_VARY_MAX,
+    ARTICLE_VARY_STEPS, ApiError, article_vary, build_article_logic_payload,
+    build_article_material, build_article_vary_note, parse_article_logic,
 )
 from app.map_service import (
     LOGIC_MAX_ATTEMPTS, LOGIC_MIN_BRANCHES, LOGIC_TEXT_MATCH_MIN, LogicRelation,
-    MapNode, logic_feedback, logic_levels, logic_rel_pairs, logic_flow,
-    logic_text_of, logic_to_map_relations, run_logic_graph, validate_logic,
+    MapNode, content_fingerprint, logic_feedback, logic_levels, logic_rel_pairs,
+    logic_flow, logic_text_of, logic_to_map_relations, logic_vary_label,
+    run_logic_graph, validate_logic, vary_plan,
 )
 
 #: 一篇「先讲问题、再讲方案、最后实测」的时序文章（测试用的最小原文）。
@@ -84,10 +86,15 @@ class FakeClient:
         self.responses = list(responses)
         self.calls: list[dict] = []
         self.titles: list[str] = []
+        #: 每次调用的「换思路」参数（批次 M21-B）：vary / temperature / effort。
+        self.vary: list[dict] = []
 
-    def article_logic(self, logic, *, title="", temperature=0.0):
+    def article_logic(self, logic, *, title="", temperature=0.0, vary=0,
+                      reasoning_effort=None):
         self.calls.append(dict(logic))
         self.titles.append(title)
+        self.vary.append({"vary": int(vary), "temperature": float(temperature),
+                          "effort": reasoning_effort})
         if not self.responses:
             raise AssertionError("假 client 的响应不够用了（用例设计错了）")
         item = self.responses.pop(0)
@@ -499,6 +506,136 @@ class TestRunLogicGraph(unittest.TestCase):
         client = FakeClient(GOOD)
         run_logic_graph(client, doc_key="k", text=ARTICLE, max_attempts=0)
         self.assertEqual(len(client.calls), 1)
+
+
+# ------------------------------------------------------------ 重新生成 = 换思路
+class TestVaryLadder(unittest.TestCase):
+    """批次 M21-B：用户口径「没有思考等级方式的变化，重新生成毫无意义」。
+
+    这一组用例守的是三件事：
+
+    * **第 0 档必须与批次 M20 的老口径逐字一致** —— 否则升级一次，用户已有的
+      缓存全失效、每张老图都要重新花钱归纳；
+    * **每一档必须真的不一样**（提示词多一段、temperature 不同、推理强度更高），
+      否则「换思路」只是嘴上说说；
+    * 每一档**各有各的指纹**（各缓存一张图），且档位随图落库、读得回来。
+    """
+
+    def test_step_zero_keeps_the_old_prompt_verbatim(self):
+        payload = build_article_logic_payload("m", {"text": ARTICLE, "terms": ["重排模型"]},
+                                              title="重排方案实测")
+        self.assertEqual(build_article_vary_note(0), "")
+        self.assertNotIn("这一遍的额外要求", payload["messages"][1]["content"],
+                         "第 0 档不许出现换思路的话，否则老缓存全部作废")
+        self.assertNotIn("额外要求", payload["messages"][0]["content"])
+
+    def test_every_step_adds_its_own_instruction_and_heat(self):
+        seen_temperature = set()
+        seen_note = set()
+        for step in range(ARTICLE_VARY_MAX + 1):
+            label, approach, temperature = article_vary(step)
+            note = build_article_vary_note(step)
+            seen_temperature.add(temperature)
+            seen_note.add(note)
+            self.assertTrue(label, "每一档都要有给人看的名字")
+            if step:
+                self.assertIn(label, note)
+                self.assertIn(approach, note)
+                self.assertGreater(temperature, 0.0,
+                                   "换思路那一遍不该还是 temperature=0（那样同一档必然复读）")
+        self.assertEqual(len(seen_temperature), ARTICLE_VARY_MAX + 1)
+        self.assertEqual(len(seen_note), ARTICLE_VARY_MAX + 1, "每一档的话必须各不相同")
+
+    def test_step_is_clamped_instead_of_exploding(self):
+        self.assertEqual(article_vary(-3), article_vary(0))
+        self.assertEqual(article_vary(99), article_vary(ARTICLE_VARY_MAX))
+        self.assertEqual(article_vary(1.0), ARTICLE_VARY_STEPS[1])
+
+    def test_payload_carries_the_step_instruction_and_its_temperature(self):
+        payload = build_article_logic_payload(
+            "m", {"text": ARTICLE, "terms": []}, title="t", vary=2)
+        body = payload["messages"][1]["content"]
+        label, approach, temperature = article_vary(2)
+        self.assertIn(label, body)
+        self.assertIn(approach, body)
+        self.assertEqual(payload["temperature"], temperature)
+        self.assertEqual(payload["messages"][1]["content"].count("这一遍的额外要求"), 1,
+                         "换思路那段只能加一次，别在重试时叠上去")
+
+    def test_zero_step_fingerprint_matches_the_old_payload(self):
+        nodes = [MapNode(entry_id=1, term="重排模型"),
+                 MapNode(entry_id=2, term="向量召回")]
+        old = content_fingerprint(7, nodes, base_url="http://x", model="m",
+                                  reasoning_effort="", source="article:k#ok:9")
+        self.assertEqual(content_fingerprint(7, nodes, base_url="http://x", model="m",
+                                             reasoning_effort="", source="article:k#ok:9",
+                                             vary=0),
+                         old, "第 0 档必须与老口径逐字相同，否则老缓存全失效")
+
+    def test_each_step_has_its_own_fingerprint(self):
+        nodes = [MapNode(entry_id=1, term="重排模型")]
+        prints = {content_fingerprint(7, nodes, base_url="http://x", model="m",
+                                      reasoning_effort="", source="a", vary=step)
+                  for step in range(ARTICLE_VARY_MAX + 1)}
+        self.assertEqual(len(prints), ARTICLE_VARY_MAX + 1,
+                         "每一档各是一张图、各有自己的缓存，不许互相顶掉")
+
+    def test_plan_walks_up_the_effort_ladder(self):
+        tiers = ["", "low", "high", "max"]
+        got = [vary_plan(step, reasoning_effort="", model="deepseek-chat")["effort"]
+               for step in range(ARTICLE_VARY_MAX + 1)]
+        self.assertEqual(got, ["", "low", "high", "max"],
+                         "设置里是「不发送」时，四档要正好走完四档推理强度")
+        self.assertEqual(got, tiers)
+
+    def test_plan_never_goes_past_the_last_tier(self):
+        plan = vary_plan(ARTICLE_VARY_MAX, reasoning_effort="max",
+                         model="deepseek-chat")
+        self.assertEqual(plan["effort"], "max", "已经在最高档就停在最高档")
+        self.assertEqual(plan["vary"], ARTICLE_VARY_MAX)
+
+    def test_plan_keeps_the_setting_when_the_model_has_no_tiers(self):
+        """没列出档位的模型走兜底目录 —— 用户在设置里选的那一档必须还在。"""
+        plan = vary_plan(1, reasoning_effort="medium", model="某个没列档位的模型")
+        self.assertEqual(plan["effort"], "high",
+                         "兜底目录是 ('', low, medium, high)：medium 往上抬一级 = high")
+        self.assertEqual(vary_plan(1, reasoning_effort="high",
+                                   model="某个没列档位的模型")["effort"], "high",
+                         "已经在顶就停在顶，不许越界")
+
+    def test_graph_records_which_step_it_came_from(self):
+        client = FakeClient(GOOD)
+        graph = run_logic_graph(client, doc_key="k", text=ARTICLE,
+                                plan=vary_plan(1, reasoning_effort="", model="deepseek-chat"))
+        self.assertEqual(graph.vary, 1)
+        self.assertEqual(graph.vary_label, article_vary(1)[0])
+        self.assertEqual(client.vary[0]["vary"], 1)
+        self.assertEqual(client.vary[0]["effort"], "low")
+        self.assertEqual(client.vary[0]["temperature"], article_vary(1)[2])
+        self.assertIn("vary", graph.as_dict(), "档位要随图落库，读缓存才认得回来")
+        self.assertEqual(len(client.calls), 1)
+
+    def test_no_plan_means_the_old_behaviour(self):
+        client = FakeClient(GOOD)
+        graph = run_logic_graph(client, doc_key="k", text=ARTICLE)
+        self.assertEqual(graph.vary, 0)
+        self.assertEqual(graph.vary_label, "")
+        self.assertEqual(client.vary[0], {"vary": 0, "temperature": 0.0, "effort": ""})
+
+    def test_label_is_silent_for_the_first_version(self):
+        self.assertEqual(logic_vary_label({"vary": 0, "vary_label": "标准"}), "")
+        self.assertEqual(logic_vary_label(None), "")
+        self.assertEqual(logic_vary_label({"vary": 2, "vary_label": "换一种结构"}),
+                         "第 3 档 · 换一种结构")
+        self.assertEqual(logic_vary_label({"vary": 1, "vary_label": ""}), "第 2 档")
+
+    def test_retry_stays_inside_the_same_step(self):
+        bad = good_copy(relations=[relation("重排模型", "重排方案", "时序")])
+        client = FakeClient(bad, GOOD)
+        run_logic_graph(client, doc_key="k", text=ARTICLE,
+                        plan=vary_plan(2, reasoning_effort="", model="deepseek-chat"))
+        self.assertEqual(client.vary[0], client.vary[1],
+                         "重试是「同一档再想一次」，不许在重试里偷偷换档")
 
 
 if __name__ == "__main__":  # pragma: no cover
