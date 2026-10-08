@@ -333,6 +333,42 @@ ARTICLE_TEXT_CHARS = 6000
 ARTICLE_MAX_BRANCHES = 9
 ARTICLE_MAX_ENTITIES = 60
 
+#: 「重新生成」用的**思维阶梯**：每往后一档，就换一种想这件事的方式。
+#: 为什么要这个：以前点「重新生成」= 同一个模型 + 同一段提示词 + ``temperature=0``
+#: ⇒ 第二次必然拿到一模一样的图（用户实测反馈：布局一个像素都不动，等于白点）。
+#: 现在每一档都换一套**明确不同**的归纳策略，并在状态行如实写清用的是哪一档。
+#: 第 0 档必须与批次 M20 的老口径**逐字一致**，否则老缓存会失效、行为会漂移。
+ARTICLE_VARY_STEPS: tuple[tuple[str, str, float], ...] = (
+    (
+        "标准",
+        "",
+        0.0,
+    ),
+    (
+        "深挖一层",
+        "在标准做法之外，这一遍请**再往下挖一层**：优先把文章里隐含的中间环节、"
+        "前提条件、以及「为什么这一步必须在下一步之前」写出来；"
+        "分支名要能看出推进关系，不要只写标题式的名词短语。",
+        0.2,
+    ),
+    (
+        "换一种结构",
+        "这一遍请**换一种切法**：上一版是按阶段切的，这一遍优先按**因果链**来切，"
+        "找出文章真正的主线（是哪一个问题导致哪一个结果）；"
+        "如果文章有两种以上可能的切法，选**上一版没有选的那个**，让这张图明显不一样。",
+        0.4,
+    ),
+    (
+        "最大思考",
+        "这一遍请**用最完整的方式重做**：先把全文的论证顺序在心里过一遍，"
+        "找出上一版漏掉的关键环节与反例，再给出分支与关系；"
+        "宁可想得慢一点，也要让这一版的脉络比上一版更完整、更准确。",
+        0.6,
+    ),
+)
+#: 阶梯最多转几档（到顶后停在最后一档，不无限上调）。
+ARTICLE_VARY_MAX = len(ARTICLE_VARY_STEPS) - 1
+
 ARTICLE_LOGIC_SYSTEM_PROMPT = """你在**读一篇文章**，然后把它归纳成一张「脉络清晰、顺序正确」的思维导图。
 
 用户会给你一篇文章的正文（可能被截断，截断处会明确标注），以及**用户在这篇文章里划过的词**。
@@ -373,7 +409,34 @@ ARTICLE_LOGIC_USER_TEMPLATE = """标题：{title}
 {terms}
 
 正文：
-{article}"""
+{article}{vary}"""
+
+#: 「重新生成」时追加在用户消息末尾的换思路指令（空串 = 标准做法，一个字不加）。
+ARTICLE_VARY_TEMPLATE = """
+
+————————————————
+这一遍的额外要求（{label}，第 {step} 档）：{approach}"""
+
+
+def article_vary(step: int) -> tuple[str, str, float]:
+    """把「第几档」翻译成 ``(标签, 追加指令, temperature)``（纯函数）。
+
+    超出范围一律**夹到有效档位**（负数 → 第 0 档；太大 → 最后一档），
+    因此界面传什么都不会炸，也不会因为一次脏计数就换出个乱七八糟的提示词。
+    """
+    index = max(0, min(int(step or 0), ARTICLE_VARY_MAX))
+    label, approach, temperature = ARTICLE_VARY_STEPS[index]
+    return label, approach, float(temperature)
+
+
+def build_article_vary_note(step: int) -> str:
+    """追加给模型的换思路指令（第 0 档返回空串 —— 标准做法不加任何东西）。"""
+    label, approach, _temperature = article_vary(step)
+    if not approach:
+        return ""
+    index = max(0, min(int(step or 0), ARTICLE_VARY_MAX))
+    return ARTICLE_VARY_TEMPLATE.format(label=label, step=index + 1, approach=approach)
+
 
 
 def build_article_material(text: str, *, limit: int = ARTICLE_TEXT_CHARS) -> str:
@@ -400,21 +463,28 @@ def build_article_material(text: str, *, limit: int = ARTICLE_TEXT_CHARS) -> str
 def build_article_logic_payload(model: str, logic, *, title: str = "",
                                 temperature: float = 0.0,
                                 reasoning_effort: str = "",
-                                thinking: str = "") -> dict:
+                                thinking: str = "", vary: int = 0) -> dict:
     """构造「按原文归纳」的请求体。
 
     ``logic`` 由 :mod:`app.map_service` 构造：
     ``{"text": 原文, "terms": [划过的词], "feedback": 上一轮的差异清单}``。
-    ``temperature`` 默认 **0.0**：同一篇文章的归纳必须稳定，重新生成不该换一张图。
+    ``temperature`` 默认 **0.0**：同一篇文章的**同一档**归纳必须稳定，同一档
+    重新生成不该换一张图（要换图请换档，见 ``vary``）。
+
+    ``vary`` 是「重新生成」的思维阶梯档位（批次 M21-B）：第 0 档 = 批次 M20 的
+    老口径（提示词一字不加），往后每档往用户消息末尾追加一段**换思路指令**。
+    界面上那句「第 N 档」用的就是它。
     """
     data = logic or {}
     text = str(data.get("text") or "")
     terms = [str(t).strip() for t in list(data.get("terms") or []) if str(t).strip()]
     feedback = str(data.get("feedback") or "").strip()
+    _label, _approach, vary_temperature = article_vary(vary)
     user = ARTICLE_LOGIC_USER_TEMPLATE.format(
         title=(title or "").strip() or "（未知标题）",
         terms="、".join(terms) if terms else "（没有划过词）",
         article=build_article_material(text),
+        vary=build_article_vary_note(vary),
     )
     if feedback:
         user += ("\n\n上一轮你的输出有这样一些问题，请**改掉它们**后重新输出完整 JSON：\n"
@@ -425,7 +495,7 @@ def build_article_logic_payload(model: str, logic, *, title: str = "",
             {"role": "system", "content": ARTICLE_LOGIC_SYSTEM_PROMPT},
             {"role": "user", "content": user},
         ],
-        "temperature": float(temperature),
+        "temperature": float(temperature if not vary else vary_temperature),
         "stream": False,
         "response_format": {"type": "json_object"},
     }, reasoning_effort), thinking)
@@ -920,16 +990,21 @@ class DeepSeekClient:
         return parse_map_template(self._extract_content(self._post(payload)), choices)
 
     # ------------------------------------------------- 按原文归纳（文章逻辑）
-    def article_logic(self, logic, *, title: str = "", temperature: float = 0.0) -> dict:
+    def article_logic(self, logic, *, title: str = "", temperature: float = 0.0,
+                      vary: int = 0, reasoning_effort: str | None = None) -> dict:
         """读**整篇文章**，归纳出分支与关系（返回 ``parse_article_logic`` 的结果）。
 
         ``logic`` 由 ``MapService`` 构造：``{"text": 原文, "terms": 划过的词,
         "feedback": 上一轮差异清单}``。和 ``map_relations`` 的区别是：这里看的是
         文章本身（而不是每个词的 240 字上下文），所以能归纳出「这篇文章在讲什么」。
+
+        ``vary`` = 思维阶梯档位（0 = 标准做法）；``reasoning_effort`` 不传就用
+        客户端自己的（``None`` 与空串是两回事：空串 = 真的不发送这个字段）。
         """
+        effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
         payload = build_article_logic_payload(
             self.model, logic, title=title, temperature=temperature,
-            reasoning_effort=self.reasoning_effort, thinking=self.thinking)
+            reasoning_effort=effort, thinking=self.thinking, vary=vary)
         return parse_article_logic(self._extract_content(self._post(payload)))
 
     # ------------------------------------------------------------- 内部

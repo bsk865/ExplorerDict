@@ -40,10 +40,10 @@ from dataclasses import dataclass, field, replace
 
 from .api_client import (
     ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES,
-    ApiError,
+    ApiError, article_vary,
 )
 from .article_source import MIN_ARTICLE_CHARS
-from .config import model_signature
+from .config import effort_choices, model_signature
 from .logging_setup import get_logger, redact
 
 log = get_logger("map")
@@ -139,6 +139,10 @@ class LogicGraph:
     warnings: tuple[str, ...] = ()
     #: 生成这份归纳时的模型签名（缓存用；换了模型就该重算）。
     model_config: str = ""
+    #: 「重新生成」的第几档思路（批次 M21-B）：0 = 标准做法。落进 ``raw`` 那一列，
+    #: 读缓存时由 :func:`_with_provenance` 认回来，界面才说得出这一次换了什么。
+    vary: int = 0
+    vary_label: str = ""
 
     def branch_of(self, entity: str) -> int | None:
         """这个实体在第几个分支里（找不到 → None）。"""
@@ -163,6 +167,8 @@ class LogicGraph:
             "relations": [rel.as_dict() for rel in self.relations],
             "warnings": list(self.warnings),
             "model_config": self.model_config,
+            "vary": int(self.vary or 0),
+            "vary_label": self.vary_label,
         }
 
 
@@ -338,7 +344,7 @@ def logic_feedback(result) -> str:
 
 def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
                     terms=(), max_attempts: int = LOGIC_MAX_ATTEMPTS,
-                    model_config: str = "") -> LogicGraph:
+                    model_config: str = "", plan=None) -> LogicGraph:
     """跑「按原文归纳」：问模型 → **代码校验** → 不合格就带着差异清单重试。
 
     这是用户要的那条流水线的第 3、4、5 步，也是**唯一**会花 token 的地方。
@@ -348,19 +354,30 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
     * 校验不通过 ⇒ 把 ``problems`` 原样回给模型，让它改，最多 ``max_attempts`` 轮；
     * 用完轮次还不合格 ⇒ 返回最后一份带 ``problems`` 的结果（``relations`` 与
       ``branches`` 保留，界面据此如实说明「这一版没通过校验」），**绝不假装成功**。
+
+    ``plan`` 是 :func:`vary_plan` 给的换思路方案（批次 M21-B）：``vary`` 决定
+    追加哪段「换一种想这件事的方式」的指令，``temperature`` 与 ``effort`` 决定
+    这一档有多发散 / 想多深。不传 = 第 0 档（老口径，提示词一字不加）。
     """
     attempts = max(1, int(max_attempts))
     body = str(text or "")
     #: 划过的词（允许直接传词条行；只取名字 —— 提示词、校验、主线都用这一份）。
     names = [str(getattr(item, "term", item) or "").strip() for item in (terms or ())]
     names = [name for name in names if name]
+    plan = dict(plan or {})
+    step = int(plan.get("vary") or 0)
+    label, _approach, _temperature = article_vary(step)
+    temperature = float(plan.get("temperature") or 0.0)
+    effort = str(plan.get("effort") or "")
     last: dict = {"branches": [], "relations": [], "problems": [], "warnings": [],
                   "ok": False, "matches": 0.0, "main_logic": ""}
     feedback = ""
     for attempt in range(attempts):
         logic = {"text": body, "terms": list(names), "feedback": feedback}
         try:
-            raw = client.article_logic(logic, title=title)
+            raw = client.article_logic(logic, title=title, vary=step,
+                                       temperature=temperature,
+                                       reasoning_effort=effort)
         except ApiError as exc:
             if exc.kind != "bad_response":
                 # 网络 / 鉴权 / 限流这类失败重试也是白花用户的钱：如实报错，不重试。
@@ -393,6 +410,9 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
         relations=tuple(last.get("relations") or ()),
         warnings=tuple(last.get("warnings") or ()),
         model_config=str(model_config or ""),
+        vary=step,
+        #: 第 0 档就是「标准做法」，不必给它起名字：界面只在真的换过思路时才说。
+        vary_label=str(label or "") if step else "",
     )
 
 
@@ -713,6 +733,11 @@ class MapGraph:
     #: 谁先谁后）。为空 = 这张图是「按词条关系」生成的（没取到原文，或用户关了）。
     main_logic: str = ""
     branches: tuple[dict, ...] = ()
+    #: 这张图是「重新生成」的第几档思路（批次 M21-B）：``0`` = 标准做法，
+    #: ``1`` 起分别是「深挖一层」「换一种结构」「最大思考」。界面据此如实说明
+    #: 「这一次换了什么」—— 说不出来就等于没换。
+    vary: int = 0
+    vary_label: str = ""
 
     def relation_for(self, src_id: int, dst_id: int, rel_type: str) -> MapRelation | None:
         for rel in self.relations:
@@ -848,7 +873,26 @@ def _with_provenance(graph: MapGraph, row) -> MapGraph:
         source="article",
         main_logic=str(data.get("main_logic") or ""),
         branches=tuple(clean),
+        vary=int(data.get("vary") or 0),
+        vary_label=str(data.get("vary_label") or ""),
     )
+
+
+def logic_vary_label(graph) -> str:
+    """这张图是「重新生成」的第几档思路 → 界面用的一句短说明（没有 → 空串）。
+
+    为什么要单独一个纯函数：档位一路会以 ``LogicGraph`` / ``MapGraph`` / 落库的
+    ``dict`` 三种形态出现，界面不该自己猜是哪一种。
+    """
+    if isinstance(graph, dict):
+        step = int(graph.get("vary") or 0)
+        label = str(graph.get("vary_label") or "").strip()
+    else:
+        step = int(getattr(graph, "vary", 0) or 0)
+        label = str(getattr(graph, "vary_label", "") or "").strip()
+    if step <= 0:
+        return ""
+    return f"第 {step + 1} 档 · {label}" if label else f"第 {step + 1} 档"
 
 
 def article_is_usable(article) -> bool:
@@ -1254,9 +1298,41 @@ def explanation_text(row) -> str:
     return "\n".join(parts)
 
 
+def vary_plan(step: int, *, reasoning_effort: str = "", model: str = "") -> dict:
+    """把「第几次重新生成」翻译成一份**明确的换思路方案**（纯函数）。
+
+    用户的实测反馈：点「重新生成」之前，这里其实什么都没变 —— 同一段提示词、
+    同一个模型、``temperature=0``，第二次必然拿到一模一样的图，画面上一个像素
+    都不动。所以重新生成必须**真的换一次思考方式**，这份方案就是那次改变：
+
+    * ``vary``：阶梯档位（进指纹、进状态行、决定追加哪段换思路指令）；
+    * ``temperature``：第 0 档 0.0（同内容同结果），往后逐档放宽；
+    * ``effort``：在用户设置的档位上**往上抬 ``vary`` 级**（设置里是「不发送」
+      时按该模型的默认档起步 —— DeepSeek 默认 high），抬到顶就停在最高档；
+    * ``label``：这一档的名字（界面如实写「第 N 次：深挖一层」）。
+    """
+    from .api_client import ARTICLE_VARY_MAX      # 避免模块级循环 import
+    index = max(0, min(int(step or 0), ARTICLE_VARY_MAX))
+    label, _approach, temperature = article_vary(index)
+    tiers = [str(item or "") for item in effort_choices(model)]
+    base = str(reasoning_effort or "").strip().lower()
+    if not tiers:
+        return {"vary": index, "temperature": float(temperature),
+                "effort": base, "label": label}
+    if base in tiers:
+        pos = tiers.index(base)
+        target = pos + index
+    else:
+        # 用户手输的怪值（不在候选档里）：第 0 档原样不动，要升就一次升到最高档。
+        target = 0 if not index else len(tiers) - 1
+    return {"vary": index, "temperature": float(temperature),
+            "effort": tiers[min(target, len(tiers) - 1)], "label": label}
+
+
 def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str = "",
-                        reasoning_effort: str = "", source: str = "") -> str:
-    """内容指纹：主题 + 每个词条的 (id, term, context, 释义) + 模型配置 (+ 生成方式)。
+                        reasoning_effort: str = "", source: str = "",
+                        vary: int = 0) -> str:
+    """内容指纹：主题 + 每个词条的 (id, term, context, 释义) + 模型配置 (+ 生成方式 / 档位)。
 
     新词 / 改词 / 换模型 / 改推理强度 → 指纹变化 → 旧缓存不命中（过期检测）；
     同内容重复打开则稳定命中。词条按 id 排序，读库顺序变化不影响指纹。
@@ -1266,6 +1342,12 @@ def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str 
     = 按这篇文章的原文归纳）。为什么要算进指纹：同一批词「有原文」和「没有原文」
     会得到两张完全不同的图，若指纹相同，切回旧库时会把另一条路的图当成缓存直接
     显示 —— 那就成了拿旧图冒充新结果。默认空串保证老缓存照旧命中。
+
+    ``vary`` 是「重新生成」的**思维阶梯档位**（批次 M21-B）。为什么要算进指纹：
+    每一档是**另一张图**（提示词不同、``temperature`` 不同、推理强度也不同），
+    共用一条指纹的话，从第 2 档退回第 1 档会把第 2 档的图当缓存显示 —— 又是
+    「拿旧图冒充新结果」。默认 0 时 ``payload`` 里的键**逐个与老口径相同**，
+    保证老缓存照旧命中。
     """
     entries = [
         {
@@ -1277,14 +1359,18 @@ def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str 
         for node in sorted(nodes or (), key=lambda item: int(item.entry_id))
     ]
     signature = model_signature(model, reasoning_effort)
+    payload_data = {
+        "topic_id": int(topic_id),
+        "entries": entries,
+        "base_url": str(base_url or "").strip().rstrip("/"),
+        "model": signature,
+        "source": str(source or ""),
+    }
+    step = int(vary or 0)
+    if step:
+        payload_data["vary"] = step
     payload = json.dumps(
-        {
-            "topic_id": int(topic_id),
-            "entries": entries,
-            "base_url": str(base_url or "").strip().rstrip("/"),
-            "model": signature,
-            "source": str(source or ""),
-        },
+        payload_data,
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -1625,7 +1711,7 @@ class MapService:
 
     # ------------------------------------------------------------- 生成
     def generate(self, topic_id: int, *, nodes=None, force: bool = False,
-                 topic_name: str = "", article=None) -> int | None:
+                 topic_name: str = "", article=None, vary: int = 0) -> int | None:
         """为某个主题生成参考关系。返回**请求 token**（``None`` = 没有发起网络请求）。
 
         ``None`` 的四种情况（调用方据此决定提示）：
@@ -1640,6 +1726,12 @@ class MapService:
         :func:`article_is_usable`）时走「按原文归纳」那条流水线
         （:func:`run_logic_graph`）；否则一律走老路（按词条关系），并且**如实说明**
         没有原文可用 —— 绝不拿一句失败理由或 240 字上下文硬编一篇原文出来。
+
+        ``vary`` 是「第几次重新生成」的**思维阶梯档位**（批次 M21-B，默认 0 =
+        老口径）：每一档换一套归纳策略、放宽 ``temperature``、抬高推理强度，
+        并**进指纹** —— 因此每一档各是一张图、各有自己的缓存，而不是拿旧图
+        冒充新结果。有原文时才逐档递进；没原文（走词条关系那条路）时只有第 0 档
+        有意义，别的档位会被跳过（见下方 ``step`` 的计算）。
 
         迟到的结果带 ``(token, topic_id, fingerprint)``：UI 只接受与当前主题 +
         当前指纹都匹配的结果，因此切主题 / 改词后的旧结果不会串图。
@@ -1658,9 +1750,14 @@ class MapService:
             # 绝不拿一句「取原文失败」的理由当文章去归纳。
             text = ""
         source = self.source_tag(article, text)
+        # 思维阶梯只在**有原文**时逐档递进：没原文那张图是代码按关系分层画出来的，
+        # 与「换个思路读文章」无关，硬抬档位只会白花钱。
+        plan = vary_plan(vary if text else 0,
+                         reasoning_effort=self.config.reasoning_effort,
+                         model=model)
         fp = content_fingerprint(topic_id, nodes, base_url=base_url, model=model,
-                                 reasoning_effort=self.config.reasoning_effort,
-                                 source=source)
+                                 reasoning_effort=plan["effort"],
+                                 source=source, vary=plan["vary"])
 
         if not force:
             cached = self.cached_graph(topic_id, nodes, fingerprint=fp,
@@ -1682,7 +1779,7 @@ class MapService:
             target=self._worker,
             args=(token, topic_id, fp, tuple(nodes), base_url, model,
                   float(self.config.timeout), str(self.config.api_key()), str(topic_name or "")),
-            kwargs={"article": (article, text) if text else None},
+            kwargs={"article": (article, text) if text else None, "plan": plan},
             name=f"map-t{token}",
             daemon=True,
         ).start()
@@ -1779,17 +1876,22 @@ class MapService:
             log.info("导图沿用上次已核对通过的关系 %s 条 topic=%s", len(carried_keys), topic_id)
         return merged, merged_verdicts, carried_keys
 
-    def _worker_article(self, token: int, topic_id: int, fp: str, nodes, article) -> None:
+    def _worker_article(self, token: int, topic_id: int, fp: str, nodes, article,
+                        plan=None) -> None:
         """后台线程（按原文归纳那条路）：归纳 → 代码校验 → 落到词条上 → 写缓存。
 
         ``article`` 是 ``(articles 表的一行, 正文)``。这一路**不**做第二次模型核对：
         归纳的每一步都由 :func:`validate_logic` 拿代码算过（实体必须在原文里逐字
         找得到、时序不许讲反、分支要够），比再问一遍模型更硬，也少花一次钱。
 
+        ``plan`` 是 :func:`vary_plan` 的换思路方案（批次 M21-B）：模型、推理强度、
+        ``temperature``、追加指令全按它来 —— 点「重新生成」才会真的换一张图。
+
         分支落进 ``map_graphs.raw`` 那一列（存归纳结果的 JSON）：读缓存时由
         :func:`_with_provenance` 认回来，界面才说得出「按哪篇文章归纳的」。
         """
         row, text = article
+        plan = dict(plan or {})
         doc_key = title = ""
         try:
             doc_key = str(row["doc_key"] or "").strip()
@@ -1801,11 +1903,13 @@ class MapService:
                                       model=str(self.config.model or ""),
                                       timeout=float(self.config.timeout),
                                       api_key=str(self.config.api_key()),
-                                      reasoning_effort=str(self.config.reasoning_effort or ""))
+                                      reasoning_effort=str(
+                                          plan.get("effort")
+                                          or self.config.reasoning_effort or ""))
             graph = run_logic_graph(
                 client, doc_key=doc_key, title=title, text=text,
                 terms=tuple(node.term for node in nodes),
-                model_config=self.model_config())
+                model_config=self.model_config(), plan=plan)
             relations, skipped = logic_to_map_relations(graph, nodes)
             dropped: dict[str, int] = {}
             if skipped:
@@ -1833,6 +1937,8 @@ class MapService:
             model_config=self.model_config(),
             main_logic=str(graph.main_logic or ""),
             branches=tuple(dict(branch) for branch in graph.branches),
+            vary=int(graph.vary or 0),
+            vary_label=str(graph.vary_label or ""),
         )
         try:
             self.db.put_map_graph(
@@ -1850,7 +1956,7 @@ class MapService:
 
     def _worker(self, token: int, topic_id: int, fp: str, nodes, base_url: str,
                 model: str, timeout: float, api_key: str, topic_name: str,
-                article=None) -> None:
+                article=None, plan=None) -> None:
         """后台线程：候选 → 本地校验 → **独立核对** → 写缓存 → 投递结果。
 
         有原文时走的是另一条路（``article=(行, 正文)``）：**按原文归纳**
@@ -1875,7 +1981,8 @@ class MapService:
         carried = 0
         try:
             if article is not None:
-                self._worker_article(token, topic_id, fp, tuple(nodes), article)
+                self._worker_article(token, topic_id, fp, tuple(nodes), article,
+                                     plan=plan)
                 return
             try:
                 client = self.make_client(base_url=base_url, model=model,
