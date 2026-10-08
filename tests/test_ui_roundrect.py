@@ -4667,6 +4667,87 @@ class TestConceptMapCamera(unittest.TestCase):
                                 "5 个 12 的小增量不该等于旧写法滚一整格")
                 self.assertEqual(sorted(seen), seen, "必须是单调放大，不许跳回去")
 
+    def test_place_view_measures_instead_of_trusting_the_formula(self):
+        """★ 批次 M22-D：Tk 的 ``moveto`` 分数换算带「每像素取整 + 1 像素」偏差。
+
+        真机实测（``scrollregion`` 左界 −1000 / 总宽 3000）：按公式
+        ``(目标 − 左界) / 总宽`` 落下来**总比目标少 1 像素**（目标 0 → ``canvasx(0)``
+        = −1；500 → 499），手推公式永远差那 1–2 像素，而这个偏差会被每次缩放的
+        ``ratio`` 反复放大 —— 用户看到的就是「滚一下图就漂一点」。
+
+        所以 ``_place_view`` 只把公式当**第一次试探**，随后读着 ``canvasx(0)`` 把
+        差值补掉（最多 3 轮）。这里给替身画布装一个「少挪 fix 像素」的偏差，断言：
+        最终落点必须是**目标**，而不是公式算出来的那个位置。
+        """
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=400, height=300)
+                win._fit_pending = False
+                win._draw(force=True)
+                plain = canvas.xview_moveto
+                seen = []
+
+                def biased(fraction):
+                    plain(fraction)
+                    canvas._set_x_origin(canvas.x_origin - 1.0)   # 公式少挪一个像素
+                    seen.append((fraction, float(canvas.canvasx(0))))
+                    return canvas.view_state
+
+                canvas.xview_moveto = biased
+                win._place_view(500.0, 0.0)
+                self.assertGreaterEqual(len(seen), 2,
+                                        msg="第一次落位偏了就必须按实测差值补挪一次")
+                self.assertAlmostEqual(win._view_left(), 500.0, delta=0.5,
+                                       msg="落点必须是目标位置，不能信公式")
+                self.assertAlmostEqual(canvas.xview_moveto, biased)
+
+    def test_a_wheel_burst_keeps_the_point_under_the_pointer(self):
+        """★ 批次 M22-D：一串滚轮刻度之后，鼠标底下必须还是**同一个画布点**。
+
+        旧实现把「视图左边缘」当成 0，误差正好是一个视图宽度 —— 真机量出来滚完
+        一串（3 个刻度、100% → 151.57%）指针底下的点从 500 漂到 757，放大 12 串
+        最大漂 313.77 px、缩小 20 串 415.84 px。修复后真机最大漂移 0.17–0.64 px，
+        这里用同样的口径把「不漂」钉住（留 2 px 余量给 Tk 的整像素取整）。
+        """
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=400, height=300)
+                win._fit_pending = False
+                win._draw(force=True)
+                cursor_x, cursor_y = 200.0, 150.0
+                series = 0
+                while series < 20 and float(win._drawn_zoom) < cm.ZOOM_MAX - 1e-9:
+                    before_zoom = float(win._drawn_zoom)
+                    world_x = (win._view_left() + cursor_x) / before_zoom
+                    world_y = (win._view_top() + cursor_y) / before_zoom
+                    for _ in range(3):                     # 一串三个刻度（合并重画）
+                        win._on_zoom_wheel(SimpleNamespace(delta=120, x=cursor_x,
+                                                           y=cursor_y))
+                    win._flush_wheel_redraw()
+                    after_zoom = float(win._drawn_zoom)
+                    if after_zoom <= before_zoom + 1e-9:
+                        break                              # 已经撞上限，这一串没得测
+                    series += 1
+                    self.assertAlmostEqual(world_x * after_zoom - win._view_left(),
+                                           cursor_x, delta=2.0,
+                                           msg=f"第 {series} 串之后 x 方向漂了")
+                    self.assertAlmostEqual(world_y * after_zoom - win._view_top(),
+                                           cursor_y, delta=2.0,
+                                           msg=f"第 {series} 串之后 y 方向漂了")
+                self.assertGreaterEqual(series, 1, "一串都没测到，用例失去意义")
+
     def test_zoom_then_click_hits_the_edge_under_the_pointer(self):
         """缩放重绘后，命中判定仍然按**当前**布局 + **当前视图偏移**算。"""
         with support.temp_db() as db:

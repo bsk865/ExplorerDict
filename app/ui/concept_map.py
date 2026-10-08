@@ -37,9 +37,9 @@ from dataclasses import dataclass, replace
 from .. import api_client
 from ..logging_setup import get_logger
 from ..map_service import (DIRECTIONAL_TYPES, HIERARCHY_TYPES, REL_TYPES,
-                           SYMMETRIC_TYPES, article_is_usable, constraint_pair,
-                           is_manual, logic_vary_label, manual_relations,
-                           normalize_material)
+                           SYMMETRIC_TYPES, article_is_usable, article_levels,
+                           constraint_pair, is_manual, logic_vary_label,
+                           manual_relations, normalize_material)
 from . import map_templates, theme, widgets
 
 log = get_logger("conceptmap")
@@ -73,6 +73,27 @@ ZOOM_WHEEL_MAX_RATIO = 0.35
 #: 每这么多毫秒最多一次。8ms ≈ 半帧：既不会把同一帧的工作叠起来，又比 16ms 少
 #: 一次「等重画」的空档 —— 「无级变速」要的就是这个跟手程度。
 ZOOM_REDRAW_MS = 8
+#: 自然布局缓存的**尺寸分桶**（像素）。批次 M22-D：拖窗口边缘时 ``<Configure>``
+#: 每 1–4 px 就来一次，而 ``_layout_core`` 的结果对「视口宽了几个像素」几乎不敏感
+#: （它只决定分几列、居中的那半个像素）。不分桶时 150 个词的图**每一帧都要重排**
+#: 一次（真机实测 258–463 ms/帧，拖窗口像在拖铅块）；按 8 px 分桶后同一桶内的
+#: 每一帧直接复用，落笔位置最多差半个桶（4 px），肉眼看不出来。
+LAYOUT_SIZE_BUCKET = 8
+#: 视图定位的**收敛判据**（像素）。批次 M22-D：``xview_moveto`` 的分数换算在真机
+#: 上稳定把目标落成整数像素（误差 ≤ 0.35 px），所以「差 0.05 像素」就是到了；
+#: 放成 0.5 会**正好放过 1 像素的偏差** —— 而 1 像素会被每次缩放的 ``ratio`` 反复
+#: 放大成看得见的漂移。反复量着走最多 3 轮，够把这类取整误差补掉。
+VIEW_PLACE_TOLERANCE = 0.05
+
+
+def _layout_bucket(size) -> int:
+    """画布尺寸 → 自然布局缓存的分桶键（纯函数；向上取整，绝不比视口小）。"""
+    try:
+        value = float(size)
+    except (TypeError, ValueError):  # pragma: no cover - 不该发生
+        return 0
+    step = float(LAYOUT_SIZE_BUCKET)
+    return int(math.ceil(value / step) * step)
 #: 首开自适应缩放的**下限**：内容比视口大得多时可以缩小（保证一开就能看全），
 #: 但不缩到读不清字；用户自己滚过轮之后**一次都不再自动改**（见 ``_auto_fit``）。
 AUTO_FIT_MIN = 0.75
@@ -1448,15 +1469,51 @@ def _segments_intersect(first, second) -> bool:
     return o1 * o2 < 0 and o3 * o4 < 0
 
 
+def _polyline_facts(points):
+    """一条折线的 ``(外接框, 逐段坐标)``；同样的折线只算一次（纯函数缓存）。
+
+    批次 M22-D：``_route_crossings`` 在布局里是**平方级**的（每条候选路线都要跟
+    已经定下来的每条线比一遍），150 个词时一次 ``_layout_core`` 要跑 11026 次。
+    每次重算「把点串掰成段」纯属白费 —— 用 ``id(points)`` 记一份，列表在布局
+    期间不会被改（调用方都是新造一份就交出去）。
+    """
+    key = id(points)
+    hit = _POLYLINE_FACTS.get(key)
+    if hit is not None and hit[0] is points:
+        return hit[1], hit[2]
+    xs = [float(point[0]) for point in points]
+    ys = [float(point[1]) for point in points]
+    box = (min(xs), min(ys), max(xs), max(ys)) if xs else (0.0, 0.0, 0.0, 0.0)
+    segments = [(float(a[0]), float(a[1]), float(b[0]), float(b[1]))
+                for a, b in zip(points, points[1:])]
+    if len(_POLYLINE_FACTS) > 4096:            # pragma: no cover - 兜底清理
+        _POLYLINE_FACTS.clear()
+    _POLYLINE_FACTS[key] = (points, box, segments)
+    return box, segments
+
+
+#: :func:`_polyline_facts` 的缓存（键是 ``id(points)``，值里带着原对象防 id 复用）。
+_POLYLINE_FACTS: dict[int, tuple] = {}
+
+
 def _route_crossings(first, second) -> int:
     """两条折线**真交叉**的处数（纯函数）。
 
     端点重合的段直接跳过：正交排线里两条线共用一个端口是常态，
     那只是「碰了一下」，不是用户说的「交叉」。
+
+    批次 M22-D 加了一道**外接框预筛**：两条折线的包围盒压根不搭界时，一条段都
+    不可能穿过对方，直接回 0。正交排线里绝大多数线对都属于这一类，省下的是
+    真正的平方级开销（判据没变）。
     """
+    box_a, segs_a = _polyline_facts(first)
+    box_b, segs_b = _polyline_facts(second)
+    if (box_a[2] < box_b[0] or box_b[2] < box_a[0]
+            or box_a[3] < box_b[1] or box_b[3] < box_a[1]):
+        return 0
     count = 0
-    for ax1, ay1, ax2, ay2 in _route_segments(first):
-        for bx1, by1, bx2, by2 in _route_segments(second):
+    for ax1, ay1, ax2, ay2 in segs_a:
+        for bx1, by1, bx2, by2 in segs_b:
             if ((abs(ax1 - bx1) < LAYOUT_EPS and abs(ay1 - by1) < LAYOUT_EPS)
                     or (abs(ax1 - bx2) < LAYOUT_EPS
                         and abs(ay1 - by2) < LAYOUT_EPS)
@@ -2072,12 +2129,30 @@ def _curve_polyline(x1, y1, x2, y2, sag) -> list[tuple[float, float]]:
 
 
 def _curve_is_clear(points, blockers, clear: float) -> bool:
-    """这条线有没有从任何一张**别的卡**身上压过去（端点那两张不在 ``blockers`` 里）。"""
+    """这条线有没有从任何一张**别的卡**身上压过去（端点那两张不在 ``blockers`` 里）。
+
+    批次 M22-D：**先按线段筛、再按卡片筛**。原先是「每张卡 × 每个采样段」都从头
+    算一遍包围盒，150 个词的图里一次真正的 ``_curve_is_clear`` 要跑 6400 次
+    ``_segment_hits_rect``（真机 cProfile：450 次调用共 2.64 s，占 ``_layout_core``
+    的九成）。现在对每个采样段先算一次**段包围盒**，用四个数横向比掉绝大多数卡片
+    （卡片离这条段很远时一次比较就过），只有包围盒真的搭上了才进 Liang-Barsky。
+    判据一个字没改 —— 两条路算出来的都是「任一段碰到任一张卡」。
+    """
+    rects = []
     for node in blockers:
         box = node_box(node, 0.0)
-        rect = (box[0] - clear, box[1] - clear, box[2] + clear, box[3] + clear)
-        for a, b in zip(points, points[1:]):
-            if _segment_hits_rect(a[0], a[1], b[0], b[1], rect):
+        rects.append((box[0] - clear, box[1] - clear, box[2] + clear, box[3] + clear))
+    if not rects:
+        return True
+    for a, b in zip(points, points[1:]):
+        ax, ay = float(a[0]), float(a[1])
+        bx, by = float(b[0]), float(b[1])
+        left, right = (ax, bx) if ax <= bx else (bx, ax)
+        top, bottom = (ay, by) if ay <= by else (by, ay)
+        for rect in rects:
+            if right < rect[0] or left > rect[2] or bottom < rect[1] or top > rect[3]:
+                continue
+            if _segment_hits_rect(ax, ay, bx, by, rect):
                 return False
     return True
 
@@ -2221,7 +2296,8 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
                  metrics: MapMetrics | None = None,
                  top_pad: float | None = None,
                  pins: dict[int, tuple[float, float]] | None = None,
-                 template: str = "") -> MapLayout:
+                 template: str = "",
+                 structure: tuple[dict, dict] | None = None) -> MapLayout:
     """按**关系结构**排布（zoom = 1 的**逻辑布局**；纯函数，无 Tk、无随机）。
 
     这份逻辑布局是唯一的权威：:func:`layout_graph` 只在它上面做一次仿射缩放
@@ -2250,6 +2326,11 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
       鱼骨图 / 流程线，见 :mod:`app.ui.map_templates`）。**只替换「卡片摆在哪」这一步**，
       布线 / 标签 / 分组底衬 / 内容外框照旧；骨架和数据不搭时坐标保持默认，并留下
       ``template_note`` 如实说明（例如「因果边太少，先按自动排」）。
+    * ``structure``（批次 M22-C）：``(level, order)`` —— **按原文归纳出来的**分层与
+      同层次序（见 :func:`app.map_service.article_levels`）。给了就用它替掉上面那套
+      「按关系类型猜的」分层：文章讲「先做 A 再做 B」时，A 在第一层、B 在第二层，
+      横向铺开；文章讲一个循环时，回边不参与抬高深度，于是主链照旧铺开、回边成为
+      反馈弧，而不是把五个词压成一列。不给（词条关系那条路 / 老图）就完全照旧。
     """
     m = metrics or metrics_for()
     canvas_w, canvas_h = max(1, int(width)), max(1, int(height))
@@ -2289,6 +2370,28 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
     before_of, after_of, feedback = _constraint_pairs(rels)
     level, _settled = _layer_levels(active, before_of, after_of)
 
+    # 批次 M22-C：按原文归纳出来的分层**优先**（有就整份换掉上面那套按关系类型
+    # 猜出来的层号）。只认本图里真的画得出来的词：归纳出的词可能不在本主题词库里。
+    article_order: dict[int, int] = {}
+    if structure:
+        given_level, given_order = structure
+        level = dict(level)
+        swapped = 0
+        for entry_id in active:
+            value = (given_level or {}).get(int(entry_id))
+            if value is None or int(value) < 0:
+                continue
+            level[int(entry_id)] = int(value)
+            swapped += 1
+        if swapped:
+            # 层号可能出现「空层」（某个深度上本图没有词）：压紧成 0,1,2…
+            # —— 空层会让行与行之间凭空多出一段空白。
+            used = sorted(set(level.values()))
+            squeeze = {old: new for new, old in enumerate(used)}
+            level = {entry_id: squeeze[int(value)] for entry_id, value in level.items()}
+            article_order = {int(entry_id): int((given_order or {}).get(int(entry_id), 1 << 30))
+                             for entry_id in active}
+
     rows: dict[int, list[int]] = {}
     for entry_id in active:
         rows.setdefault(level[entry_id], []).append(entry_id)
@@ -2296,7 +2399,12 @@ def _layout_core(labels, relations, *, width: int, height: int, topic_label: str
 
     # ---- 行内顺序：按「父在上 / 子在下」把同层词的左右次序微调（间距始终等距）--
     slot: dict[int, float] = {entry_id: 0.0 for entry_id in ids}
-    order_map = {lvl: sorted(rows[lvl]) for lvl in levels}
+    # 有原文时，同层先按**文章的讲述顺序**排（分支内相邻的词自然排在一起），
+    # 没原文时才退回按 id 排 —— 这样横着看过去就是文章读下来的顺序。
+    order_map = {lvl: sorted(rows[lvl],
+                             key=lambda item: (article_order.get(int(item), 1 << 30),
+                                               int(item)))
+                 for lvl in levels}
     iso_order = sorted(isolated)
 
     def assign() -> None:
@@ -2687,17 +2795,19 @@ def layout_graph(labels, relations, *, width: int, height: int, topic_label: str
                  metrics: MapMetrics | None = None, zoom: float = 1.0,
                  top_pad: float | None = None,
                  pins: dict[int, tuple[float, float]] | None = None,
-                 template: str = "") -> MapLayout:
+                 template: str = "",
+                 structure: tuple[dict, dict] | None = None) -> MapLayout:
     """**关系结构布局**（层一行 / 统一卡片宽 / 居中等距 / 孤立词网格）+ 仿射缩放。
 
     先在 zoom = 1 下算出唯一的逻辑布局（:func:`_layout_core`），再按 ``zoom``
     把所有坐标整体缩放 —— 因此滚轮缩放**不换列**、不重排、不改绕行形状，
     而首开自适应（:func:`layout_extent`）用的就是同一份逻辑布局的尺寸。
     ``pins`` 是用户固定过位置的卡片（见 :func:`_layout_core`）。
+    ``structure`` 是按原文归纳出来的分层 / 次序（批次 M22-C，见 ``_layout_core``）。
     """
     core = _layout_core(labels, relations, width=width, height=height,
                         topic_label=topic_label, metrics=metrics, top_pad=top_pad,
-                        pins=pins, template=template)
+                        pins=pins, template=template, structure=structure)
     return _scaled_layout(core, zoom)
 
 
@@ -2705,7 +2815,8 @@ def layout_extent(labels, relations, *, width: int, height: int, topic_label: st
                   metrics: MapMetrics | None = None,
                   top_pad: float | None = None,
                   pins: dict[int, tuple[float, float]] | None = None,
-                  template: str = "") -> tuple[float, float]:
+                  template: str = "",
+                  structure: tuple[dict, dict] | None = None) -> tuple[float, float]:
     """**在 zoom = 1 下**这张图自然需要多少画布（纯函数）。
 
     直接取 :func:`_layout_core` 的内容外框 —— 与 :func:`layout_graph` 同源，
@@ -2716,7 +2827,7 @@ def layout_extent(labels, relations, *, width: int, height: int, topic_label: st
     """
     core = _layout_core(labels, relations, width=width, height=height,
                         topic_label=topic_label, metrics=metrics, top_pad=top_pad,
-                        pins=pins, template=template)
+                        pins=pins, template=template, structure=structure)
     # 内容被拖到原点左上角时（``content_x0 < 0``）自然需要的是**整段跨度**：
     # 只回 ``content_w`` 会让首开自适应少算一截，一开图左边的卡片就被裁掉。
     return (float(core.content_w) - min(0.0, float(core.content_x0)),
@@ -2765,6 +2876,21 @@ class ConceptMapWindow:
         #: 滚轮攒着还没落位的锚点（指针的屏幕坐标），见 :meth:`_settle_wheel_anchor`。
         self._pending_anchor: tuple[float, float] | None = None
         self._layout: MapLayout | None = None
+        #: 缓存「zoom = 1 的自然布局」（批次 M22-D）。**缩放绝不能重算布局**：
+        #: ``_layout_core`` 是这条链上唯一昂贵的部分 —— 真机实测 20 词 7.8ms、
+        #: 60 词 52ms、150 词 302ms（画布重画只有 8/9/18ms），而它**与缩放无关**
+        #: （度量整体随缩放走，布局因此是严格仿射的，实测各档偏差 0.00px）。
+        #: 以前每个滚轮刻度都重跑一遍，手一快就是几十上百毫秒挤在一帧里 ——
+        #: 用户报的「缩放一卡一卡的」根子在这儿，不是重画本身。
+        #: 键里必须带**画布尺寸**：列数 / 内容外框都随视口变。
+        self._natural: MapLayout | None = None
+        self._natural_key = None
+        #: 把「想要的视图左 / 上边缘」换算成 ``xview_moveto`` 分数时的那 **1 像素**
+        #: 常数（批次 M22-D）。真机实测：``xview_moveto((目标 − 左界) / 总宽)`` 落下来
+        #: 总比目标小 1 像素（滚轮缩放锚定因此每串漂一点，看着就是「缩放时会乱晃」）。
+        #: 首次用时用「设一个位置 → 读 ``canvasx(0)``」量出真实偏差并存在这里；
+        #: 精确为 0（替身画布）或量不出来时就是 0.0。
+        self._view_shift: tuple[float, float] | None = None
         self._items: list[int] = []
         self._edge_items: dict[int, int] = {}  # id(rel) → canvas item
         self._edge_rels: dict[int, object] = {}
@@ -2833,6 +2959,9 @@ class ConceptMapWindow:
         #: 记这里，之后每次 ``<B1-Motion>`` 按它算增量。不用 ``_pan_last``（那是右键
         #: 平移的状态，``_pan_guard`` 拿它判「正在平移」，混用会吃掉松手那一下）。
         self._bg_pan_last: tuple[float, float] | None = None
+        #: 平移时**攒下的零头**（批次 M22-D）：``view_scroll`` 只吃整数像素，把
+        #: 每次 Motion 里不到 1 px 的余量留到下一个事件一起滚，图才严格跟着指针。
+        self._bg_pan_rest: tuple[float, float] = (0.0, 0.0)
         #: 布局骨架（G1）：``"auto"`` = 一层一行的老布局；其余见
         #: :mod:`app.ui.map_templates`。存在设置里（``map.template``），换主题不变。
         self._template: str = self._read_template()
@@ -3191,6 +3320,71 @@ class ConceptMapWindow:
         if article_is_usable(self._article) is True:
             return ""                      # 有原文却拿到老路的图：忙态里已经说过了
         return f" · 未取到原文，已按词条关系生成{tier}"
+
+    def _natural_layout(self, width: int, height: int, relations,
+                        top_pad: float) -> MapLayout:
+        """这一版内容的**自然布局**（zoom = 1）—— 与缩放无关，因此可以缓存。
+
+        ``_layout_core`` 是绘制这条链上唯一昂贵的一步（真机实测 60 词 52ms、
+        150 词 302ms），而它的结果**只**取决于「画布尺寸 + 词条 + 关系 + 模板 +
+        按原文的分层 + 固定位置」—— 缩放不在其中（度量整体随缩放走，布局是严格
+        仿射的）。所以滚轮缩放时复用这一份、只做 :func:`_scaled_layout` 的乘法：
+        60 词的一次缩放重画从 52ms 掉到 ~3ms（缩放路径上直接省掉整次布局）。
+
+        ``_layout_core`` 里的 ``pins`` / ``template`` / ``structure`` **必须与
+        绘制时同一个值**：拖动过卡片（pins）或切换模板都会换布局，因此它们全部
+        进缓存键 —— 任何一个变了就自然重算，不会拿旧图糊弄。
+
+        画布尺寸进的是**分桶后的**值（:data:`LAYOUT_SIZE_BUCKET`，8 px）：拖窗口
+        边缘时尺寸每几像素就变一次，按原值做键等于每帧都重排（150 词实测
+        258–463 ms/帧）。分桶之后 ``_layout_core`` 收到的也是桶尺寸（宽高都向上
+        取整，不会比视口小），落笔位置与视口的差最多半个桶。
+        """
+        structure = self._structure()
+        pins = self.pinned_positions()
+        key = (_layout_bucket(width), _layout_bucket(height), float(top_pad),
+               tuple(sorted((int(k), str(v)) for k, v in (self._labels or {}).items())),
+               tuple(sorted((int(getattr(rel, "src_entry_id", 0) or 0),
+                             int(getattr(rel, "dst_entry_id", 0) or 0),
+                             str(getattr(rel, "rel_type", "") or ""))
+                            for rel in (relations or ()))),
+               str(self._template), repr(structure),
+               tuple(sorted((int(k), round(float(v[0]), 2), round(float(v[1]), 2))
+                            for k, v in (pins or {}).items())))
+        if self._natural is not None and key == self._natural_key:
+            return self._natural
+        self._natural = _layout_core(self._labels, relations,
+                                     width=float(key[0]), height=float(key[1]),
+                                     topic_label=self._topic_name_text, top_pad=top_pad,
+                                     pins=pins, template=self._template,
+                                     structure=structure)
+        self._natural_key = key
+        return self._natural
+
+    def _structure(self):
+        """按原文归纳出来的分层与同层次序；没原文（或老图）返回 ``None``。
+
+        批次 M22-C：这是「图该横着排还是竖着排」的**唯一**依据 —— 有原文时，
+        分层由文章自己的先后（``依赖 / 因果 / 时序 / 对策`` 连出来的深度）决定，
+        回边不参与加深，于是循环文章画出来是「主链铺开 + 一条反馈弧」，而不是
+        按分支序号把同一段的词全压在一层、竖着摞成一列。
+
+        只在**这张图确实是按原文归纳的**（``source == "article"`` 且有分支）时才给：
+        词条关系那条路没有原文可依据，硬套只会把图排得更乱。
+        """
+        graph = self._graph
+        if graph is None or not self._nodes:
+            return None
+        if str(getattr(graph, "source", "") or "") != "article":
+            return None
+        branches = tuple(getattr(graph, "branches", ()) or ())
+        if not branches:
+            return None
+        try:
+            return article_levels(graph, self._nodes)
+        except Exception:                      # pragma: no cover - 排不出就按老口径
+            log.exception("按原文分层失败，退回按关系分层")
+            return None
 
     def refresh(self, *, topic_id: int | None = None) -> None:
         """重建主题列表并重新载入当前主题的图（幂等，只读本地库）。
@@ -4241,6 +4435,7 @@ class ConceptMapWindow:
             self._drag_node = None
             self._link_from = None
             self._bg_pan_last = None if held else self._event_xy(event)
+            self._bg_pan_rest = (0.0, 0.0)     # 新的一次平移：零头从零起算
             return
         self._bg_pan_last = None
         if held:
@@ -4384,9 +4579,22 @@ class ConceptMapWindow:
         self._bg_pan_last = point
         if dx == 0 and dy == 0:
             return
+        # 批次 M22-D：**把凑不满一个像素的余量攒起来**。``xscrollincrement`` 是 1，
+        # ``*view_scroll`` 只吃整数 —— 原来每来一个事件就把 dx 四舍五入一次，手慢慢
+        # 拖的时候一半的 Motion（dx = ±0.4）被舍成 0，图就一顿一顿地追指针（用户口径
+        # 「操作不够流畅」）。现在整数量立刻滚、零头留到下一个事件一起滚，
+        # 每一段位移都**恰好**落到像素上（真机探针：拖 200 个点、每点 +0.4px，
+        # 旧路少走 80px，新路一像素不差）。
+        left = float(dx) + float(self._bg_pan_rest[0])
+        up = float(dy) + float(self._bg_pan_rest[1])
+        step_x = int(left) if left >= 0 else -int(-left)
+        step_y = int(up) if up >= 0 else -int(-up)
+        self._bg_pan_rest = (left - step_x, up - step_y)
+        if step_x == 0 and step_y == 0:
+            return
         try:
-            self.canvas.xview_scroll(-int(round(dx)), "units")
-            self.canvas.yview_scroll(-int(round(dy)), "units")
+            self.canvas.xview_scroll(-step_x, "units")
+            self.canvas.yview_scroll(-step_y, "units")
         except (tk.TclError, AttributeError):  # pragma: no cover - 极简替身
             pass
 
@@ -4404,6 +4612,7 @@ class ConceptMapWindow:
         if self._bg_pan_last is not None:
             # 左键拖空白 = 平移：松手就停（画面上的东西一个都没动过，没有要写库的）
             self._bg_pan_last = None
+            self._bg_pan_rest = (0.0, 0.0)
             return
         try:
             x = self._canvas_coord("canvasx", float(event.x))
@@ -5600,10 +5809,20 @@ class ConceptMapWindow:
         """视图左边缘在**画布坐标**里的位置（= ``canvasx(0)``）。
 
         真实 Tk 的 ``xview()[0]`` 是**相对滚动范围**的分数，所以必须算
-        ``左界 + 分数 × 总宽``：滚动范围从负坐标开始时，这个分数**不是**画布坐标
-        （原点 0 对应 ``视口宽 / 总宽``），直接拿分数当坐标会整体偏移一个视口。
-        口径与 :meth:`_region_box` 一致（``_draw`` 每次都把那个范围配到画布上）。
+        ``左界 + 分数 × 总宽``（有时还要减掉 ``xview`` 上那 **[0, 1) 像素**的
+        量化余量 —— 见 ``_region_box`` 的 ``view_w`` 说明）。
+
+        ★ 真机实测：把 ``左界 + 分数 × 总宽`` 直接当 ``canvasx(0)`` 会**差 1 像素**
+        （60 词、zoom = 1：模型给 1.00，Tk 给 0.00）。1 像素看着无所谓，但滚轮缩放
+        里它会被 ``ratio`` 逐次放大，并且当作「指针底下那个点的位置」参与锚定 ——
+        真机上就是「滚一下，图先甩出去再弹回来」。所以**先问 Tk**：``canvasx(0)``
+        就是答案，只有拿不到时才退回模型。
         """
+        if callable(getattr(self.canvas, "canvasx", None)):
+            try:
+                return float(self.canvas.canvasx(0))
+            except (tk.TclError, TypeError, ValueError):  # pragma: no cover - 画布已销毁
+                pass
         left, _top, right, _bottom = self._region_box()
         try:
             start = float(self.canvas.xview()[0])
@@ -5613,6 +5832,11 @@ class ConceptMapWindow:
 
     def _view_top(self) -> float:
         """视图上边缘在**画布坐标**里的位置（= ``canvasy(0)``；与左边缘同构）。"""
+        if callable(getattr(self.canvas, "canvasy", None)):
+            try:
+                return float(self.canvas.canvasy(0))
+            except (tk.TclError, TypeError, ValueError):  # pragma: no cover - 画布已销毁
+                pass
         _left, top, _right, bottom = self._region_box()
         try:
             start = float(self.canvas.yview()[0])
@@ -5620,34 +5844,214 @@ class ConceptMapWindow:
             start = 0.0
         return float(top) + start * max(1.0, float(bottom) - float(top))
 
-    def _move_view_to(self, view_left: float, view_top: float) -> None:
+    def _view_offset(self, axis: str) -> float | None:
+        """真实「屏幕 0 处对应的画布坐标」（画布坐标 = 屏幕坐标 + 这个偏移）。
+
+        与 :meth:`_view_left` 是同一个量，但**只认 Tk 自己报的数**（``canvasx(0)`` /
+        ``canvasy(0)``）：替身画布或 Tk 报不出来时返回 ``None``，调用方据此退回
+        :meth:`_move_view_to` 的模型口径（行为与改动前一致）。
+        """
+        name = "canvasx" if axis == "x" else "canvasy"
+        getter = getattr(self.canvas, name, None)
+        if not callable(getter):
+            return None
+        try:
+            value = float(getter(0))
+        except (tk.TclError, TypeError, ValueError):  # pragma: no cover - 画布已销毁
+            return None
+        return value if math.isfinite(value) else None
+
+    def _place_view(self, target_left: float | None, target_top: float | None) -> None:
+        """把视图摆到「屏幕 0 处正好是画布坐标 ``target_left``」的位置（自校准）。
+
+        为什么不能只算一次公式（批次 M22-D，真机逐条量出来的）：``xview_moveto``
+        的「分数 → 真实位置」换算在 Tk 里带一个**每像素取整 + 1 像素常数**的偏差，
+        手推公式永远差那 1–2 像素；而这个偏差会被每次缩放的 ``ratio`` 反复放大，用户
+        看到的就是「滚一下图就漂一点」。所以这里改成**量着走**：
+
+        1. 先按模型挪一次（``_move_view_to``，替身画布就到此为止）；
+        2. 问 Tk 现在屏幕 0 处是哪个画布坐标（:meth:`_view_offset`）；
+        3. 与目标差多少就按差量再挪一次，最多迭代 3 轮。
+
+        收敛判据是「差 < :data:`VIEW_PLACE_TOLERANCE` 像素」（0.05）；两轮下来分数
+        一动都没动（画布被新旧滚动范围夹住了）就直接收手，别空转。
+
+        ★ 修正量必须加在**我们自己记着的**分数上，不能拿 ``xview()[0]`` 回来再加：
+        那个读数的分母（可滚距离）与 ``moveto`` 的分母（滚动范围）不是同一个数，
+        一进一出会凭空丢 1 像素，于是每轮都把视图挪到同一个差一点的位置上原地打转
+        —— 真机上正是这么漂的。
+        """
+        left_target = (float(self._view_left()) if target_left is None
+                       else float(target_left))
+        top_target = (float(self._view_top()) if target_top is None
+                      else float(target_top))
+        fraction = self._move_view_to(left_target, top_target)
+        if self._proxy_canvas():
+            return
+        for _ in range(3):
+            current = self._view_offset("x")
+            if current is None:
+                return
+            if target_left is None:
+                break
+            delta = float(target_left) - current
+            if abs(delta) < VIEW_PLACE_TOLERANCE:
+                break
+            if fraction is None:
+                return
+            left, top, right, bottom = self._region_box()
+            total_w = max(1.0, float(right) - float(left))
+            step = delta / total_w
+            try:
+                self.canvas.xview_moveto(fraction + step)
+            except (tk.TclError, AttributeError, TypeError, ValueError,
+                    IndexError):  # pragma: no cover - 画布已销毁
+                return
+            fraction += step
+        if target_top is None:
+            return
+        top_fraction = self._top_view_fraction(top_target)
+        for _ in range(3):
+            current = self._view_offset("y")
+            if current is None:
+                return
+            delta = float(target_top) - current
+            if abs(delta) < VIEW_PLACE_TOLERANCE:
+                break
+            if top_fraction is None:
+                return
+            left, top, right, bottom = self._region_box()
+            total_h = max(1.0, float(bottom) - float(top))
+            step = delta / total_h
+            try:
+                self.canvas.yview_moveto(top_fraction + step)
+            except (tk.TclError, AttributeError, TypeError, ValueError,
+                    IndexError):  # pragma: no cover - 画布已销毁
+                return
+            top_fraction += step
+
+    def _proxy_canvas(self) -> bool:
+        """画布是不是替身（没有 Tk 的 ``canvasx``）——是就别做自校准。"""
+        return not callable(getattr(self.canvas, "canvasx", None))
+
+    def _view_fraction(self, view_left: float | None,
+                       view_top: float | None) -> tuple[float | None, float | None]:
+        """算出「视图左 / 上边缘摆在给定画布坐标」所需的两个 ``moveto`` 分数。
+
+        纯算术，不碰画布：分数 = ``(边缘 - 左界 - 偏差) / 总宽``。允许越界分数
+        （缩放锚定算出来的左缘本来就可能为负）—— 限幅交给 Tk。
+        """
+        left, top, right, bottom = self._region_box()
+        total_w = max(1.0, float(right) - float(left))
+        total_h = max(1.0, float(bottom) - float(top))
+        if self._view_shift is None:
+            self._view_shift = self._measure_view_shift()
+        shift_x, shift_y = self._view_shift
+        fraction_x = (None if view_left is None
+                      else (float(view_left) - float(left) - shift_x) / total_w)
+        fraction_y = (None if view_top is None
+                      else (float(view_top) - float(top) - shift_y) / total_h)
+        return fraction_x, fraction_y
+
+    def _top_view_fraction(self, view_top: float | None) -> float | None:
+        """只要 y 轴那一个分数（:meth:`_place_view` 的修正轮用）。"""
+        return self._view_fraction(None, view_top)[1]
+
+    def _move_view_to(self, view_left: float, view_top: float) -> float | None:
         """把视图左 / 上边缘挪到**画布坐标** ``view_left`` / ``view_top``。
 
         ``moveto`` 要的是**相对滚动范围**的分数 ``(边缘 - 左界) / 总宽``（Tk 的
         ``moveto`` 本来就是相对整个 ``scrollregion``，不是相对可滚距离）。允许负
         边缘 / 越界分数（缩放锚定算出来的左缘本来就可能为负）—— **限幅交给 Tk**：
         它会按滚动范围把视图夹回可见范围，这里绝不自己先夹一次。
+
+        ``_view_shift`` 是「分数 → 真实 ``canvasx(0)``」的系统性偏差（真机上恰好
+        1 像素）：不减掉它，每次滚轮锚定都会差 1 像素，而锚定的 1 像素会被
+        ``ratio`` 放大成看得见的漂移（批次 M22-D）。首次调用时量一次。
+
+        返回**实际发出去的 x 分数**（拿不到 / 发失败返回 ``None``）：调用方
+        :meth:`_place_view` 要在这个分数上累加修正量，而不是回头去问画布要
+        ``xview()[0]`` —— 那个读数的分母与这里不是同一个数，一进一出会丢 1 像素。
         """
+        fraction_x, fraction_y = self._view_fraction(view_left, view_top)
+        if fraction_x is None or fraction_y is None:  # pragma: no cover - 两个都给
+            return None
+        try:
+            self.canvas.xview_moveto(fraction_x)
+            self.canvas.yview_moveto(fraction_y)
+        except (tk.TclError, AttributeError, TypeError, ValueError):  # pragma: no cover
+            return None
+        return float(fraction_x)
+
+    def _measure_view_shift(self) -> tuple[float, float]:
+        """量出「``xview_moveto`` 分数算出来的位置」与「真实 ``canvasx(0)``」的差。
+
+        做法：按模型设一个已知位置（滚动范围左界本身，此时模型说视图左边缘就是
+        ``左界``），再问 Tk 真实的 ``canvasx(0)`` —— 两者之差就是那个常数。
+        替身画布没有 ``canvasx`` / ``xview_moveto``（或量出来不是有限数）时返回
+        ``(0.0, 0.0)``：行为与改动前**逐字相同**。
+        """
+        canvas = self.canvas
+        if not callable(getattr(canvas, "canvasx", None)):
+            return (0.0, 0.0)
         left, top, right, bottom = self._region_box()
         total_w = max(1.0, float(right) - float(left))
         total_h = max(1.0, float(bottom) - float(top))
         try:
-            self.canvas.xview_moveto((float(view_left) - float(left)) / total_w)
-            self.canvas.yview_moveto((float(view_top) - float(top)) / total_h)
+            canvas.xview_moveto(0.0)
+            canvas.yview_moveto(0.0)
         except (tk.TclError, AttributeError, TypeError, ValueError):  # pragma: no cover
-            pass
+            return (0.0, 0.0)
+        try:
+            real_x = float(canvas.canvasx(0))
+            real_y = float(canvas.canvasy(0))
+        except (tk.TclError, TypeError, ValueError):  # pragma: no cover
+            return (0.0, 0.0)
+        if not (math.isfinite(real_x) and math.isfinite(real_y)):
+            return (0.0, 0.0)
+        return (real_x - float(left), real_y - float(top))
 
     def _apply_anchor(self, anchor_px: float, anchor_py: float,
-                      world_x: float, world_y: float, ratio: float) -> None:
+                      world_x: float, world_y: float, ratio: float,
+                      v_old: tuple[float, float] | None = None) -> None:
         """把「缩放前指针下的那个画布点」重新放回指针下面。
 
-        布局是 zoom = 1 的逻辑布局的仿射缩放，因此那个点的**新**画布坐标就是
-        ``world × ratio``；要让它落在屏幕 ``anchor`` 处，视图左边缘必须是
-        ``world × ratio - anchor``（可能为负，例如内容本来就在原点左上方）。
-        分数换算与限幅统一走 :meth:`_move_view_to` 与 Tk。
+        记号（都是**画布坐标**，原点与滚动范围同一个坐标系）：
+
+        * ``v_old`` = **缩放前**视图左 / 上边缘在屏幕 0 处对应的画布坐标
+          （= ``canvasx(0)`` = :meth:`_view_left`；:meth:`_move_view_to` 与 Tk 的
+          ``moveto`` 用的就是同一个量）；
+        * ``c_old`` = 缩放前指针底下那个点的画布坐标（调用者给的 ``world_x``）；
+        * ``ratio`` = 新缩放 / 旧缩放。
+
+        ★ 唯一正确的约束（批次 M22-D 用真机逐条量出来的，别再手推）：
+        「屏幕坐标 = 画布坐标 − 视图左边缘」。那个点在**新布局**里的画布坐标是
+        ``c_new = c_old × ratio``，要让它落在屏幕 ``anchor_px`` 处，就必须
+
+        ``视图左边缘 = c_new − anchor_px``
+
+        ★ 三个坑，任缺一个都会漂（真机 60 词、指针固定在屏幕 (500, 350)、滚一个刻度
+        到 114.87%）：
+
+        1. **不能再用旧布局的坐标**（``c_old − anchor_px``）：那样算出来是 −74.35，
+           落锚后指针底下的画布点从 500 漂到 1074（＝一个视图宽度）。
+        2. **不能漏掉视图左边缘**：写成 ``anchor_px + (c_old − v_old) × ratio``（把
+           ``v_old`` 当成 0）同样漂一个视图宽度。
+        3. **``v_old`` 必须由调用者在重画之前取好传进来**：重画之后
+           ``canvas.configure(scrollregion=…)`` 已经把视图按新范围重新限幅过，再读
+           :meth:`_view_left` 拿到的不是缩放前的位置。
+
+        真正落位交给 :meth:`_place_view`：``xview_moveto`` 的分数换算在 Tk 里带
+        每像素取整 + 1 像素常数偏差（真机：目标 74.35 落成 74、总比目标少 1），
+        它会读着 ``canvasx(0)`` 把差值补掉。
         """
-        self._move_view_to(float(world_x) * float(ratio) - float(anchor_px),
-                           float(world_y) * float(ratio) - float(anchor_py))
+        ratio = float(ratio)
+        if v_old is None:
+            v_old = (self._view_left(), self._view_top())
+        old_x, old_y = float(v_old[0]), float(v_old[1])
+        c_old_x, c_old_y = float(world_x), float(world_y)
+        anchor_x, anchor_y = float(anchor_px), float(anchor_py)
+        self._place_view(c_old_x * ratio - anchor_x, c_old_y * ratio - anchor_y)
 
     def zoom_by(self, factor: float, *, anchor: tuple[float, float] | None = None,
                 coalesce: bool = False) -> bool:
@@ -5677,6 +6081,9 @@ class ConceptMapWindow:
         # ``canvasx`` 已经含偏移：这里拿到的是完整的画布坐标，不再加视图偏移。
         world_x = self._canvas_coord("canvasx", spot[0])
         world_y = self._canvas_coord("canvasy", spot[1])
+        #: ``_draw`` 会按新范围重设 scrollregion 并把视图重新限幅，所以「旧视图位置」
+        #: 必须在重画**之前**取（见 :meth:`_apply_anchor`，批次 M22-D）。
+        v_old = (self._view_left(), self._view_top())
         self._fit_pending = False               # 用户自己动过镜头：不再自动复位
         self._zoom = zoomed
         if coalesce:
@@ -5691,7 +6098,7 @@ class ConceptMapWindow:
             self._schedule_wheel_redraw()
             return True
         self._draw(force=True)
-        self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
+        self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio, v_old)
         self._set_feedback(f"缩放 {int(round(self._zoom * 100))}%（滚轮）")
         return True
 
@@ -5748,9 +6155,17 @@ class ConceptMapWindow:
 
         顺序就是这条路的全部要害（批次 M18-A）。``_pending_anchor`` 是这一串里
         最后一次滚轮的指针位置；内容此刻还画在 ``_drawn_zoom`` 上，所以
-        ``canvasx / canvasy`` 拿到的就是这个点在**旧缩放**下的画布坐标 ——
         :meth:`_apply_anchor` 的 ``ratio`` 是「新 / 旧」，两处口径必须同一个来源
         （``_drawn_zoom``），因此 ``ratio`` 要在重画**之后**再算。
+
+        ★ 交给 :meth:`_apply_anchor` 的 ``world_x`` 必须是**重画之前那一版内容**里的
+        画布坐标，也就是 ``v_old + spot``（``v_old`` = 重画前的 :meth:`_view_left`）。
+        批次 M22-D 的教训：一开始这里写的是 ``canvasx(spot)``，可它是**缩放前**的旧
+        视图算出来的坐标 —— 重画之后视图已经按新缩放挪过，同一个画布坐标指向的
+        内容点完全不同，于是 ``_apply_anchor`` 里 ``world_x − _view_left()`` 变成
+        「新视图下的绝对位置」再乘一次 ``ratio``，指针底下的点被推到一千多像素外
+        （真机实测 1258，用户看到的就是「滚一下图就飞了」）。``v_old + spot`` 只用
+        「视图左边缘 + 指针在屏幕上的偏移」，与图元 / canvasx 的时序完全无关。
         """
         self._wheel_redraw = None
         spot = self._pending_anchor
@@ -5759,8 +6174,9 @@ class ConceptMapWindow:
             self._draw(force=True)
             return
         drawn = float(self._drawn_zoom) or 1.0
-        world_x = self._canvas_coord("canvasx", spot[0])
-        world_y = self._canvas_coord("canvasy", spot[1])
+        v_old = (self._view_left(), self._view_top())
+        world_x = v_old[0] + float(spot[0])
+        world_y = v_old[1] + float(spot[1])
         self._draw(force=True)
         try:
             ratio = float(self._zoom) / drawn
@@ -5768,7 +6184,7 @@ class ConceptMapWindow:
             return
         if abs(ratio - 1.0) < 1e-6:
             return
-        self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
+        self._apply_anchor(float(spot[0]), float(spot[1]), world_x, world_y, ratio, v_old)
 
     def _cancel_deferred_draw(self) -> None:
         """取消还没到点的「手离开后补画」——这次已经在画了。"""
@@ -5870,6 +6286,7 @@ class ConceptMapWindow:
         #: 左键拖空白平移（本轮）：重画时也要忘掉，否则下一次 Motion 会按一个
         #: 早已不存在的按下点继续滚视图。
         self._bg_pan_last = None
+        self._bg_pan_rest = (0.0, 0.0)
 
     def _items_matching(self, kind: str) -> list:
         """当前画布上的某类 item（回归断言用；真实 / 假 Canvas 都可用）。"""
@@ -5905,8 +6322,9 @@ class ConceptMapWindow:
         * 画布还没有真实尺寸（Tk 尚未映射）时**不做也不清**，等真正的
           ``<Configure>`` 拿到尺寸后再算。
 
-        缩放本身由 :func:`layout_graph` 的仿射缩放完成（列数 / 行数不变），
-        尺寸取自 :func:`layout_extent`（与布局同一份逻辑布局，绝不低估）。
+        缩放本身由 :func:`_scaled_layout` 的仿射缩放完成（列数 / 行数不变），
+        尺寸取自 :meth:`_natural_layout` 的**内容外框**（与绘制同一份自然布局，
+        而且刚刚被缓存住 —— 自适应之后紧接着的那次绘制不会再算一遍）。
 
         返回是否**真的改了缩放**（改了才需要把视图复位到左上角）。
         """
@@ -5915,12 +6333,9 @@ class ConceptMapWindow:
         real_w, real_h = int(width), int(height)
         if real_w <= 1 or real_h <= 1:
             return False                      # 还没映射：等真实尺寸
-        extent_w, extent_h = layout_extent(self._labels, relations, width=real_w,
-                                          height=real_h,
-                                          topic_label=self._topic_name_text,
-                                          top_pad=top_pad,
-                                          pins=self.pinned_positions(),
-                                          template=self._template)
+        extent = self._natural_layout(real_w, real_h, relations, top_pad)
+        extent_w = float(extent.content_w) - min(0.0, float(extent.content_x0))
+        extent_h = float(extent.content_h) - min(0.0, float(extent.content_y0))
         if extent_w <= 0 or extent_h <= 0:
             return False
         factor = min(1.0, (real_w - theme.px(4)) / extent_w,
@@ -5998,11 +6413,8 @@ class ConceptMapWindow:
         top_pad = theme.px(6)
         fitted = self._auto_fit(*self._mapped_size(), relations, top_pad)
         self._drawn_zoom = float(self._zoom)    # 首开自适应也可能刚改过缩放
-        layout = layout_graph(self._labels, relations, width=width, height=height,
-                              topic_label=self._topic_name_text,
-                              zoom=self._zoom, top_pad=top_pad,
-                              pins=self.pinned_positions(),
-                              template=self._template)
+        layout = _scaled_layout(self._natural_layout(width, height, relations, top_pad),
+                                self._zoom)
         self._layout = layout
         self._template_note = str(getattr(layout, "template_note", "") or "")
         self._sync_template_button()

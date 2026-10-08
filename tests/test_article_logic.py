@@ -210,7 +210,10 @@ class TestParseArticleLogic(unittest.TestCase):
 # ------------------------------------------------------------ 确定性校验
 class TestValidateLogic(unittest.TestCase):
     def test_good_result_passes_and_reports_match_ratio(self):
-        result = validate_logic(GOOD, text=ARTICLE, terms=("重排模型", "延迟"))
+        # 批次 M22-C 起「划过的词一条关系都没连上」算问题，所以这里选的词都真的
+        # 出现在 GOOD 的关系里（「延迟」只在分支里出现过，会被如实标成漏掉 ——
+        # 那条规则本身另有用例覆盖）。
+        result = validate_logic(GOOD, text=ARTICLE, terms=("重排模型", "准确率"))
         self.assertTrue(result["ok"], f"合格的归纳被判不合格：{result['problems']}")
         self.assertEqual(result["problems"], [])
         self.assertEqual(result["main_logic"], "时序")

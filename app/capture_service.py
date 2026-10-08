@@ -860,22 +860,19 @@ class CaptureService:
     def _article_source_value(self, src: SourceInfo) -> str:
         """这次划词的「来源值」：能取到原文就返回它，取不到返回空串。
 
-        优先 ``src.url``（浏览器的地址、编辑器的文件路径都在这儿）。它认不出
-        本地文件时再退一步看 ``src.title`` —— 记事本 / Typora 这类程序在
-        UIA 里报不出 URL，但窗口标题往往就是文件路径或「文件名 - 程序名」。
-        只在标题里**确实能认出路径**时才用（:func:`article_source.local_path_of`），
-        免得把一句普通标题当成文件名去读盘。
+        判断本身交给了 :func:`app.article_source.source_value_of`（纯函数 + 一次
+        有限的目录查找）：优先 ``src.url``（浏览器的地址、编辑器报出的文件路径
+        都在这儿），认不出再退一步看 ``src.title`` —— 记事本 / Typora 这类程序
+        在 UIA 里报不出 URL，窗口标题里往往就是「文件路径 - 程序名」，甚至只是
+        一个**裸文件名**（批次 M22-A：以前只认带盘符的绝对路径，于是最普通的
+        记事本划词一个字节都没读到）。
+
+        返回空串只表示「连文件名都认不出来」；认出来了但磁盘上没有的情况由
+        :func:`_fetch_article_worker` 如实写一行原因，**不在这儿静默放弃**。
         """
-        raw = (src.url or "").strip() if src is not None else ""
-        if article_source.is_fetchable_url(raw):
-            return raw
-        title = (src.title or "").strip() if src is not None else ""
-        if not title:
+        if src is None:
             return ""
-        for candidate in (title, *(part.strip() for part in title.split(" - "))):
-            if candidate and article_source.local_path_of(candidate):
-                return candidate
-        return ""
+        return article_source.source_value_of(src.url or "", src.title or "")
 
     def maybe_fetch_article(self, src: SourceInfo, doc_key: str | None = None) -> bool:
         """这一页还没留档就**在后台**去抓一次原文。返回是否真的起了线程。
@@ -891,16 +888,19 @@ class CaptureService:
         **本地文档照样留档**（批次 M21-A）：来源值既可能是网页地址，也可能是
         ``file:///D:/笔记.txt`` 或一条裸路径 —— 后者由
         :func:`app.article_source.fetch_article` 直接读盘，**不联网**。
-        记事本这类程序有时报不出完整路径（窗口标题里才带），所以路径可能在
-        ``src.url`` 也可能在 ``src.title``（见 :func:`_local_source_value`）。
+
+        **只有文件名也照样留档**（批次 M22-A）：记事本这类程序有时只报得出
+        「新建 文本文档.txt」，连目录都没有。那种情况**也起线程** —— 找文件是
+        磁盘 I/O，必须待在后台线程里做；找不到就如实写一行原因，而不是像以前
+        那样连线程都不起、`articles` 表里一个字都不留。
         """
         key = (doc_key or "").strip() or self.page_doc_key(src)
         if not key:
             return False
         if not self.config.fetch_article:
             return False
-        url = self._article_source_value(src)
-        if not url:
+        source = self._article_source_value(src)
+        if not source:
             return False
         if self.db.has_article(key):
             return False
@@ -910,7 +910,7 @@ class CaptureService:
             self._article_pending.add(key)
         thread = threading.Thread(
             target=self._fetch_article_worker,
-            args=(key, url, src.title if src is not None else ""),
+            args=(key, source, src.title if src is not None else ""),
             name="article-fetch", daemon=True,
         )
         thread.start()
@@ -919,12 +919,20 @@ class CaptureService:
     def _fetch_article_worker(self, doc_key: str, url: str, title: str) -> None:
         """后台线程：抓原文 → 落库 → 发 ``article_ready`` 事件。
 
+        取回这一步统一走 :func:`app.article_source.fetch_source`（批次 M22-A）：
+        它认得「网址 / 绝对路径 / 只有文件名」三种来源，并在真的认不出来时
+        返回 ``ok=False`` 的留档 —— 以前这里拿到的是空串连线程都不起，
+        库里一个字都不留，用户只能看到一句「未取到原文」。
+
         这个函数里**任何**异常都不许冒出来：它跑在独立线程，异常会把
         「线程里未捕获」的噪音打进日志，而用户什么都没做错。
         """
         article = None
         try:
-            article = self._article_fetcher(url)
+            if article_source.is_http_url(url):
+                article = self._article_fetcher(url)
+            else:
+                article = article_source.fetch_source(url, title)
         except Exception as exc:  # pragma: no cover - 假 fetcher / 极端网络异常
             log.debug("取原文失败（%s）：%s", url, exc)
         if article is None:

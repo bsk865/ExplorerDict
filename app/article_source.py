@@ -590,9 +590,207 @@ def local_path_of(url: str) -> str:
     return ""
 
 
+def looks_like_file_name(value: str) -> bool:
+    """这个字符串像不像一个**文件名**（纯函数：不碰磁盘）。
+
+    记事本的窗口标题是「新建 文本文档.txt - 记事本」：``src.url`` 是空的，
+    标题里只有**裸文件名**、没有目录。批次 M21-A 的 :func:`local_path_of` 只认
+    带盘符 / UNC / ``file://`` 的写法，于是这种最普通的用法一个字节都没读到
+    （批次 M22-A 的真病根）。
+
+    判定刻意保守：必须有白名单后缀、长度合理、不含路径分隔符与换行，
+    再加一条「像文件名的字符」检查 —— 免得把一句普通标题当成文件名去磁盘上找。
+    """
+    raw = (value or "").strip().strip('"')
+    if not raw or len(raw) > 200:
+        return False
+    if any(ch in raw for ch in ("\n", "\r", "\t")):
+        return False
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return False
+    suffix = Path(raw).suffix.lower()
+    if suffix not in LOCAL_TEXT_SUFFIXES:
+        return False
+    stem = Path(raw).stem
+    return bool(stem) and any(ch.isalnum() or ch in "._-（）()【】[] " for ch in stem)
+
+
+def local_name_of(value: str) -> str:
+    """从「来源值」里认出一个**裸文件名**；认不出返回空串（纯函数：不碰磁盘）。
+
+    与 :func:`local_path_of` 的分工：那个认**绝对路径**（认出来就能直接读盘），
+    这个只认「没有目录、但有文件后缀」的写法 —— 它必须再经过
+    :func:`resolve_local_path` 去常见目录里找，才知道文件到底在哪。
+    """
+    raw = (value or "").strip().strip('"')
+    if not raw or not looks_like_file_name(raw):
+        return ""
+    if _WINDOWS_PATH_RE.match(raw) or raw.startswith("\\\\"):
+        return ""                                # 绝对路径归 local_path_of 管
+    if "/" in raw or "\\" in raw:
+        return ""                                # 带目录的相对路径：先不支持，交给上层如实报
+    return raw
+
+
+#: 裸文件名先在这些目录里找（按顺序）：用户最常把「新建 文本文档.txt」扔在桌面。
+LOCAL_SEARCH_DIRS = ("Desktop", "Documents", "Downloads")
+
+
+def local_search_roots() -> tuple[Path, ...]:
+    """找裸文件名时要翻的目录（真实路径；取不到的目录直接跳过）。"""
+    home = Path.home()
+    roots = [home / name for name in LOCAL_SEARCH_DIRS]
+    roots.append(Path.cwd())
+    return tuple(roots)
+
+
+def resolve_local_path(name: str, *, extra_dirs=(), recursive: bool = False) -> str:
+    """把「裸文件名」找成一条真实存在的路径；找不到返回空串。
+
+    先看当前工作目录（同名文件就在手边时零成本命中），再按
+    :func:`local_search_roots` 逐个查；``extra_dirs`` 由调用方补充（比如刚才
+    划词那个进程的工作目录）。``recursive`` 打开时才往下钻一层子目录。
+    """
+    raw = (name or "").strip().strip('"')
+    if not raw:
+        return ""
+    dirs: list[Path] = []
+    for item in extra_dirs or ():
+        if item:
+            dirs.append(Path(item))
+    try:
+        dirs.append(Path.cwd())
+    except OSError:                              # pragma: no cover - 工作目录被删
+        pass
+    dirs.extend(local_search_roots())
+    seen: set[str] = set()
+    for folder in dirs:
+        try:
+            key = str(folder.resolve()).lower()
+        except OSError:                          # pragma: no cover
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        candidate = folder / raw
+        try:
+            if candidate.is_file():
+                return str(candidate)
+        except OSError:                          # pragma: no cover
+            continue
+        if not recursive:
+            continue
+        try:
+            for found in folder.glob("*"):
+                if not found.is_dir():
+                    continue
+                nested = found / raw
+                if nested.is_file():
+                    return str(nested)
+        except OSError:                          # pragma: no cover
+            continue
+    return ""
+
+
+def read_local_article_by_name(name: str, *, max_bytes: int = MAX_LOCAL_BYTES,
+                               extra_dirs=()) -> Article:
+    """按**裸文件名**读原文（读盘不联网）；找不到就说清楚为什么。
+
+    这是记事本那条路的最后一公里：文件名认出来了，但磁盘上找不到时**不许
+    静默放弃** —— 如实写一行「在桌面 / 文档 / 下载里都没找到这个文件」，
+    用户点开「未取到原文」能看到到底卡在哪。
+    """
+    raw = (name or "").strip().strip('"')
+    if not raw:
+        return Article(ok=False, url="", status=STATUS_SKIP,
+                       note="这一页没有可归纳的正文（桌面软件 / 手工输入）")
+    found = resolve_local_path(raw, extra_dirs=extra_dirs)
+    if not found:
+        return Article(ok=False, url=raw, status=STATUS_FAILED,
+                       note=f"认出了文件名「{raw}」，但在桌面 / 文档 / 下载"
+                            f"和当前目录里都没找到它（文件可能已改名、被移动，"
+                            f"或者还没保存到磁盘）")
+    return read_local_article(found, max_bytes=max_bytes, label=raw)
+
+
 def is_local_source(url: str) -> bool:
     """这条来源值是不是一份**本地文件**（是 → 走读盘，不联网）。"""
     return bool(local_path_of(url))
+
+
+def title_candidates(title: str) -> tuple[str, ...]:
+    """窗口标题里的**候选来源值**（纯函数）：原样 + 按 ``" - "`` 拆出来的每一段。
+
+    记事本 / Typora / VSCode 这类程序报不出 URL，窗口标题往往是
+    「文件全路径 - 程序名」或「文件名 - 程序名」；按 ``" - "`` 拆开逐段试，
+    才认得出哪一段是文件。
+    """
+    text = (title or "").strip()
+    if not text:
+        return ()
+    parts = [text, *(part.strip() for part in text.split(" - "))]
+    out: list[str] = []
+    for part in parts:
+        if part and part not in out:
+            out.append(part)
+    return tuple(out)
+
+
+def source_value_of(url: str, title: str, *, extra_dirs=()) -> str:
+    """这次划词的来源：**能直接取到原文**的值；取不到返回空串。
+
+    优先 ``url``（浏览器的地址、编辑器报出的文件路径都在这儿），认不出再退一步
+    看窗口标题。返回的可能是 http(s) 地址、绝对路径，或一条**裸文件名**
+    （交给 :func:`read_local_article_by_name` 去常见目录里找）。
+    """
+    raw = (url or "").strip()
+    if is_http_url(raw):
+        return raw
+    direct = local_path_of(raw)
+    if direct:
+        return direct
+    for candidate in title_candidates(title):
+        if is_http_url(candidate):
+            return candidate
+        found = local_path_of(candidate)
+        if found:
+            return found
+        name = local_name_of(candidate)
+        if name and resolve_local_path(name, extra_dirs=extra_dirs):
+            return name
+    return ""
+
+
+def fetch_source(url: str, title: str = "", *, timeout: float = DEFAULT_TIMEOUT,
+                 extra_dirs=()) -> Article:
+    """取原文的**统一入口**：网址联网抓，本地文件读盘，裸文件名先找再读。
+
+    与 :func:`fetch_article` 的区别只有一条：这里会拿窗口标题当补充线索
+    （记事本那种「只有文件名、没有路径」的来源就靠它）。找不到文件时返回
+    ``ok=False`` 的留档，note 里写清楚卡在哪一步，**绝不静默放弃**。
+    """
+    raw = (url or "").strip()
+    if is_local_source(raw):
+        return read_local_article(raw, max_bytes=MAX_LOCAL_BYTES)
+    if raw:
+        # 裸文件名（「新建 文本文档.txt」这种只有名字、没有目录的写法）：
+        # ``is_local_source`` 认不出来（它不是路径），但它**绝不是网址** ——
+        # 必须先按文件名读盘，否则会被 :func:`fetch_article` 当成一个畸形 URL
+        # 去联网，拿到一句「取不到正文」的失败记录（批次 M22-A 的真病根）。
+        if looks_like_file_name(raw):
+            return read_local_article_by_name(raw, max_bytes=MAX_LOCAL_BYTES,
+                                              extra_dirs=extra_dirs)
+        return fetch_article(raw, timeout=timeout)
+    for candidate in title_candidates(title):
+        direct = local_path_of(candidate)
+        if direct:
+            return read_local_article(direct, max_bytes=MAX_LOCAL_BYTES)
+        name = local_name_of(candidate)
+        if name:
+            return read_local_article_by_name(name, max_bytes=MAX_LOCAL_BYTES,
+                                              extra_dirs=extra_dirs)
+    return Article(ok=False, url="", status=STATUS_SKIP,
+                   note="这一页没有可归纳的正文（桌面软件 / 手工输入）")
 
 
 def is_fetchable_url(url: str) -> bool:

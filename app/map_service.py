@@ -172,6 +172,113 @@ class LogicGraph:
         }
 
 
+def canonical_term(name, terms) -> str:
+    """把一个实体名对齐到**用户自己的词条**上；对不上就原样返回（纯函数）。
+
+    批次 M22-C 的实测病根之一：模型在归纳时写的是原文里的**完整说法**
+    （「项目任务拆解」「反向调整项目需求」「重新拆解任务」），而用户划下来的是
+    **简写**（「任务拆解」「确定项目需求」）。两边一对不上，
+    :func:`logic_to_map_relations` 就把这些边全当「涉及不在本主题的词」丢掉 ——
+    用户那篇 210 字的文章归纳出 7 条关系，最后**只画得出 2 条**，图当然不像话。
+
+    对齐规则（宁缺勿滥，只认**唯一**的候选）：
+
+    * 完全一样 → 就是它；
+    * 只有一个词条**被它包住**（去掉标点空白后比，如「项目任务拆解」包住
+      「任务拆解」）→ 用那个词条的名字；
+    * 有多个候选、或一个都没有 → **原样返回**。猜错一个词比丢一条边更糟：
+      图会把关系画到错误的卡片上。
+
+    **方向是单向的**：只认「模型写得比词条长」，不认「词条比模型写得长」。
+    反过来收会把**文章里另一个真的不一样的说法**吞掉 —— 实测那篇 210 字的文章
+    同时讲了「项目开发」和「项目开发体系」，两者共 4 个字，按互相包含去收就会合并
+    成一个词，于是同一个词条在两个分支里各出现一次，图上也少了一张卡片。
+    """
+    raw = str(name or "").strip()
+    if not raw:
+        return raw
+    words: list[str] = []
+    for term in terms or ():
+        word = str(term or "").strip()
+        if word and word not in words:
+            words.append(word)
+    if raw in words:
+        return raw
+    probe = normalize_material(raw)
+    if not probe:
+        return raw
+    hits = []
+    for word in words:
+        other = normalize_material(word)
+        # 只收「模型写了全称、用户划的是简称」这一种（长名包住短名）。
+        if other and other in probe:
+            hits.append(word)
+    if len(hits) == 1:
+        return hits[0]
+    return raw
+
+
+def canonicalize_logic(graph, terms):
+    """把归纳结果里的实体名**整份对齐**到用户的词条上（纯函数，返回新的图）。
+
+    与 :func:`canonical_term` 同一套规则；分支里的实体名和每条关系的两端一起换，
+    换完还认不出来的保持原样（:func:`logic_to_map_relations` 会如实记「没画上去」）。
+    在 :func:`run_logic_graph` 拿到结果后立刻做这一步：**后面所有环节**
+    （画图、按原文分层、落库的 raw）看到的都是同一份名字，不会再出现
+    「分支里写的是全称、关系连的是简写」这种自相矛盾。
+    """
+    words = list(terms or ())
+    if not words:
+        return graph
+    branches = []
+    #: 对齐之后可能撞名（模型写「项目任务拆解」、另一个分支写「任务拆解」，都收成
+    #: 同一个词），这里顺手去重：一个词只能待在一个分支里，**保留第一次出现**，
+    #: 顺序不变。不做这一步的话，同一个词会出现在两个分组框里。
+    placed: set[str] = set()
+    for branch in _graph_field(graph, "branches"):
+        if not isinstance(branch, dict):
+            continue
+        item = dict(branch)
+        members: list[str] = []
+        for name in list(branch.get("entities") or ()):
+            word = canonical_term(name, words)
+            if word and word not in placed:
+                placed.add(word)
+                members.append(word)
+        if not members:
+            continue
+        item["entities"] = members
+        branches.append(item)
+    relations = []
+    for rel in _graph_field(graph, "relations"):
+        if isinstance(rel, dict):
+            src = str(rel.get("src") or "")
+            dst = str(rel.get("dst") or "")
+            rel_type = str(rel.get("type") or "")
+            reason = str(rel.get("reason") or "")
+        else:
+            src = str(getattr(rel, "src", "") or "")
+            dst = str(getattr(rel, "dst", "") or "")
+            rel_type = str(getattr(rel, "rel_type", "") or "")
+            reason = str(getattr(rel, "reason", "") or "")
+        relations.append(LogicRelation(src=canonical_term(src, words),
+                                       dst=canonical_term(dst, words),
+                                       rel_type=rel_type, reason=reason))
+    return LogicGraph(
+        doc_key=str(getattr(graph, "doc_key", "") or ""),
+        title=str(getattr(graph, "title", "") or ""),
+        main_logic=str(getattr(graph, "main_logic", "") or ""),
+        branches=tuple(branches),
+        relations=tuple(relations),
+        warnings=tuple(getattr(graph, "warnings", ()) or ()),
+        #: 原样带过去：``model_config`` 在现场是**字符串**（模型名 / 配置摘要），
+        #: 不是字典 —— 别在这里自作主张转类型。
+        model_config=getattr(graph, "model_config", ""),
+        vary=int(getattr(graph, "vary", 0) or 0),
+        vary_label=str(getattr(graph, "vary_label", "") or ""),
+    )
+
+
 def logic_text_of(article) -> str:
     """从「articles 表的一行」或普通字符串里取出正文（取不到就是空串）。"""
     if article is None:
@@ -287,9 +394,41 @@ def validate_logic(data, *, text: str = "", terms=(), entities=(),
         seen_edges.add(key)
         relations.append(LogicRelation(src=src, dst=dst, rel_type=rel_type, reason=reason))
 
-    # 逆行检查：有时序的三类边必须顺着分支顺序走，否则就是把文章的脉络讲反了
+    # 逆行检查：有时序的三类边必须顺着分支顺序走，否则就是把文章的脉络讲反了。
+    #
+    # 批次 M22-B 的修正（这条改动**只放宽闭环**，不放过真讲反）：
+    # 文章本身常是**循环**的 —— 本机那篇 210 字的测试文就是
+    # 「确定项目需求 → 任务拆解 → 项目复盘 → 循环迭代 →（回）确定项目需求」。
+    # 旧的检查把回边一律判成「讲反了」，模型被要求改，于是干脆把关系全删掉：
+    # 真机上第 1 轮 5 条关系被判死、第 2 轮只剩 6 条且丢掉整条循环，
+    # 最后界面静默退回「按词条关系生成」—— 用户看到的就是那张竖成一列的图。
+    #
+    # 现在的口径：**只有闭环里的那一条**才算「反馈」 —— 它在关系图里本来就有
+    # 一条反着走得到的路径，画出来是一条反馈弧，不是错误；而一条孤立的回边
+    # （反方向根本走不通）仍然是「讲反了」，照旧算错。
     flow = logic_flow(branches, terms)
     rank = {name: index for index, name in enumerate(flow)}
+
+    def _reaches(start: str, goal: str) -> bool:
+        """关系图里从 ``start`` 顺着走能不能到 ``goal``（纯函数，无副作用）。"""
+        stack = [start]
+        seen = {start}
+        while stack:
+            node = stack.pop()
+            for other in after.get(node, ()):
+                if other == goal:
+                    return True
+                if other not in seen:
+                    seen.add(other)
+                    stack.append(other)
+        return False
+
+    after: dict[str, set] = {}
+    for rel in relations:
+        if rel.rel_type not in LOGIC_ORDERED_TYPES:
+            continue
+        after.setdefault(rel.src, set()).add(rel.dst)
+
     backwards = []
     for rel in relations:
         if rel.rel_type not in LOGIC_ORDERED_TYPES:
@@ -301,6 +440,13 @@ def validate_logic(data, *, text: str = "", terms=(), entities=(),
                             f"没法判断先后")
             continue
         if rank[rel.src] > rank[rel.dst]:
+            if _reaches(rel.dst, rel.src):
+                # 闭环：文章讲的是一个循环，这条是回边（反馈弧）。如实说，不算错。
+                warnings.append(
+                    f"{rel.src}→{rel.dst}（{rel.rel_type}）是一条回边 —— "
+                    f"「{rel.dst}」本来就在「{rel.src}」前面，这里说的是循环回到开头，"
+                    f"画成反馈弧")
+                continue
             backwards.append(f"{rel.src}→{rel.dst}（{rel.rel_type}）")
     if backwards:
         problems.append("这些关系与分支顺序相反（文章的先后被讲反了）：" + "、".join(backwards))
@@ -317,6 +463,37 @@ def validate_logic(data, *, text: str = "", terms=(), entities=(),
         matches = 0.0
         if not body:
             problems.append("没有原文可比对，不能凭空归纳")
+
+    # 「连不上的词」检查（批次 M22-C，用户的第三条判据）：
+    # 用户划过、也出现在分支里的词，如果**一条关系都没有**，它在图上就只是一张
+    # 孤零零的卡片 —— 实测那篇 210 字的文章里「循环迭代」明明承接在最后一步，
+    # 却因为模型没写它和别人的关系而飘在旁边（用户原话：「漏掉循环迭代和其他
+    # 卡片的关联，把它识别成孤立词汇」）。
+    #
+    # 这一条算 problem（会让 :func:`run_logic_graph` 带着清单重试一轮），但
+    # ``run_logic_graph`` 在轮次用完时**照样画图**、只把清单降级成 warnings：
+    # 宁可让用户看到「这张卡还没接上」的提示，也不许因为一句话把整张图吞掉。
+    # 只盯**用户亲手划过的词**（``terms`` 那一份）：分支里的实体是模型自己拆的，
+    # 多几句「顺带提到」的话很正常，不该逼它给每句话都编一条关系。划过的词不一样
+    # —— 那是用户点名要看的东西，飘在图上就是漏了。
+    # 注意不能用 ``flow``（那是**分支里的**词，模型拆多少就有多少），必须是传进来的
+    # ``terms``：漏掉的词往往正好**没**被模型写进任何分支，只认 flow 就永远看不见它。
+    marked: list[str] = []
+    marked_norm: set[str] = set()
+    for item in terms or ():
+        word = str(item or "").strip()
+        if word and word not in marked:
+            marked.append(word)
+            marked_norm.add(normalize_material(word))
+    wired = {rel.src for rel in relations} | {rel.dst for rel in relations}
+    wired_norm = {normalize_material(name) for name in wired}
+    loose = [name for name in marked
+             if name in known and name not in wired
+             and normalize_material(name) not in wired_norm]
+    if loose:
+        problems.append(
+            "这些词没有连上任何关系（漏掉了它们在文章里的关联）："
+            + "、".join(f"「{name}」" for name in loose))
 
     declared = str(main_logic or raw.get("main_logic") or "").strip()
     if declared and declared not in LOGIC_TYPES:
@@ -398,11 +575,23 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
             log.info("归纳第 %d 轮通过校验：%d 个分支 / %d 条关系",
                      attempt + 1, len(result["branches"]), len(result["relations"]))
             break
+        # 「某个词一条关系都没连上」是**可以接受**的：图照样画得出来，用户至少
+        # 能看到哪张卡空着（见 validate_logic 里那一段）。为它多花一轮 token 不值，
+        # 于是把它从 problems 降级成 warnings 后直接收工 —— 但**别的问题一条都不放过**。
+        only_loose = bool(result["problems"]) and all(
+            "没有连上任何关系" in item for item in result["problems"])
+        if only_loose:
+            loose = list(result["problems"])
+            last = dict(result, warnings=list(result["warnings"]) + loose,
+                        problems=[], ok=True)
+            log.info("归纳第 %d 轮只剩「连不上的词」（%d 条），降级成提醒后直接画图",
+                     attempt + 1, len(loose))
+            break
         feedback = logic_feedback(result)
         log.info("归纳第 %d 轮没通过校验（%d 个问题），%s",
                  attempt + 1, len(result["problems"]),
                  "重试" if attempt + 1 < attempts else "已达重试上限")
-    return LogicGraph(
+    graph = LogicGraph(
         doc_key=str(doc_key or ""),
         title=str(title or ""),
         main_logic=str(last.get("main_logic") or ""),
@@ -414,6 +603,11 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
         #: 第 0 档就是「标准做法」，不必给它起名字：界面只在真的换过思路时才说。
         vary_label=str(label or "") if step else "",
     )
+    #: 批次 M22-C：模型写的是原文里的**完整说法**（「项目任务拆解」），用户划下来
+    #: 的是**简写**（「任务拆解」）—— 两边对不上，这些边就会在落图那一步被当
+    #: 「涉及不在本主题的词」整条丢掉（实测 7 条只画得出 2 条）。在这里一次性把
+    #: 实体名对齐到用户自己的词上，画图、分层、落库看到的都是同一份名字。
+    return canonicalize_logic(graph, names)
 
 
 def _graph_field(graph, name: str):
@@ -504,6 +698,139 @@ def logic_levels(graph, nodes) -> dict[int, int]:
         entry_id = int(getattr(node, "entry_id", 0) or 0)
         levels.setdefault(entry_id, -1)
     return levels
+
+
+def article_levels(graph, nodes) -> tuple[dict[int, int], dict[int, int]]:
+    """**按原文的逻辑给词条分层**：一张图该横着排还是竖着排，由文章自己说了算。
+
+    这是批次 M22-C 的核心（纯函数，只读，返回 ``(level, order)``）：
+
+    * ``level[entry_id]``：这个词在文章的先后里排第几层（``依赖 / 因果 / 时序 /
+      对策`` 这类**有方向**的边连起来的深度）。不在任何一条边上的词记 ``-1``
+      （调用方按「孤立词」单独摆，与老口径一致）。
+    * ``order[entry_id]``：同一个层里的左右次序 —— 按**分支在主逻辑里的先后**，
+      再按分支内实体的先后（就是文章的讲述顺序）。分支本来就是「这一段讲什么」，
+      因此同分支的词自然排在一起。
+
+    为什么要它：老口径只数「第几个分支」（``logic_levels`` 返回分支序号），于是
+    「项目开发流程」这个分支里的四个词全被压在第 0 层、竖着摞成一列 —— 用户看到的
+    「一根竖柱」就是这么来的（图里那条链其实是横向的流程）。
+
+    **成环照样有解**：文章讲一个循环时（需求→拆解→复盘→迭代→回需求），深搜遇到
+    自己在栈上就停手，回边不参与抬高深度 —— 于是主链照旧铺开、回边在图上成为一条
+    反馈弧，而不是把整张图判成「讲反了」后丢掉。
+    """
+    by_term: dict[str, int] = {}
+    for node in nodes or ():
+        name = str(getattr(node, "term", "") or "").strip()
+        if name and name not in by_term:
+            by_term[name] = int(getattr(node, "entry_id", 0) or 0)
+
+    # 同一层的左右次序：分支顺序 → 分支内实体顺序（即文章的讲述顺序）。
+    order: dict[int, int] = {}
+    for branch in _graph_field(graph, "branches"):
+        if not isinstance(branch, dict):
+            continue
+        for entity in list(branch.get("entities") or ()):
+            entry_id = by_term.get(str(entity).strip())
+            if entry_id and entry_id not in order:
+                order[entry_id] = len(order)
+
+    onward: dict[int, list[int]] = {}
+    for rel in _graph_field(graph, "relations"):
+        if isinstance(rel, dict):
+            src_name = str(rel.get("src") or "").strip()
+            dst_name = str(rel.get("dst") or "").strip()
+            rel_type = str(rel.get("type") or "")
+        else:
+            src_name = str(getattr(rel, "src", "") or "").strip()
+            dst_name = str(getattr(rel, "dst", "") or "").strip()
+            rel_type = str(getattr(rel, "rel_type", "") or "")
+        # 摆位置用的是**四类有方向的边**（:data:`DIRECTIONAL_TYPES`），比校验用的
+        # ``LOGIC_ORDERED_TYPES`` 多一个「依赖」：模型常把同一条先后写成「依赖」
+        # （实测真机那版第 2 条就是 `确定项目需求→任务拆解（依赖）`）。校验看的是
+        # 「有没有把文章的顺序讲反」，依赖不算先后，所以那边不收；但**摆位置**只要
+        # 知道谁在谁后面就够了，漏掉「依赖」会让下游的词掉回第 0 层、整条流程散开。
+        if rel_type not in DIRECTIONAL_TYPES:
+            continue
+        src = by_term.get(src_name)
+        dst = by_term.get(dst_name)
+        if not src or not dst or src == dst or dst in onward.get(src, ()):
+            continue
+        onward.setdefault(src, []).append(dst)
+
+    touched = {entry_id for entry_id in order}
+    for src, targets in onward.items():
+        touched.add(src)
+        touched.update(targets)
+
+    depth: dict[int, int] = {}
+
+    # 先把**回边**挑出来（M22-C 实测修正）：文章讲一个循环时（需求→拆解→复盘→
+    # 迭代→回需求），最后那条「回到开头」的边如果也算进深度，最早讲的词会被抬到
+    # 最后一层 —— 实测「确定项目需求」被抬到第 3 层，横向的流程线于是读不出先后。
+    # 判据是深搜时的栈：走回一个还在栈上的点 = 这一条是回边，只画反馈弧、不算层。
+    after: dict[int, list[int]] = {}
+    for src, targets in onward.items():
+        for dst in targets:
+            item = after.setdefault(src, [])
+            if dst not in item:
+                item.append(dst)
+    back: set[tuple[int, int]] = set()
+    state: dict[int, int] = {}                 # 0 = 正在走，1 = 已经走完
+
+    def _mark(node: int, stack: frozenset) -> None:
+        state[node] = 0
+        for child in after.get(node, ()):
+            if child in stack:
+                back.add((node, child))
+            elif state.get(child) is None:
+                _mark(child, stack | {node})
+        state[node] = 1
+
+    # 从哪个词开始深搜，决定环在哪一条边上被切断 —— 必须按**文章讲述的先后**
+    # 起步，断出来的才是「绕回开头」的那一条（实测：从「确定项目需求」起步会把
+    # 「任务拆解→项目复盘」当回边切掉，于是流程线读不出先后）。
+    for entry_id in sorted(after, key=lambda item: (order.get(item, 1 << 30), item)):
+        if state.get(entry_id) is None:
+            _mark(entry_id, frozenset())
+
+    core: dict[int, list[int]] = {}
+    for src, targets in after.items():
+        for dst in targets:
+            if (src, dst) in back:
+                continue
+            item = core.setdefault(src, [])
+            if dst not in item:
+                item.append(dst)
+
+    # 无环之后就是**最长路径**（Kahn 拓扑序 + 逐层抬高）。
+    # 入度同时按「第几条边」数，是为了让**成环的那些边**不至于让两个点永远进不了
+    # 队列（进不去就等于没分层）：环里最先被文章讲到的那个词先入队，环上的边
+    # 退化成「同一层 / 往回一条」，图不会崩，层号也还是文章的顺序。
+    indegree: dict[int, int] = {entry_id: 0 for entry_id in touched}
+    for src, targets in core.items():
+        for dst in targets:
+            indegree[dst] = indegree.get(dst, 0) + 1
+    key_of = lambda item: (order.get(item, 1 << 30), item)   # noqa: E731 - 就地小排序键
+    queue = sorted((entry_id for entry_id in touched if indegree.get(entry_id, 0) == 0),
+                   key=key_of)
+    while queue:
+        node = queue.pop(0)
+        for child in sorted(core.get(node, ()), key=key_of):
+            depth[child] = max(depth.get(child, 0), depth.get(node, 0) + 1)
+            indegree[child] -= 1
+            if indegree[child] == 0:
+                queue.append(child)
+                queue.sort(key=key_of)
+
+    level: dict[int, int] = {}
+    for entry_id in touched:
+        level[entry_id] = int(depth.get(entry_id, 0))
+    for node in nodes or ():                   # 没被任何关系碰到的词：单独摆
+        entry_id = int(getattr(node, "entry_id", 0) or 0)
+        level.setdefault(entry_id, -1)
+    return level, order
 
 
 def logic_flow(branches, entries=(), *, prefer_terms: bool = False) -> list[str]:

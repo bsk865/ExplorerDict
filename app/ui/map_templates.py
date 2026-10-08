@@ -46,6 +46,9 @@ BELONGS = "属于"
 HIERARCHY_TYPES = (CONTAINS, BELONGS)
 #: 方向型（有前后，但不一定是父子）
 DIRECTIONAL_TYPES = (DEPEND, CAUSAL)
+#: 「先做这个、再做那个」型（批次 M22-C）：文章在讲步骤 / 流程时用的是这两个，
+#: 鱼骨图与组织架构图都不合适，只有流程线画得对。
+SEQUENCE_TYPES = ("时序", "对策")
 
 #: 鱼骨图至少要几条因果边才摆得出来（少于此数退回自动，并如实说明）
 FISHBONE_MIN_CAUSAL = 2
@@ -910,11 +913,58 @@ def place(key: str, *, ids: Iterable[int], rels: Iterable, levels: Mapping[int, 
 
 
 # ------------------------------------------------------------------ 本地建议
+def _is_plain_tree(pairs) -> bool:
+    """这几条边能不能当**一棵树**看（纯函数）。
+
+    树 = 没有环、且除根以外每个点**只有一个父亲**。只有这种形状才配得上「组织
+    架构图 / 树状图」：批次 M22-C 的用户实测里，一篇五步流程被人人一条父边的
+    形状喂给组织架构图，画出来就是一根竖柱 —— 那是**误判**，不是模板的错。
+    自环与重复边在这里没有意义，直接不算。
+    """
+    parents: dict[int, set] = {}
+    nodes: set = set()
+    for src, dst, _kind in pairs or ():
+        if src == dst:
+            continue
+        nodes.update((src, dst))
+        parents.setdefault(dst, set()).add(src)
+    if len(nodes) <= 1:
+        return False
+    if any(len(daddies) > 1 for daddies in parents.values()):
+        return False                              # 有人有两个父亲：不是树
+    if len(parents) >= len(nodes):
+        return False                              # 每个点都有父亲 = 一定成环
+    roots = [node for node in nodes if node not in parents]
+    if len(roots) != 1:
+        return False                              # 没有根 / 多个根：不是树
+    # 从根顺着走一遍：走到重复的点就是环
+    onward: dict[int, list[int]] = {}
+    for src, dst, _kind in pairs or ():
+        if src != dst:
+            onward.setdefault(src, []).append(dst)
+    seen: set = set()
+    stack = [roots[0]]
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            return False
+        seen.add(node)
+        stack.extend(onward.get(node, ()))
+    return len(seen) == len(nodes)
+
+
 def suggest(rels: Iterable, *, total: int = 0) -> tuple[str, str]:
     """**本地规则**挑一个模板（零成本、可解释）：``(key, 理由)``。
 
     这是「LLM 挑模板」的第一层：模型没配 / 没开开关 / 失败时都用它，而且理由
     永远是数据本身（数了几条什么类型的边），不是模型的自由发挥。
+
+    批次 M22-C 重排了判据的顺序，为的是让**流程图不再被画成一根竖柱**：
+
+    1. 「先做 A 再做 B / 问题 A 有办法 B」这类边为主 → 流程线（横着读）；
+    2. 层级边为主 → 但只有它真是一棵**树**时才给组织架构图，否则给树状图
+       （``_is_plain_tree``；一篇多步流程被当组织架构图排，就是那根竖柱的来源）；
+    3. 其余照旧。
     """
     counts: dict[str, int] = {}
     pairs: set[tuple[int, int, str]] = set()
@@ -928,7 +978,14 @@ def suggest(rels: Iterable, *, total: int = 0) -> tuple[str, str]:
     if edges < 2:
         return TEMPLATE_AUTO, ""
     causal = counts.get(CAUSAL, 0)
+    sequence = sum(counts.get(kind, 0) for kind in SEQUENCE_TYPES)
     hierarchy = counts.get(CONTAINS, 0) + counts.get(BELONGS, 0)
+    if hierarchy and not _is_plain_tree(pairs):
+        # 有层级边但不是树（多父 / 成环）：退回按层级排的树状图，别硬当组织架构图。
+        return ("tree" if hierarchy * 2 >= edges else "flow-h",
+                "层级边不是一棵树（有词挂在多个父上或绕成了环），先按层级摊开")
+    if sequence >= 2 and sequence * 2 >= edges:
+        return "flow-h", f"「先做这个、再做那个」这类边占了一半以上（{sequence}/{edges}）"
     if causal >= FISHBONE_MIN_CAUSAL and causal * 2 >= edges:
         return "fishbone", f"因果边占了一半以上（{causal}/{edges}）"
     if hierarchy >= 2 and hierarchy * 2 >= edges:
