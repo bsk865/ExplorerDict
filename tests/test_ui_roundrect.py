@@ -3363,6 +3363,46 @@ class TestSettingsDialogModelAndReasoningEffort(unittest.TestCase):
                                  list(effort_choices("qwen-max")))
                 self.assertEqual(dialog.var_effort.get(), "")
 
+    def test_the_fetch_article_switch_mirrors_and_saves_the_config(self):
+        """「自动抓取原文」勾选框（批次 M20-A）：默认跟配置一致，保存后落库。
+
+        它是**唯一**能让应用完全不联网取原文的开关（关掉后导图退回「按词条关系生成」），
+        所以必须真读真写：读错了用户以为关了其实还在抓，写错了关一次下次又自己打开。
+        """
+        from tests.support import FakeWidget
+        from app.config import Config
+        from app.ui.settings_dialog import SettingsDialog
+
+        with support.temp_db() as db:
+            cfg = self._cfg(db)
+            self.assertTrue(cfg.fetch_article, "默认必须是开")
+            with _FakeTkEnv():
+                stub, _calls = self._stub(cfg)
+                dialog = SettingsDialog(FakeWidget(None), stub)
+                self.assertTrue(dialog.var_fetch_article.get(), "打开窗口要按已保存的值选中")
+                dialog.var_fetch_article.set(False)
+                dialog.save()
+                self.assertFalse(cfg.fetch_article, "取消勾选必须落库")
+                self.assertEqual(cfg.get("capture.fetch_article", "?"), "0",
+                                 "存的就是那个配置键，别的键不许被连带改掉")
+
+            # 关掉之后重开窗口：勾选框要如实反映「已经关了」
+            with _FakeTkEnv():
+                again, _calls = self._stub(cfg)
+                reopened = SettingsDialog(FakeWidget(None), again)
+                self.assertFalse(reopened.var_fetch_article.get(),
+                                 "用户关过就要一直关着，不许悄悄自己打开")
+                reopened.var_fetch_article.set(True)
+                reopened.save()
+                self.assertTrue(cfg.fetch_article, "再打开也要存住")
+
+            # 配置里被写成认不出的值（"也许"）时不许炸：Config 已兜底成默认开；
+            # "no" 属于已知的「假」写法，要如实当关。
+            cfg.set("capture.fetch_article", "no")
+            self.assertFalse(Config(db).fetch_article, "no / false / off 都算关")
+            cfg.set("capture.fetch_article", "也许")
+            self.assertTrue(Config(db).fetch_article, "认不出的值退回默认开，不抛异常")
+
     def test_saving_stores_the_model_and_the_effort_and_refreshes_the_live_line(self):
         from tests.support import FakeWidget
         from app.ui.settings_dialog import SettingsDialog

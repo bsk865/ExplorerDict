@@ -198,12 +198,17 @@ class SettingsDialog:
 
         self.var_game = tk.BooleanVar(value=self.cfg.game_mode)
         self.var_paused = tk.BooleanVar(value=not self.cfg.capture_enabled)
+        #: 批次 M20-A：划词落库后要不要顺手把这一页的正文抓下来（后台、同一页只抓一次）。
+        #: 默认开 —— 导图靠这篇原文才能「先分分支再画线」；关掉是**唯一**能让应用
+        #: 完全不联网取原文的开关，导图随之退回「按词条关系生成」。
+        self.var_fetch_article = tk.BooleanVar(value=self.cfg.fetch_article)
 
         opts = tk.Frame(wrap, bg=theme.BG)
         opts.pack(fill="x", padx=theme.px(10), pady=(theme.px(6), 0))
         for text, var in (
             ("游戏模式", self.var_game),
             ("暂停取词（Ctrl+Alt+Shift+P）", self.var_paused),
+            ("自动抓取原文（后台，同一页只抓一次）", self.var_fetch_article),
         ):
             tk.Checkbutton(opts, text=text, variable=var, bg=theme.BG, fg=theme.TEXT,
                            font=theme.font(9), activebackground=theme.BG,
@@ -448,6 +453,8 @@ class SettingsDialog:
         self.cfg.set_bool("chat.enabled", self.var_chat_enabled.get())
         self.cfg.set_bool("gate.game_mode", self.var_game.get())
         self.cfg.set_bool("capture.enabled", not self.var_paused.get())
+        #: 批次 M20-A：关掉它 = 完全不联网取原文（导图退回「按词条关系生成」）
+        self.cfg.set_bool("capture.fetch_article", self.var_fetch_article.get())
         #: 关系图那一节（``map.template_ask_model``）本轮搬进「导图设置…」——
         #: 主界面不再显示、也不再写这个键（见 app\ui\map_settings_dialog.py）
         #: 「追加上下文」只认 "append"，其它都是 "new"（见 Config.duplicate_action）
