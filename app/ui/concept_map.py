@@ -34,10 +34,12 @@ import tkinter as tk
 from tkinter import messagebox
 from dataclasses import dataclass, replace
 
+from .. import api_client
 from ..logging_setup import get_logger
 from ..map_service import (DIRECTIONAL_TYPES, HIERARCHY_TYPES, REL_TYPES,
                            SYMMETRIC_TYPES, article_is_usable, constraint_pair,
-                           is_manual, manual_relations, normalize_material)
+                           is_manual, logic_vary_label, manual_relations,
+                           normalize_material)
 from . import map_templates, theme, widgets
 
 log = get_logger("conceptmap")
@@ -46,16 +48,31 @@ log = get_logger("conceptmap")
 #: 直接用真实尺寸会把整张图挤成 1x1，用户看到的就是「打开是空的」。
 FALLBACK_W = 520
 FALLBACK_H = 320
-#: 缩放范围与步长（滚轮 / Ctrl+滚轮）
+#: 缩放范围（滚轮 / Ctrl+滚轮）
 ZOOM_MIN = 0.6
 ZOOM_MAX = 2.0
-ZOOM_STEP = 1.1
+#: 滚轮缩放的**档距**（批次 M21-C）。用户口径 2026-10-09：「缩放一卡一卡的，
+#: 我要求无级变速」—— 旧写法是「一格 = 固定 ±10%」（``ZOOM_STEP = 1.1``），
+#: 于是缩放只有 10% 这一种步幅：滚一下就跳一格，慢滚与快滚一样跳，精密触控板
+#: 送来的一格的一小半也照样跳一整格。现在改成**连续指数**：
+#:
+#:     factor = 2 ** (delta / ZOOM_WHEEL_PIXELS_PER_DOUBLING)
+#:
+#: ``delta`` 是系统给的原生滚轮量（Windows 一个刻度 = 120，精密触控板会给更小的
+#: 增量），所以「滚得多快就变多少」是连续的，而不是只有一格一格的台阶。
+#: 取 600 像素 = 放大一倍：一个刻度（120）≈ 1.1487 倍，与旧手感接近，但可以**停
+#: 在任意中间值**上。
+ZOOM_WHEEL_PIXELS_PER_DOUBLING = 600.0
+#: 单次事件的缩放**限幅**（±35%）：某些驱动 / 远控软件会一口气送来几千的 delta，
+#: 不限幅就会「滚一下不知道飞到哪里去了」。
+ZOOM_WHEEL_MAX_RATIO = 0.35
 #: 滚轮缩放的**重画间隔**（毫秒）。一次「滚一下」在 Windows 上会连着送来好几个
 #: ``<MouseWheel>``（手快时 5 个刻度挤在 30ms 里），每个事件都整套重排 + 重画，
 #: 手一快就是 5 帧的工作挤在一帧里 —— 用户报的「缩放有卡顿」就是这个。
 #: 现在 ``_zoom`` 与视图锚点**每个事件都立刻生效**（纯算术），只有重画合并成
-#: 每这么多毫秒最多一次（一帧的预算，60fps）。
-ZOOM_REDRAW_MS = 16
+#: 每这么多毫秒最多一次。8ms ≈ 半帧：既不会把同一帧的工作叠起来，又比 16ms 少
+#: 一次「等重画」的空档 —— 「无级变速」要的就是这个跟手程度。
+ZOOM_REDRAW_MS = 8
 #: 首开自适应缩放的**下限**：内容比视口大得多时可以缩小（保证一开就能看全），
 #: 但不缩到读不清字；用户自己滚过轮之后**一次都不再自动改**（见 ``_auto_fit``）。
 AUTO_FIT_MIN = 0.75
@@ -63,6 +80,32 @@ AUTO_FIT_MIN = 0.75
 #: 它现在只出现在窗口**底部状态行**里 —— 画布上原来那两行图例（图例 + 操作提示）
 #: 压在图左上角、挡住内容，用户明确要求删掉，操作提示改放画布**右下角**。
 MAP_TAG = "AI 参考"
+
+
+def wheel_zoom_factor(delta: int) -> float:
+    """把系统给的滚轮 ``delta`` 换成**连续的**缩放倍数（批次 M21-C，纯函数）。
+
+    用户口径 2026-10-09：「缩放一卡一卡的，我要求无级变速」。旧的
+    ``ZOOM_STEP = 1.1`` 只有「放大 10% / 缩小 10%」两种结果 —— 不管滚轮送来
+    120 还是 12，画面都跳同样一格，所以永远是一格一格的台阶。
+
+    现在是**指数映射**：``2 ** (delta / 600)``。一个刻度（120）≈ 1.1487 倍，
+    与旧手感接近；而精密触控板送来的小增量（如 12）≈ 1.014 倍 —— 真的是「滚多少
+    变多少」，可以停在任意中间值上。单次事件限幅 ±:data:`ZOOM_WHEEL_MAX_RATIO`：
+    个别驱动 / 远控软件会一口气送来几千，不限幅就会「滚一下不知道飞哪儿去了」。
+    ``delta = 0`` → 1.0（不动）。
+    """
+    try:
+        value = int(delta or 0)
+    except (TypeError, ValueError):  # pragma: no cover - 不该发生
+        return 1.0
+    if not value:
+        return 1.0
+    ratio = float(value) / float(ZOOM_WHEEL_PIXELS_PER_DOUBLING)
+    factor = 2.0 ** ratio
+    low = 1.0 - ZOOM_WHEEL_MAX_RATIO
+    high = 1.0 + ZOOM_WHEEL_MAX_RATIO
+    return max(low, min(high, factor))
 #: 画布右下角的操作提示（**一行一条**，行与行之间留空档）。用户原来给的三行
 #: （右键平移 / 滚轮缩放 / 点连线看依据）仍在，前三行改成把 F1–F3 与本轮的新
 #: 操作也写进去 —— 拖拽连线、拖动卡片、左键拖空白平移，全靠手感发现不了，
@@ -2699,6 +2742,15 @@ class ConceptMapWindow:
         #: 它参与内容指纹（「按原文归纳」与「按词条关系」是两张图），也决定状态行
         #: 说的是「按《标题》原文归纳」还是「未取到原文，已按词条关系生成」。
         self._article = None
+        #: 「重新生成」已经换到第几档思路（批次 M21-B）。0 = 标准做法；每点一次
+        #: 重新生成 +1，逐档换归纳策略 / 放宽 temperature / 抬高推理强度 ——
+        #: 以前这里什么都不变，所以第二张图与第一张一模一样（用户实测反馈）。
+        #: 换主题 / 改词条（材料变了）时归零：那是**另一张图**，不该接着上一档。
+        self._vary = 0
+        #: 上面这一档是**对哪一批词条**换的（批次 M21-B）：词条集合换了 = 材料换了，
+        #: 阶梯必须归零。**不能拿内容指纹判断** —— 指纹本身就含档位，重新生成后
+        #: 必然「变了」，那样每点一次阶梯就被清零，用户永远停在第一档。
+        self._vary_ids: tuple[int, ...] = ()
         self._pending_token: int | None = None
         self._selected = None                  # 当前点选的 MapRelation
         self._selected_node = None             # 当前点选的词（entry_id；与连线二选一）
@@ -3120,19 +3172,25 @@ class ConceptMapWindow:
           为什么图和别的文章长得不一样，也不会以为归纳功能坏了。
 
         标题以**图自己记的**为准（``main_logic`` / ``branches`` 随图落库），
-        拿不到才退回窗口当前读到的留档标题。
+        拿不到才退回窗口当前读到的留档标题。这一版是**第几档思路**同样以图自己
+        记的为准（``vary`` / ``vary_label`` 随图落库，批次 M21-B）：用户点了
+        「重新生成」而这张图是缓存里取回来的旧档，状态行必须说旧档，不能说新档。
         """
         branches = tuple(getattr(graph, "branches", ()) or ())
         title = self._article_title()
+        #: 「第 N 档 · 标签」—— 状态行末尾如实说明这一次是换了什么思路。
+        step = logic_vary_label(graph)
+        tier = f"（{step}）" if step else ""
         if branches or str(getattr(graph, "source", "") or "") == "article":
             part = f"按《{title}》原文归纳" if title else "按原文归纳"
             if branches:
                 part += f"（{len(branches)} 个分支）"
             logic = str(getattr(graph, "main_logic", "") or "").strip()
-            return f" · {part}，主逻辑「{logic}」" if logic else f" · {part}"
+            head = f" · {part}，主逻辑「{logic}」" if logic else f" · {part}"
+            return f"{head}{tier}"
         if article_is_usable(self._article) is True:
             return ""                      # 有原文却拿到老路的图：忙态里已经说过了
-        return " · 未取到原文，已按词条关系生成"
+        return f" · 未取到原文，已按词条关系生成{tier}"
 
     def refresh(self, *, topic_id: int | None = None) -> None:
         """重建主题列表并重新载入当前主题的图（幂等，只读本地库）。
@@ -3203,9 +3261,14 @@ class ConceptMapWindow:
             note = ""
         if self._subset_ids and len(nodes) != len(all_nodes):
             note = f"本次只分析选中的 {len(nodes)} 词（该主题共 {len(all_nodes)} 词）"
+        ids = tuple(int(n.entry_id) for n in nodes)
+        # 换词条 = 换材料（批次 M21-B）：阶梯回到标准做法，否则「重新生成」的档位
+        # 会跟着新词条继续往上走，用户看到的第 3 档其实从没按新词条从头想过。
+        if ids != tuple(self._vary_ids):
+            self._vary = 0
+            self._vary_ids = ids
         changed = (fingerprint != str(self._fingerprint)
-                   or tuple(int(n.entry_id) for n in nodes)
-                   != tuple(int(n.entry_id) for n in self._nodes)
+                   or ids != tuple(int(n.entry_id) for n in self._nodes)
                    or note != str(getattr(self, "_coverage_note", "") or ""))
         self._all_nodes = all_nodes
         self._nodes = nodes
@@ -3389,6 +3452,7 @@ class ConceptMapWindow:
         self._labels = {}
         self._fingerprint = ""
         self._article = None                   # 换主题 = 换文章：留档跟着重读
+        self._vary = 0                         # 换主题 = 回到标准做法（阶梯归零）
         self._coverage_note = ""
         #: 换主题 = 换范围：词条列表不跨主题沿用（人工关系按主题各自读库）。
         #: 子集**通常也清空** —— 例外只有一个：主界面刚把「只画勾选的词」设在本主题上
@@ -3476,8 +3540,8 @@ class ConceptMapWindow:
         不重复发，但按钮必须给出**真实**反馈 —— 那份结果回来会直接显示。
 
         ``note`` 是「点按钮时已经顺带做过的事」（批次 M18-B：重新生成前先取消
-        固定位置、按自动布局重排），并进忙态提示 —— 用户点下去当场就知道
-        画面为什么变了，不必等结果回来。
+        固定位置、按自动布局重排）或「这一遍换了第几档思路」（批次 M21-B），并进
+        忙态提示 —— 用户点下去当场就知道这一次与上一次有什么不一样，不必等结果回来。
         """
         service = self.service
         if service is None or self._topic_id is None:
@@ -3510,7 +3574,8 @@ class ConceptMapWindow:
         self._show_hint(False)
         token = service.generate(topic_id, nodes=self._nodes, force=bool(force),
                                  topic_name=self._topic_name_text,
-                                 article=self._article)
+                                 article=self._article,
+                                 vary=int(self._vary or 0))
         if token is None:
             return                          # 命中缓存 / 没有可生成内容（结果走回调）
         self._pending_token = int(token)
@@ -3586,6 +3651,10 @@ class ConceptMapWindow:
         if str(status) == "ok" and graph is not None:
             self._graph = graph
             self._state = "ready"
+            # 显示的这一版是第几档，**以图自己记的为准**（批次 M21-B）：取缓存回来
+            # 的可能是旧档，阶梯得对齐它，否则下一次「重新生成」会重复同一档。
+            self._vary = int(getattr(graph, "vary", 0) or 0)
+            self._vary_ids = tuple(int(n.entry_id) for n in self._nodes)
             note = "（缓存）" if str(getattr(graph, "source", "") or "") == "cache" else ""
             summary = getattr(graph, "summary", None)
             text = summary() if callable(summary) else ""
@@ -3639,7 +3708,19 @@ class ConceptMapWindow:
         # 关系由模型给、位置由我们排 —— 他手拖过的固定位置不清掉，重新生成之后
         # 画面一个像素都不会变（AI 给的关系往往与上一次一模一样），看起来就像
         # 「点了没反应」。所以每次重新生成都**先整理一次**，并把这件事写进状态行。
-        self._request(force=True, note=self._tidy_for_regenerate())
+        #
+        # 用户口径 2026-10-09（本批次 M21-B）：「重新生成本质上还是恢复布局，如果
+        # 没有思考等级方式的变化，重新生成导图可以说是毫无意义」。于是除了整理，
+        # 每点一次还**往上换一档思路**：换切法 / 放宽 temperature / 抬高推理强度。
+        # 只在真有原文时递进 —— 没有原文那张图是代码按关系分层画的，换档没有意义。
+        note = self._tidy_for_regenerate()
+        if article_is_usable(self._article) is True:
+            step = min(int(self._vary or 0) + 1, int(api_client.ARTICLE_VARY_MAX))
+            if step > int(self._vary or 0):
+                self._vary = step
+                label, _approach, _temperature = api_client.article_vary(step)
+                note = f"{note}（换第 {step + 1} 档思路：{label}）"
+        self._request(force=True, note=note)
 
     def _open_settings(self) -> None:
         opener = getattr(self.app, "open_settings", None)
@@ -5623,9 +5704,12 @@ class ConceptMapWindow:
     def _on_zoom_wheel(self, event) -> None:
         """滚轮 = **直接**缩放（以鼠标所在位置为锚）；Ctrl+滚轮走同一条路。
 
+        缩放量按系统给的 ``delta`` **连续**换算（批次 M21-C：用户要的「无级变速」，
+        见 :func:`wheel_zoom_factor`）—— 不再是「一格固定 10%」。
+
         ``coalesce=True``：一次「滚一下」常有 3–5 个 ``<MouseWheel>`` 挤在几十
         毫秒里，每个都整套重排 + 重画就是卡顿的来源。缩放本身照旧每个事件都
-        立刻生效，只有重画合并成每 :data:`ZOOM_REDRAW_MS` 毫秒一次。
+        立刻生效（连续累加），只有重画合并成每 :data:`ZOOM_REDRAW_MS` 毫秒一次。
         """
         delta = self._wheel_delta(event)
         if not delta:
@@ -5635,8 +5719,7 @@ class ConceptMapWindow:
             anchor = (float(event.x), float(event.y))
         except (AttributeError, TypeError, ValueError):  # pragma: no cover
             anchor = None
-        self.zoom_by(ZOOM_STEP if delta > 0 else 1.0 / ZOOM_STEP, anchor=anchor,
-                     coalesce=True)
+        self.zoom_by(wheel_zoom_factor(delta), anchor=anchor, coalesce=True)
 
     def _schedule_wheel_redraw(self) -> None:
         """排一次「滚轮合并后的重画」；已经排过就不重复排。
