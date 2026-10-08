@@ -4539,6 +4539,10 @@ class TestConceptMapCamera(unittest.TestCase):
                 win._on_zoom_wheel(SimpleNamespace(delta=120, x=cursor_x, y=cursor_y))
                 self.assertAlmostEqual(win._zoom, cm.ZOOM_STEP, places=6,
                                        msg="滚轮必须**直接**缩放")
+                self.assertAlmostEqual(win._view_left(), direct_x, places=6,
+                                       msg="合并重画的那十几毫秒里视图先别动"
+                                           "（批次 M18-A：当场挪一下就是用户说的「乱晃」）")
+                win._flush_wheel_redraw()          # 定时器到点：先按新缩放重画，再落锚点
                 world_after_x = win._view_left() + cursor_x
                 world_after_y = win._view_top() + cursor_y
                 self.assertAlmostEqual(world_after_x, world_before[0] * cm.ZOOM_STEP,
@@ -4665,6 +4669,92 @@ class TestConceptMapCamera(unittest.TestCase):
                                  ["别的词0", "别的词1", "别的词2", "别的词3"],
                                  "换主题后画布上必须是新主题自己的词表")
                 self.assertTrue(first)
+
+
+    # ---------------------------------------- M18-A：滚轮缩放不许「乱晃」（用户口径 2026-10-08）
+    def test_a_wheel_burst_leaves_the_view_alone_until_the_redraw(self):
+        """合并重画的那十几毫秒里，视图**一个像素都不许动**。
+
+        病根：``_zoom`` 每个刻度立刻生效，图上的内容却还是上一次缩放的（``_draw``
+        才重画），旧代码却当场按新缩放挪视图 ⇒ 内容先跳一大步、16 毫秒后重画再被
+        拽回来，用户看到的就是「缩放时会乱晃」。
+        """
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=400, height=300)
+                win._fit_pending = False
+                win._draw(force=True)
+                win.zoom_by(1.2)                  # 先离开 1.0，免得三个刻度撞上限幅
+                left, top = win._view_left(), win._view_top()
+                snap_zoom, snap_drawn = float(win._zoom), float(win._drawn_zoom)
+                self.assertAlmostEqual(snap_zoom, snap_drawn, places=6,
+                                       msg="前提：这一步没有合并重画，图上的缩放与状态一致")
+                for _ in range(3):
+                    win.zoom_by(cm.ZOOM_STEP, anchor=(120.0, 90.0), coalesce=True)
+                self.assertAlmostEqual(float(win._zoom), snap_zoom * cm.ZOOM_STEP ** 3,
+                                       places=6, msg="缩放值照旧每个刻度立刻生效")
+                self.assertAlmostEqual(win._view_left(), left, places=6,
+                                       msg="★ 串内视图一个像素都不许动（动了就是他说的「乱晃」）")
+                self.assertAlmostEqual(win._view_top(), top, places=6,
+                                       msg="★ 上下方向同理")
+                self.assertAlmostEqual(float(win._drawn_zoom), snap_drawn, places=6,
+                                       msg="还没重画：图上仍然画在旧缩放上")
+                self.assertIsNotNone(win._pending_anchor,
+                                     "指针位置要记着，等重画完了再落锚点")
+
+    def test_the_settle_redraws_first_and_anchors_after(self):
+        """★ 顺序就是全部要害：**先按新缩放画出来，再按新滚动范围落锚点**。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=400, height=300)
+                win._fit_pending = False
+                win._draw(force=True)
+                win.zoom_by(1.2)
+                self.assertFalse(win._fit_pending, "前提：尺寸没再变，这一串不会再自适应")
+                order = []
+                real_draw, real_anchor = win._draw, win._apply_anchor
+                win._draw = lambda *a, **kw: (order.append("draw"), real_draw(*a, **kw))[1]
+                win._apply_anchor = lambda *a: (order.append("anchor"), real_anchor(*a))[1]
+                win.zoom_by(cm.ZOOM_STEP, anchor=(120.0, 90.0), coalesce=True)
+                self.assertEqual(order, [], "串内既不许重画、也不许落锚点")
+                win._flush_wheel_redraw()
+                self.assertEqual(order, ["draw", "anchor"],
+                                 "★ 必须先把图按新缩放画出来、再落锚点；反过来就是「乱晃」")
+                self.assertIsNone(win._pending_anchor, "落完锚点要清掉，别留给下一串")
+
+    def test_every_draw_records_the_zoom_it_actually_painted(self):
+        """``_drawn_zoom`` 必须等于「图上那份内容是用哪个缩放画的」。
+
+        自适应（首开装不下就缩到看得全）也会改 ``self._zoom`` —— 它走的路径与滚轮
+        完全不同，漏同步的话滚轮锚点会按错的比例算，一样是晃。
+        """
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=320, height=220)
+                win._draw(force=True)
+                self.assertLess(float(win._zoom), 1.0,
+                                "这组内容在小画布里必须自适应缩小，否则这条用例没量到东西")
+                self.assertAlmostEqual(float(win._drawn_zoom), float(win._zoom), places=6,
+                                       msg="★ 自适应改过缩放之后也要同步")
+                win.zoom_by(1.4)
+                self.assertAlmostEqual(float(win._drawn_zoom), float(win._zoom), places=6,
+                                       msg="不合并的那条路当场重画，同样要同步")
 
 
 class TestConceptMapEvidenceSource(unittest.TestCase):
@@ -6592,10 +6682,11 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                 ok, message = win.pin_node(ids["过拟合"], 640.0, 420.0)
                 self.assertTrue(ok, message)
                 self.assertEqual(db.list_node_pins(bid), {ids["过拟合"]: (640.0, 420.0)})
-                win._drop_expired(force=True)      # 等价于「重新生成」
+                win._drop_expired(force=True)      # 刷新内容（≠ 点「重新生成」按钮）
                 win._draw(force=True)
                 self.assertAlmostEqual(win._layout.find(ids["过拟合"]).x, 640.0, places=3,
-                                       msg="重新生成只换 AI 关系，不动他摆过的位置")
+                                       msg="刷新内容只换 AI 关系、不动他摆过的位置"
+                                           "（点「重新生成」按钮会先整理，见这批 M18 的用例）")
                 win._pins = {}                     # 相当于把这张图关掉再打开
                 win._reload_pins()
                 self.assertEqual(win.pinned_positions(), {ids["过拟合"]: (640.0, 420.0)},
@@ -6847,6 +6938,77 @@ class TestConceptMapDragPinsAndEdgeBlocks(unittest.TestCase):
                 self.assertIsNone(win._relation_editor.initial_dst)
                 self.assertIsNone(win._relation_editor.initial_relation)
                 win._relation_editor.close()
+
+
+    # ---------------------------------------- M18-B：重新生成必先整理（用户口径 2026-10-08）
+    def test_regenerating_tidies_the_pinned_cards_and_says_so(self):
+        """用户口径：「重新生成即使关系不发生改变也应该进行导图的整理」。
+
+        病根：AI 给的关系往往与上一次**一模一样**，而他手拖固定的卡片位置又原样
+        还原 ⇒ 重新生成完画面一个像素都不变，看起来就像「点了没反应」。
+        """
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, ids, _bid = self._window(db)
+                self.assertEqual(win._tidy_for_regenerate(), "",
+                                 "一张都没固定过就别说话，别拿废话占状态行")
+                for name, x, y in (("卷积", 250.0, 180.0), ("池化", 640.0, 420.0)):
+                    ok, message = win.pin_node(ids[name], x, y)
+                    self.assertTrue(ok, message)
+                self.assertEqual(len(win.pinned_positions()), 2)
+                draws = []
+                real_draw = win._draw
+                win._draw = lambda **kw: (draws.append(kw), real_draw(**kw))[1]
+                note = win._tidy_for_regenerate()
+                self.assertEqual(draws, [{"force": True}],
+                                 "★ 整理完必须当场重排一次，不然画面还是原样")
+                self.assertIn("2 张卡片", note, "整理了几张要写出来")
+                self.assertIn("自动布局", note)
+                self.assertEqual(win._pins, {}, "固定过的位置要全放开")
+                self.assertEqual(win.pinned_positions(), {})
+                self.assertEqual(win._tidy_for_regenerate(), "",
+                                 "第二次点不该重复说「已顺带整理」")
+
+    def test_clicking_regenerate_tidies_before_it_asks_for_a_new_graph(self):
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win, ids, bid = self._window(db)
+                ok, message = win.pin_node(ids["卷积"], 250.0, 180.0)
+                self.assertTrue(ok, message)
+
+                class _ReadyService:
+                    """就绪 + 给一个在途 token，但不发任何网络请求。"""
+
+                    def __init__(self, order):
+                        self.order = order
+
+                    def is_ready(self):
+                        return True, ""
+
+                    def generate(self, topic_id, **kw):
+                        self.order.append("generate")
+                        return 7
+
+                    def __getattr__(self, name):
+                        # 其余服务方法一概当作「没有」：这些用例只关心顺序与状态行
+                        def _nothing(*_a, **_kw):
+                            return None
+                        return _nothing
+
+                order = []
+                win.service = _ReadyService(order)
+                real_tidy = win._tidy_for_regenerate
+                win._tidy_for_regenerate = lambda: (order.append("tidy"), real_tidy())[1]
+                win._on_generate()
+                self.assertEqual(order, ["tidy", "generate"],
+                                 "★ 点「重新生成」必须先整理、再请求（顺序反了用户还是觉得没反应）")
+                self.assertEqual(db.list_node_pins(bid), {},
+                                 "点下去那一下就已经放开固定了，不必等结果回来")
+                text = str(win.feedback.cget("text"))
+                self.assertIn("正在生成参考关系", text)
+                self.assertIn("已顺带整理", text,
+                              "状态行要顺带说一句：画面为什么变了")
+                self.assertEqual(win._pending_token, 7)
 
 
 class _ImmediateAfter:

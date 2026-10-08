@@ -2697,6 +2697,14 @@ class ConceptMapWindow:
         self._selected_node = None             # 当前点选的词（entry_id；与连线二选一）
         self._state = "empty"                  # empty / idle / loading / ready / error / nokey
         self._zoom = 1.0
+        #: **画布上这一版内容**是按哪个缩放画出来的（批次 M18-A）。滚轮把
+        #: ``_zoom`` 立刻改掉、重画却合并到 :data:`ZOOM_REDRAW_MS` 之后 —— 这中间
+        #: 「状态里的缩放」与「图上的缩放」不是一回事：要把指针底下的点折回画布
+        #: 坐标，必须用**图上的**那个值，否则视图先按新缩放挪一大步、等重画时才被
+        #: 拽回来（用户 2026-10-08 报的「缩放时会乱晃」）。
+        self._drawn_zoom = 1.0
+        #: 滚轮攒着还没落位的锚点（指针的屏幕坐标），见 :meth:`_settle_wheel_anchor`。
+        self._pending_anchor: tuple[float, float] | None = None
         self._layout: MapLayout | None = None
         self._items: list[int] = []
         self._edge_items: dict[int, int] = {}  # id(rel) → canvas item
@@ -3357,6 +3365,8 @@ class ConceptMapWindow:
         # 「刷新」不走这里 —— 词条变化 / 重新生成都保留用户自己调好的缩放与位置。
         self._zoom = 1.0
         self._fit_pending = True
+        self._drawn_zoom = 1.0
+        self._pending_anchor = None      # 上个主题攒下的滚轮锚点不许带到新主题
         self._topic_name_text = self._topic_name()
         self._update_evidence()
         if self._topic_id is None:
@@ -3397,12 +3407,16 @@ class ConceptMapWindow:
         self._request(force=False)
 
     # ------------------------------------------------------------- 生成
-    def _request(self, *, force: bool) -> None:
+    def _request(self, *, force: bool, note: str = "") -> None:
         """发起一次生成（唯一入口：打开 / 切主题 / 点按钮）。
 
         发请求前**再按当前主题读一次库**：``self._nodes`` 只是显示副本，绝不把
         陈旧快照发给模型。同主题 + 同内容的请求已经在途时（例如窗口关掉又打开）
         不重复发，但按钮必须给出**真实**反馈 —— 那份结果回来会直接显示。
+
+        ``note`` 是「点按钮时已经顺带做过的事」（批次 M18-B：重新生成前先取消
+        固定位置、按自动布局重排），并进忙态提示 —— 用户点下去当场就知道
+        画面为什么变了，不必等结果回来。
         """
         service = self.service
         if service is None or self._topic_id is None:
@@ -3440,7 +3454,8 @@ class ConceptMapWindow:
         self._pending_token = int(token)
         self._state = "loading"
         self._sync_button()
-        self._set_feedback(self._with_coverage("正在生成参考关系…（先按当前词节点显示）"))
+        self._set_feedback(self._with_coverage(
+            f"正在生成参考关系…（先按当前词节点显示）{note}"))
 
     def _reject_stale(self, token: int, pending: int | None) -> None:
         """过期 / 迟到结果：只清理**它自己**那份忙态，绝不动更新请求的忙态。"""
@@ -3549,7 +3564,11 @@ class ConceptMapWindow:
             self._set_feedback(service.unavailable_hint())
             self._open_settings()
             return
-        self._request(force=True)
+        # 用户口径 2026-10-08：「重新生成即使关系不发生改变也应该进行导图的整理」。
+        # 关系由模型给、位置由我们排 —— 他手拖过的固定位置不清掉，重新生成之后
+        # 画面一个像素都不会变（AI 给的关系往往与上一次一模一样），看起来就像
+        # 「点了没反应」。所以每次重新生成都**先整理一次**，并把这件事写进状态行。
+        self._request(force=True, note=self._tidy_for_regenerate())
 
     def _open_settings(self) -> None:
         opener = getattr(self.app, "open_settings", None)
@@ -4549,6 +4568,27 @@ class ConceptMapWindow:
         self._set_feedback(f"已恢复自动布局（取消固定 {count} 张卡片）")
         self._draw(force=True)
 
+    def _tidy_for_regenerate(self) -> str:
+        """「重新生成」之前**先整理一次**：取消本主题全部固定位置（批次 M18-B）。
+
+        用户口径 2026-10-08：「重新生成即使关系不发生改变也应该进行导图的整理」。
+        位置本来就是我们自己排的东西，不把它放开就谈不上整理。返回一句给状态行
+        的说明；本来就没有固定位置时返回空串（那句话就不出现）。
+        """
+        if self._topic_id is None:
+            return ""
+        try:
+            count = int(self.db.clear_node_pins(int(self._topic_id)))
+        except Exception:
+            log.exception("重新生成前的整理失败")
+            return ""
+        if count <= 0:
+            return ""
+        self._pins = {}
+        self._drag_node = None
+        self._draw(force=True)
+        return f"；已顺带整理：取消固定 {count} 张卡片，按自动布局重排"
+
     # ============================================== 模板 / 布局骨架（G1·G2·G4）
     def _read_template(self) -> str:
         """从设置里读布局骨架（未知值一律当「自动」—— 脏配置不该让图画不出来）。"""
@@ -5466,10 +5506,10 @@ class ConceptMapWindow:
         缩放前后指针底下还是同一个画布点；不给就锚在画布中心。缩放被限幅在
         :data:`ZOOM_MIN` – :data:`ZOOM_MAX`，并在同一处停掉首开自适应。
 
-        ``coalesce=True`` 时**只把重画推迟、合并**（滚轮专用，见
-        :meth:`_schedule_wheel_redraw`）：``_zoom`` 与视图锚点照旧立刻生效，
-        因此「缩了多少」与调用方读到的状态完全一致，只是不必每个滚轮刻度都
-        整套重排 + 重画一次。
+        ``coalesce=True`` 时**只把重画与视图锚点推迟、合并**（滚轮专用，见
+        :meth:`_schedule_wheel_redraw` 与 :meth:`_settle_wheel_anchor`）：
+        ``_zoom`` 照旧立刻生效，因此「缩了多少」与调用方读到的状态完全一致，
+        只是不必每个滚轮刻度都整套重排 + 重画一次。
         """
         try:
             current = float(self._zoom)
@@ -5488,8 +5528,13 @@ class ConceptMapWindow:
         self._fit_pending = False               # 用户自己动过镜头：不再自动复位
         self._zoom = zoomed
         if coalesce:
-            # 滚轮：缩放与锚点**立刻**落位（纯算术，不碰任何图元），重画合并。
-            self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
+            # 滚轮：**只有缩放值**立刻生效（纯算术，不碰任何图元）；视图锚点与重画
+            # 一起合并到 :meth:`_settle_wheel_anchor`。顺序是这条路的全部要害 ——
+            # 「先重画、后落锚点」：先前是当场落锚点，而画布上的内容还画在上一次的
+            # 缩放上，于是视图先按新缩放挪一大步、等重画时才被拽回来。真机实测
+            # （`.tmp/probe_m18_zoom.py`）：3 个刻度的一串滚轮里，指针底下的内容
+            # 滑走 166 像素再弹回 —— 用户看到的就是「缩放时会乱晃」。
+            self._pending_anchor = (spot[0], spot[1])
             self._set_feedback(f"缩放 {int(round(self._zoom * 100))}%（滚轮）")
             self._schedule_wheel_redraw()
             return True
@@ -5532,7 +5577,7 @@ class ConceptMapWindow:
             return
         after = getattr(self.canvas, "after", None)
         if not callable(after):                 # pragma: no cover - 极简替身
-            self._draw(force=True)
+            self._settle_wheel_anchor()
             return
         try:
             self._wheel_redraw = after(ZOOM_REDRAW_MS, self._flush_wheel_redraw)
@@ -5542,7 +5587,34 @@ class ConceptMapWindow:
     def _flush_wheel_redraw(self) -> None:
         """滚轮那一串事件结束后的补画：把这一段时间攒下的缩放一次性画出来。"""
         self._wheel_redraw = None
+        self._settle_wheel_anchor()
+
+    def _settle_wheel_anchor(self) -> None:
+        """滚轮一串事件的收尾：**先**按新缩放重画，**再**把指针底下那个点放回指针下。
+
+        顺序就是这条路的全部要害（批次 M18-A）。``_pending_anchor`` 是这一串里
+        最后一次滚轮的指针位置；内容此刻还画在 ``_drawn_zoom`` 上，所以
+        ``canvasx / canvasy`` 拿到的就是这个点在**旧缩放**下的画布坐标 ——
+        :meth:`_apply_anchor` 的 ``ratio`` 是「新 / 旧」，两处口径必须同一个来源
+        （``_drawn_zoom``），因此 ``ratio`` 要在重画**之后**再算。
+        """
+        self._wheel_redraw = None
+        spot = self._pending_anchor
+        self._pending_anchor = None
+        if spot is None:
+            self._draw(force=True)
+            return
+        drawn = float(self._drawn_zoom) or 1.0
+        world_x = self._canvas_coord("canvasx", spot[0])
+        world_y = self._canvas_coord("canvasy", spot[1])
         self._draw(force=True)
+        try:
+            ratio = float(self._zoom) / drawn
+        except ZeroDivisionError:               # pragma: no cover - drawn 已兜底
+            return
+        if abs(ratio - 1.0) < 1e-6:
+            return
+        self._apply_anchor(spot[0], spot[1], world_x, world_y, ratio)
 
     def _cancel_deferred_draw(self) -> None:
         """取消还没到点的「手离开后补画」——这次已经在画了。"""
@@ -5747,6 +5819,9 @@ class ConceptMapWindow:
         if not force and key == self._draw_key:
             return self._item_count()
         self._draw_key = key
+        # 从这里往下画出来的内容，就是按**这一刻**的 ``self._zoom`` 画的；滚轮
+        # 合并期间要靠这个值把指针底下的画布坐标折回旧缩放（见 :meth:`_settle_wheel_anchor`）。
+        self._drawn_zoom = float(self._zoom)
         self._clear()
         # 画布上的**每一个字号都随缩放走**（``theme.font_at(pt, self._zoom)``）：
         # 卡片框 / 坐标来自 ``layout_graph(..., zoom=self._zoom)``，字号必须与
@@ -5768,6 +5843,7 @@ class ConceptMapWindow:
         # （``_layout_core`` 取 ``max(pad, top_pad)``）。
         top_pad = theme.px(6)
         fitted = self._auto_fit(*self._mapped_size(), relations, top_pad)
+        self._drawn_zoom = float(self._zoom)    # 首开自适应也可能刚改过缩放
         layout = layout_graph(self._labels, relations, width=width, height=height,
                               topic_label=self._topic_name_text,
                               zoom=self._zoom, top_pad=top_pad,
