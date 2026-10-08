@@ -156,6 +156,70 @@ class TestExtractArticleText(unittest.TestCase):
         self.assertNotEqual(why, "", "识别不出必须给原因，不能静默返回空")
         self.assertIn("短", why)
 
+    # 下面五条是**补测试缺口**用的：原装置里的导航 / 页脚分别是裸 ``<nav>``
+    # / ``<header>`` / ``<footer>``，早就被 _DROP_TAGS 删干净了，
+    # 于是「class / id 里带提示词的**容器**」这条路径其实从没被跑到过。
+    # 2026-10-08 真机核查时发现：这条路径上只要导航排在正文之前，正文会被整段
+    # 吃掉，而 34 条测试全绿 —— 就是缺了这几个用例。
+    def test_hinted_div_before_the_article_does_not_eat_it(self):
+        """导航容器（带提示词的 div）排在正文**之前**时，正文一个字都不许丢。"""
+        before = "<div class=\"nav\"><a href=\"/\">首页</a><a href=\"/t\">技术</a></div>"
+        body = f"{before}<div class=\"content\"><p>{para('正文')}</p></div>"
+        text, method, why = extract_article_text(page(body))
+        self.assertEqual(why, "")
+        self.assertEqual(method, "density")
+        self.assertIn("正文：", text, "导航排在正文之前是真实网页的常态，正文必须留下")
+        self.assertNotIn("首页", text)
+        self.assertNotIn("技术", text)
+
+    def test_hinted_container_by_id_is_dropped_too(self):
+        """提示词也可能藏在 ``id`` 里（``id="nav"``），同样不许吞正文。"""
+        before = "<div id=\"nav\"><a href=\"/\">首页</a></div><aside id=\"sidebar\">侧边栏</aside>"
+        body = f"{before}<div id=\"main\"><p>{para('正文')}</p></div>"
+        text, _method, why = extract_article_text(page(body))
+        self.assertEqual(why, "")
+        self.assertIn("正文：", text)
+
+    def test_unclosed_hinted_container_does_not_eat_the_rest(self):
+        """导航容器忘了写 ``</div>`` 时，只许吃掉它自己，后面正文全留。
+
+        老写法在这种情况下会「删到输入末尾」—— 一个漏掉的闭标签就能让整篇文章
+        变成「未取到原文」。"""
+        before = "<div class=\"nav\">首页 关于我们"
+        body = f"{before}<div class=\"content\"><p>{para('正文')}</p></div>"
+        text, _method, why = extract_article_text(page(body))
+        self.assertEqual(why, "")
+        self.assertIn("正文：", text, "没闭合的导航容器只该吃掉自己，不许连累正文")
+
+    def test_hinted_containers_after_the_article_do_not_eat_it(self):
+        """排在正文**之后**的评论 / 广告容器同样不许影响正文。"""
+        body = (f"<div class=\"content\"><p>{para('正文')}</p></div>"
+                "<div class=\"comment-list\"><p>评论区第一楼</p></div>"
+                "<div class=\"ad-banner\">广告位</div>")
+        text, _method, why = extract_article_text(page(body))
+        self.assertEqual(why, "")
+        self.assertIn("正文：", text)
+        self.assertNotIn("评论区第一楼", text)
+        self.assertNotIn("广告位", text)
+
+    def test_paragraph_with_hint_word_is_never_dropped(self):
+        """``<p>`` 不在容器白名单里：段落就算叫 ``class="nav-note"`` 也不许删。"""
+        body = f"<div class=\"content\"><p class=\"nav-note\">{para('正文')}</p></div>"
+        text, _method, why = extract_article_text(page(body))
+        self.assertEqual(why, "")
+        self.assertIn("正文：", text)
+
+    def test_only_the_first_matching_block_is_dropped_per_call(self):
+        """``_drop_element`` 一次只删**一个**元素：顺手删兄弟块就是吞正文的元凶。"""
+        from app.article_source import _drop_element
+        html = ("<div class=\"nav\">首页</div>"
+                "<div class=\"content\"><p>正文在这里</p></div>")
+        once = _drop_element(html, "div")
+        self.assertNotIn("首页", once)
+        self.assertIn("正文在这里", once, "删导航不许把紧随其后的容器一起删掉")
+        twice = _drop_element(once, "div")
+        self.assertNotIn("正文在这里", twice, "第二轮的命中点才是正文容器")
+
     def test_script_only_page_returns_reason(self):
         text, _method, why = extract_article_text(
             "<html><body><script>document.write('x')</script></body></html>")

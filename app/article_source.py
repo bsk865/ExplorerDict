@@ -163,38 +163,47 @@ class Article:
 
 
 def _drop_element(html: str, tag: str) -> str:
-    """删掉所有 ``<tag>…</tag>`` 整块（含嵌套的同名标签）。
+    """删掉**第一个** ``<tag>…</tag>`` 整块（含嵌套的同名标签）。
 
-    为什么要配对而不是「删到下一个 ``</tag>``」：``<div><div>…</div></div>``
-    这种嵌套极常见，简单删法会把外层闭标签留下，正文就跟着被吞掉一截。
+    只删一个元素，调用方自己循环 —— 这一点很要紧：把「继续往后找下一个同类元素」
+    也塞进本函数，第一次调用就会顺手把紧跟其后的正文容器一起删掉。
+
+    配对规则（三条都踩过坑）：
+    1. 命中点之后第一个闭标签就是它自己的，直接删到那里；
+    2. 中间先遇到同名开标签，说明有嵌套，往后按深度配平；
+    3. **配平不成（这个块根本没闭合）时一个字都不删**，只把开标签本身吃掉。
+       老写法在这种情况下「删到输入末尾」，页面里只要有一个没闭合的
+       ``<div class="nav">``，它后面的正文会被整段抹掉 —— 而真实网页上
+       「导航容器忘了写闭合标签」并不罕见。
     """
     open_re = re.compile(rf"<{tag}\b[^>]*>", re.IGNORECASE)
     close_re = re.compile(rf"</{tag}\s*>", re.IGNORECASE)
-    out = []
-    pos = 0
-    while True:
-        m = open_re.search(html, pos)
-        if m is None:
-            out.append(html[pos:])
-            break
-        out.append(html[pos:m.start()])
-        depth = 1
-        scan = m.end()
-        while depth > 0:
-            nxt_open = open_re.search(html, scan)
-            nxt_close = close_re.search(html, scan)
-            if nxt_close is None:  # 没闭合：删到结尾
-                scan = len(html)
-                depth = 0
-                break
-            if nxt_open is not None and nxt_open.start() < nxt_close.start():
-                depth += 1
-                scan = nxt_open.end()
-            else:
-                depth -= 1
-                scan = nxt_close.end()
-        pos = scan
-    return "".join(out)
+    m = open_re.search(html)
+    if m is None:  # 没有这个标签，原样返回
+        return html
+    after = m.end()
+    iopen = open_re.search(html, after)
+    iclose = close_re.search(html, after)
+    if iclose is None:
+        # 整篇都没有闭标签：只吃掉开标签，后面的内容原样留着。
+        return html[: m.start()] + html[after:]
+    if iopen is None or iclose.start() < iopen.start():
+        return html[: m.start()] + html[iclose.end():]
+    depth = 2
+    scan = iopen.end()
+    while depth > 0:
+        scan_open = open_re.search(html, scan)
+        scan_close = close_re.search(html, scan)
+        if scan_close is None:
+            # 嵌套里的块没闭合：只吃掉这两个开标签，正文一个字都不动。
+            return html[: m.start()] + html[iopen.end():]
+        if scan_open is not None and scan_open.start() < scan_close.start():
+            depth += 1
+            scan = scan_open.end()
+        else:
+            depth -= 1
+            scan = scan_close.end()
+    return html[: m.start()] + html[scan:]
 
 
 def _drop_self_closing_container(html: str, tag: str) -> str:
@@ -216,7 +225,7 @@ def _strip_hinted_containers(html: str) -> str:
         r"(?:class|id)\s*=\s*[\"']([^\"']*)[\"'][^>]*>",
         re.IGNORECASE,
     )
-    for _ in range(50):  # 上限纯粹是防呆：真页面嵌套不会这么深
+    for _ in range(100):  # 上限纯粹是防呆：真页面不会有这么多命中容器
         hit = None
         for m in pattern.finditer(html):
             if _DROP_HINTS.search(m.group(2) or ""):
@@ -224,7 +233,13 @@ def _strip_hinted_containers(html: str) -> str:
                 break
         if hit is None:
             return html
-        html = _drop_element(html[hit.start():], hit.group(1).lower()) + html[:hit.start()]
+        at = hit.start()
+        # 只把「从命中标签开始的那一段」交给 _drop_element：它删掉的是其中
+        # **第一个** ``<div …>`` 整块（也就是命中的那个），再拼回前半段。
+        stripped = _drop_element(html[at:], hit.group(1).lower())
+        if len(stripped) == len(html) - at:  # 什么都没删掉：防呆，别死循环
+            return html
+        html = stripped + html[:at]
     return html
 
 
