@@ -2008,6 +2008,11 @@ class App:
 
         判断只在 :func:`app.ui.setup_wizard.should_show` 里（标记 ``ui.wizard_done``
         + 门控没被硬阻断）：游戏 / 全屏 / 暂停时**不弹**，等下次打开主界面再说。
+
+        向导**只是首次上手引导**：它建不出来（没有真实 Tk 环境 / 控件异常）时
+        记一条日志就返回 ``False``，绝不让「主界面已经亮出来了、顺手弹个向导」
+        反过来把 ``request_open_main()`` 整条路径掀翻 —— 那会让双击快捷方式
+        什么也打不开。
         """
         try:
             locked = bool(self.gate_controller.is_locked())
@@ -2015,7 +2020,12 @@ class App:
             locked = False
         if not wizard_should_show(self.config, gate_locked=locked):
             return False
-        self.open_setup_wizard()
+        try:
+            self.open_setup_wizard()
+        except Exception:  # pragma: no cover - 无真实 Tk（headless / 控件异常）
+            log.exception("首次配置向导没能建出来（不影响主界面）")
+            self._wizard_win = None
+            return False
         return True
 
     def open_setup_wizard(self) -> None:
