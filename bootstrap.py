@@ -498,7 +498,81 @@ def acquire_single_instance(boot: "Bootstrap", argv: list[str]):
         return guard, None
     boot.note(f"single_instance: already running ({guard.name})")
     boot.error("已有一个实例在运行：本次启动退出（避免抢热键 / 并发写库）")
+    summoned = _summon_running_instance()
+    boot.note(f"activation: {'signalled' if summoned else 'not signalled'}")
+    _notify_already_running(summoned)
     return guard, int(exit_code)
+
+
+def _summon_running_instance() -> bool:
+    """把「双击了一次」这件事**告诉已经在跑的那个实例**（呼出通道）。
+
+    为什么要有：``启动.cmd`` 用 ``start`` 起进程后立刻返回，父进程看不到退出码，
+    所以「已经在运行」这条路径如果什么都不做，用户看到的就是**「点了没反应」**
+    （2026-10-08 的实际反馈）。
+
+    通道是 ``app.activation`` 的命名事件（``CreateEventW`` + ``SetEvent``，与互斥体
+    共用同一份数据目录签名）：已经在跑的那个实例收到事件后走
+    ``App.request_open_main`` —— 与托盘菜单「打开词典」、``--open-main`` **同一条**
+    门控路径（受游戏 / 全屏硬阻断时会**暂存**，不硬闯）。
+
+    失败（旧实例没有这条通道 / 权限不足 / 无 ctypes）只返回 ``False``，不影响退出码。
+    """
+    try:
+        from app.activation import REQUEST_SIGNALED, request_activation
+
+        return request_activation() == REQUEST_SIGNALED
+    except Exception:  # pragma: no cover - 通道不可用不影响「本次启动退出」这个结论
+        return False
+
+
+#: 单实例提示框标题（用户双击启动、程序已在运行时显示一次）
+ALREADY_RUNNING_TITLE = "探索词典"
+#: 提示文案：按「有没有成功叫出已有实例」分两种说法
+ALREADY_RUNNING_TEXT_SUMMONED = (
+    "探索词典已经在运行了，已经把你那个窗口叫到前面来。\n\n"
+    "所以这次双击没有再开一个新窗口（多个实例会互相抢全局热键、并发写同一个数据库）。\n\n"
+    "这个提示 10 秒后自动消失。"
+)
+ALREADY_RUNNING_TEXT_ALONE = (
+    "探索词典已经在运行了。\n\n"
+    "所以这次双击没有再开一个新窗口（多个实例会互相抢全局热键、并发写同一个数据库）。\n\n"
+    "窗口没有自动到前面来的话，请从托盘菜单 / 任务栏把它叫出来。这个提示 10 秒后自动消失。"
+)
+#: 兼容旧名字（既有文档与测试提到这个常量名）
+ALREADY_RUNNING_TEXT = ALREADY_RUNNING_TEXT_ALONE
+#: ``MessageBoxTimeoutW`` 的 uType 位：MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND
+_MB_OK_INFO_SETFOREGROUND = 0x00000000 | 0x00000040 | 0x00010000
+#: 提示框自动关闭时间（毫秒）——常驻弹窗会把「安静启动」变成打扰，所以限时
+ALREADY_RUNNING_TIMEOUT_MS = 10000
+
+
+def _notify_already_running(summoned: bool = False) -> bool:
+    """已在运行时给一次**可见**反馈（只弹一次、10 秒自动消失）。
+
+    为什么需要：``启动.cmd`` 用 ``start`` 起 pythonw 后立刻返回，父进程看不到子进程
+    的退出码；判重失败时本次启动只写日志就退出，用户看到的现象就是
+    **「双击了，什么也没发生」**（2026-10-08 实际反馈）。
+
+    ``summoned``：呼出事件有没有发出去（见 :func:`_summon_running_instance`）。
+    发出去时说「已经把你那个窗口叫到前面来」，没发出去时告诉用户去哪里找窗口。
+
+    为什么用 ``MessageBoxTimeoutW`` 而不是 Tk：这条路径在 ``import app.main``
+    之前，不该为了一个提示框拉起整套 Tk 运行环境；而且它带超时，不会把
+    「已经在运行」变成必须手动点掉的拦路弹窗。
+
+    弹不出来（无桌面会话 / user32 不可用）不影响退出码，也不抛异常。
+    """
+    text = ALREADY_RUNNING_TEXT_SUMMONED if summoned else ALREADY_RUNNING_TEXT_ALONE
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxTimeoutW(
+            None, text, ALREADY_RUNNING_TITLE,
+            _MB_OK_INFO_SETFOREGROUND, 0, ALREADY_RUNNING_TIMEOUT_MS)
+        return True
+    except Exception:  # pragma: no cover - 提示失败绝不影响「本次启动退出」这个结论
+        return False
 
 
 def _release_single_instance(guard) -> None:

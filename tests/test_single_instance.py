@@ -202,6 +202,52 @@ class TestBootstrapGate(unittest.TestCase):
         self.assertIsNone(code)
         self.assertTrue(any("single_instance: ok" in row for row in boot.notes))
 
+    def test_second_launch_notifies_exactly_once_and_first_launch_never(self):
+        """「双击了却什么也没发生」的守卫。
+
+        ``启动.cmd`` 用 ``start`` 起进程后立刻返回，父进程看不到退出码，所以
+        「已经在运行」这条路径**必须有屏幕上的反馈**；而正常启动那次绝不能弹
+        （每次开机都弹一个「已经在运行」是纯打扰）。
+        """
+        import bootstrap
+        from unittest import mock
+
+        busy = self._Boot()
+        fake_busy = SingleInstance(backend=FakeMutexBackend(existed=True),
+                                   logger=RecordingLogger())
+        with mock.patch("app.single_instance.SingleInstance", return_value=fake_busy), \
+                mock.patch.object(bootstrap, "_summon_running_instance",
+                                  return_value=True) as summon, \
+                mock.patch.object(bootstrap, "_notify_already_running") as notify:
+            bootstrap.acquire_single_instance(busy, [])
+        summon.assert_called_once_with()
+        notify.assert_called_once_with(True)
+        self.assertEqual(notify.call_count, 1)
+
+        fresh = self._Boot()
+        fake_fresh = SingleInstance(backend=FakeMutexBackend(),
+                                    logger=RecordingLogger())
+        with mock.patch("app.single_instance.SingleInstance", return_value=fake_fresh), \
+                mock.patch.object(bootstrap, "_notify_already_running") as notify2:
+            bootstrap.acquire_single_instance(fresh, [])
+        notify2.assert_not_called()
+
+    def test_notify_already_running_never_raises(self):
+        """提示框是体验改进，不是启动条件：弹不出来也必须安静地退化成 ``False``。"""
+        import bootstrap
+        from unittest import mock
+
+        with mock.patch("ctypes.windll", create=True) as windll:
+            self.assertIs(bootstrap._notify_already_running(), True)
+            windll.user32.MessageBoxTimeoutW.assert_called_once()
+            args = windll.user32.MessageBoxTimeoutW.call_args.args
+            self.assertEqual(args[1], bootstrap.ALREADY_RUNNING_TEXT)
+            self.assertEqual(args[2], bootstrap.ALREADY_RUNNING_TITLE)
+            self.assertGreater(args[5], 0, "提示框必须带超时，不能变成拦路弹窗")
+
+            windll.user32.MessageBoxTimeoutW.side_effect = OSError("no desktop session")
+            self.assertIs(bootstrap._notify_already_running(), False)
+
 
 class EventBackend(FakeMutexBackend):
     """把加锁 / 解锁写进共享事件表：用于断言「锁在 Tk / 建库之前」。"""
