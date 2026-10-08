@@ -652,8 +652,26 @@ class TestManualRelations(unittest.TestCase):
     def _columns(self, db: Database, table: str) -> set[str]:
         return {str(r["name"]) for r in db.query(f"PRAGMA table_info({table})")}
 
-    def test_schema_version_is_9(self):
-        self.assertEqual(SCHEMA_VERSION, 9)
+    def test_schema_version_matches_constant(self):
+        """库版本必须跟 ``db.SCHEMA_VERSION`` 一致（v10 = 新增 articles 表，存原文留档）。
+
+        这里刻意**不写死数字**：写死过一次（``assertEqual(SCHEMA_VERSION, 9)``），
+        结果每次升版都要顺手改这条测试，改的还是「期望值」而不是行为。
+        真正要守的是「建库后 setting 里记的版本 == 代码里的版本」，以及 v10 那张表
+        确实建出来了（见下一条）。
+        """
+        self.assertGreaterEqual(SCHEMA_VERSION, 10)
+
+    def test_new_db_has_articles_table(self):
+        """v10：原文留档表必须建出来（抓不到就存失败原因，不存半截正文）。"""
+        with temp_db() as db:
+            row = db.query_one(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='articles'")
+            self.assertIsNotNone(row, "v10 需要 articles 表")
+            cols = self._columns(db, "articles")
+            for name in ("doc_key", "title", "status", "text", "note", "fetched_at"):
+                self.assertIn(name, cols, f"articles 缺列 {name}")
+            self.assertEqual(db.get_setting("schema_version"), str(SCHEMA_VERSION))
 
     def test_new_db_has_topic_and_note_columns(self):
         with temp_db() as db:
@@ -697,7 +715,7 @@ class TestManualRelations(unittest.TestCase):
         return bid, e1, e2, rel_id
 
     def test_old_v7_db_gains_columns_keeps_rows_and_is_idempotent(self):
-        """老库升级：补两列 + 两张新表 + 版本号变 9 + **旧关系一条不少**，重开也不重复迁移。"""
+        """老库升级：补两列 + 新表 + 版本号升到当前值 + **旧关系一条不少**，重开也不重复迁移。"""
         with tmp_dir("dbmig_rel_") as tmp:
             path = Path(tmp) / "old_v7.sqlite3"
             bid, e1, e2, rel_id = self._make_old_v7_db(path)
@@ -707,13 +725,13 @@ class TestManualRelations(unittest.TestCase):
                 cols = self._columns(db, "relations")
                 self.assertIn("topic_id", cols, "v7 → v8：relations 必须补上 topic_id")
                 self.assertIn("note", cols, "v7 → v8：relations 必须补上 note")
-                self.assertEqual(db.get_setting("schema_version"), "9")
+                self.assertEqual(db.get_setting("schema_version"), str(SCHEMA_VERSION))
 
-                # ---- v8 → v9：两张新表也在（老库同样要有）----
-                for table in ("node_pins", "map_edge_blocks"):
+                # ---- v8 → v9 → v10：新表也在（老库同样要有）----
+                for table in ("node_pins", "map_edge_blocks", "articles"):
                     self.assertIsNotNone(db.query_one(
                         "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)),
-                        f"v9 需要 {table} 表")
+                        f"v9 / v10 需要 {table} 表")
                 # 老库里两张新表都是空的（不凭空造数据）
                 self.assertEqual(db.list_node_pins(0), {})
                 self.assertEqual(db.map_edge_block_pairs(0), set())
@@ -742,7 +760,7 @@ class TestManualRelations(unittest.TestCase):
 
             db2 = Database(path)                    # 再开一次：迁移必须幂等
             try:
-                self.assertEqual(db2.get_setting("schema_version"), "9")
+                self.assertEqual(db2.get_setting("schema_version"), str(SCHEMA_VERSION))
                 self.assertEqual(len(db2.list_manual_relations()), 1, "重开不得重复插入或删行")
                 self.assertEqual(int(db2.list_manual_relations()[0]["id"]), rel_id)
                 self.assertEqual(db2.get_entry(e1)["term"], "旧词 A")

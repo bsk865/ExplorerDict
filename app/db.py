@@ -15,9 +15,10 @@ import threading
 from pathlib import Path
 
 from . import crypto_dpapi
+from .article_source import Article
 from .models import now_iso
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 def _as_topic(topic_id: object) -> int:
@@ -61,6 +62,11 @@ CONTEXT_JOINER = " ／ "
 #: 黑名单**：用户判定「这条 AI 关系不对」后，同一对端点的候选边不再画出来，
 #: 重新生成也不会回来）。两者都随词条删除自动清理（``ON DELETE CASCADE``），
 #: 都只记「位置」与「哪一对词条」，**不缓存任何模型输出**。
+#: v9 → v10 加入 ``articles``：**原文留档**（以 ``doc_key`` 为主键，一个文档一行）。
+#: 导图的目标是「按这一篇文章的脉络归纳」，而归纳必须看得到原文 —— 只拿每个词的
+#: 240 字上下文，模型给得出「词与词的关系」，给不出「这篇文章在讲什么」。正文在
+#: 划词那一刻抓（页面内容随时会变，事后补抓到的往往已经是另一版），抓不到就如实写
+#: ``status='failed'`` + 原因，**绝不**拿导航文字或上一次的缓存冒充原文。
 _MIGRATIONS = """
 CREATE TABLE IF NOT EXISTS chat_turns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +79,17 @@ CREATE TABLE IF NOT EXISTS chat_turns (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_turns_entry ON chat_turns(entry_id, id);
 CREATE INDEX IF NOT EXISTS idx_chat_turns_request ON chat_turns(request_id);
+
+CREATE TABLE IF NOT EXISTS articles (
+    doc_key TEXT PRIMARY KEY,
+    url TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL DEFAULT '',
+    text_chars INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'failed',
+    note TEXT NOT NULL DEFAULT '',
+    fetched_at TEXT NOT NULL DEFAULT ''
+);
 
 CREATE TABLE IF NOT EXISTS map_graphs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -676,6 +693,61 @@ class Database:
                 "UPDATE batches SET source_key=?, updated_at=? WHERE id=?",
                 (source_key, now_iso(), batch_id),
             )
+
+    # -------------------------------------------------------------- articles
+    def put_article(self, doc_key: str, article: Article) -> None:
+        """写入 / 覆盖一篇原文留档（``doc_key`` 是主键，一个文档一行）。
+
+        ``status`` 也照实存：抓失败的那次会留着原因（``note``），界面据此显示
+        「未取到原文」。**失败也要存** —— 否则同一页每划一个词都要重抓一遍，
+        既慢又像在反复捶别人服务器。
+        """
+        key = (doc_key or "").strip()
+        if not key:
+            return
+        self.execute(
+            "INSERT INTO articles(doc_key, url, title, text, text_chars, status, note, "
+            "fetched_at) VALUES(?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(doc_key) DO UPDATE SET url=excluded.url, title=excluded.title, "
+            "text=excluded.text, text_chars=excluded.text_chars, status=excluded.status, "
+            "note=excluded.note, fetched_at=excluded.fetched_at",
+            (
+                key,
+                article.url or "",
+                article.title or "",
+                article.text or "",
+                int(article.chars),
+                article.status or "",
+                article.note or "",
+                now_iso(),
+            ),
+        )
+
+    def get_article(self, doc_key: str) -> sqlite3.Row | None:
+        """按 ``doc_key`` 取原文留档；没有（或从没抓过）返回 ``None``。"""
+        key = (doc_key or "").strip()
+        if not key:
+            return None
+        return self.query_one("SELECT * FROM articles WHERE doc_key=?", (key,))
+
+    def has_article(self, doc_key: str) -> bool:
+        """这一页是不是**已经处理过**（抓到过或明确抓失败过）。
+
+        判定必须包含失败 —— 否则每划一个词都会重抓一遍同一页。
+        """
+        return self.get_article(doc_key) is not None
+
+    def article_text(self, doc_key: str) -> str:
+        """取原文正文；没有 / 抓失败过时返回空串（调用方据此如实说明）。"""
+        row = self.get_article(doc_key)
+        if row is None:
+            return ""
+        return str(row["text"] or "") if str(row["status"] or "") == "ok" else ""
+
+    def delete_article(self, doc_key: str) -> None:
+        key = (doc_key or "").strip()
+        if key:
+            self.execute("DELETE FROM articles WHERE doc_key=?", (key,))
 
     # -------------------------------------------------------------- entries
     def add_entry(
