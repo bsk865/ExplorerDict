@@ -15,15 +15,17 @@
 from __future__ import annotations
 
 import gzip
+import pathlib
 import unittest
 import zlib
 from email.message import Message
 from urllib.error import HTTPError, URLError
 
 from app.article_source import (
-    DEFAULT_TIMEOUT, MAX_BYTES, MIN_ARTICLE_CHARS, STATUS_SKIP, Article,
-    decode_html, detect_blocked, extract_article_text, fetch_article,
-    is_fetchable_url,
+    DEFAULT_TIMEOUT, MAX_BYTES, MAX_LOCAL_BYTES, MIN_ARTICLE_CHARS, STATUS_SKIP,
+    Article, decode_html, detect_blocked, extract_article_text, fetch_article,
+    is_fetchable_url, is_http_url, is_local_source, local_path_of,
+    read_local_article,
 )
 
 
@@ -283,14 +285,25 @@ class TestArticleObject(unittest.TestCase):
 class TestFetchArticle(unittest.TestCase):
     def test_url_scheme_gate(self):
         for good in ("http://a.example.com/p", "https://a.example.com/p"):
-            self.assertTrue(is_fetchable_url(good))
-        for bad in ("", "   ", "file:///C:/a.txt", "javascript:void(0)",
-                    "about:blank", "https://", "ftp://a.example.com/x"):
-            self.assertFalse(is_fetchable_url(bad), f"{bad!r} 不该被判为可抓")
+            self.assertTrue(is_http_url(good))
+        for bad in ("", "   ", "javascript:void(0)", "about:blank", "https://",
+                    "ftp://a.example.com/x", "mailto:a@b.c"):
+            self.assertFalse(is_http_url(bad), f"{bad!r} 不该被判为可抓的网页")
+
+    def test_local_sources_are_recognized_but_never_count_as_http(self):
+        """批次 M21-A：本地文档要能取原文（读盘），但**不是**网页。"""
+        for path in ("D:\\x\\需求.txt", "D:/x/需求.txt", "file:///D:/x/需求.txt",
+                     "\\\\server\\share\\x.md"):
+            self.assertTrue(is_local_source(path), f"{path!r} 是本地文件")
+            self.assertTrue(is_fetchable_url(path), "本地文件也算「能取到原文」")
+            self.assertFalse(is_http_url(path), "本地文件不许走网络那条路")
+        for junk in ("", "   ", "计算器", "https://a.example.com/p",
+                     "mailto:a@b.c", "javascript:void(0)"):
+            self.assertFalse(is_local_source(junk), f"{junk!r} 不是本地文件")
 
     def test_non_fetchable_url_skips_without_network(self):
         opener = FakeOpener(error=AssertionError("不许联网"))
-        art = fetch_article("file:///C:/a.docx", opener=opener)
+        art = fetch_article("javascript:void(0)", opener=opener)
         self.assertFalse(art.ok)
         self.assertEqual(art.status, STATUS_SKIP)
         self.assertEqual(opener.requests, [], "非 http(s) 一律不许发请求")
@@ -392,6 +405,120 @@ class TestFetchArticle(unittest.TestCase):
                             opener=FakeOpener(error=URLError("断网")))
         self.assertEqual(art.url, "https://a.example.com/p")
         self.assertEqual(art.text, "")
+
+
+# ----------------------------------------------------- 本地文档（批次 M21-A）
+class TestLocalArticle(unittest.TestCase):
+    """用户口径 2026-10-09：「我用的是本地的 txt 写了一段测试文本，你告诉我没有
+    抓取到原文？而且抓取原文为什么需要联网？」
+
+    守两条：**本地文本文件读得进来**（且一个数据包都不发），**读不进来的要说清
+    为什么**（不是 PDF 这种格式 / 找不到 / 是文件夹 / 是二进制 / 太短）。
+    """
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write(self, name: str, text: str, encoding: str = "utf-8") -> pathlib.Path:
+        target = self.root / name
+        target.write_bytes(text.encode(encoding))
+        return target
+
+    def test_reads_a_plain_text_file_without_touching_the_network(self):
+        body = "第一段讲问题。\n\n" + para("需求")
+        target = self.write("需求.txt", body)
+        art = read_local_article(str(target))
+        self.assertTrue(art.ok, art.note)
+        self.assertEqual(art.status, "ok")
+        self.assertEqual(art.method, "local")
+        self.assertEqual(art.title, "需求", "标题就用文件名，不编造")
+        self.assertIn("第一段讲问题。", art.text)
+        self.assertEqual(art.charset, "utf-8-sig")
+        self.assertEqual(art.url, target.resolve().as_uri(),
+                         "留档里要写成 file:///… 的规范形式")
+
+    def test_file_url_and_bare_path_land_on_the_same_file(self):
+        body = para("路径") + "\n"
+        target = self.write("路径.txt", body)
+        for value in (str(target), target.as_uri(),
+                      str(target).replace("\\", "/")):
+            art = read_local_article(value)
+            self.assertTrue(art.ok, f"{value} 应当读得到：{art.note}")
+            self.assertEqual(art.chars, read_local_article(str(target)).chars)
+
+    def test_gbk_file_is_decoded_correctly(self):
+        body = para("国标") + "\n"
+        target = self.write("国标.txt", body, encoding="gb18030")
+        art = read_local_article(str(target))
+        self.assertTrue(art.ok, art.note)
+        self.assertEqual(art.charset, "gb18030")
+        self.assertIn("国标：", art.text)
+        self.assertNotIn("\ufffd", art.text, "不许留乱码替换符")
+
+    def test_html_file_reuses_the_article_extractor(self):
+        target = self.write("文章.html", page(f"<article><p>{para('网页')}</p></article>"))
+        art = read_local_article(str(target))
+        self.assertTrue(art.ok, art.note)
+        self.assertTrue(art.method.startswith("local:"), art.method)
+        self.assertIn("网页：", art.text)
+        self.assertNotIn("评论区第一楼", art.text, "本地 HTML 也要剥导航评论")
+
+    def test_unsupported_format_says_what_it_is(self):
+        target = self.write("论文.pdf", "not really a pdf" + para("假"))
+        art = read_local_article(str(target))
+        self.assertFalse(art.ok)
+        self.assertIn("pdf", art.note.lower())
+        self.assertIn("纯文本", art.note)
+
+    def test_missing_and_directory_and_empty_are_three_different_sentences(self):
+        missing = read_local_article(str(self.root / "没有这个文件.txt"))
+        self.assertFalse(missing.ok)
+        self.assertIn("找不到", missing.note)
+        folder = read_local_article(str(self.root))
+        self.assertFalse(folder.ok)
+        self.assertIn("文件夹", folder.note)
+        empty = self.write("空的.txt", "")
+        blank = read_local_article(str(empty))
+        self.assertFalse(blank.ok)
+        self.assertNotIn(blank.note, (missing.note, folder.note))
+
+    def test_binary_file_is_refused_not_garbled(self):
+        target = self.root / "程序.txt"
+        target.write_bytes(b"\x00\x01\x02PK\x03\x04" + b"\x00" * 400)
+        art = read_local_article(str(target))
+        self.assertFalse(art.ok)
+        self.assertIn("二进制", art.note)
+
+    def test_too_short_file_says_how_many_chars_it_saw(self):
+        target = self.write("短.txt", "太短了")
+        art = read_local_article(str(target))
+        self.assertFalse(art.ok)
+        self.assertIn("短", art.note)
+
+    def test_oversized_file_is_truncated_and_says_so(self):
+        target = self.write("大.txt", "很长的一段话。" * 200)
+        art = read_local_article(str(target), max_bytes=120)
+        self.assertLessEqual(art.raw_bytes, 120, "最多只读这么多字节")
+        self.assertIn("文件较大", art.note)
+
+    def test_fetch_article_routes_local_paths_to_the_reader(self):
+        """``fetch_article`` 对本地路径同样不许联网 —— 传进去的 opener 一次都不该被用。"""
+        opener = FakeOpener(error=AssertionError("本地文件绝不允许联网"))
+        target = self.write("走这条.txt", para("直读"))
+        art = fetch_article(str(target), opener=opener)
+        self.assertTrue(art.ok, art.note)
+        self.assertEqual(opener.requests, [])
+        self.assertEqual(art.method, "local")
+
+    def test_local_reader_accepts_a_max_bytes_budget(self):
+        target = self.write("预算.txt", para("预算"))
+        art = read_local_article(str(target), max_bytes=MAX_LOCAL_BYTES)
+        self.assertTrue(art.ok, art.note)
 
 
 if __name__ == "__main__":
