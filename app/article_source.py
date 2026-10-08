@@ -17,6 +17,13 @@
   ``ok=False`` + 原因，**绝不**返回「看起来像正文的导航文字」充当原文。
   上层据此如实告诉用户「未取到原文」，而不是硬编一份归纳。
 * **只抓用户正在看的那一页**：URL 来自划词时的来源信息，不爬站、不跟站内链接。
+* **本地文档不需要联网**（批次 M21-A）：来源是 ``file:///…`` 或一条本地路径
+  （``D:\\笔记\\需求.txt``）时走 :func:`read_local_article` —— **直接读磁盘，
+  一个数据包都不发**。用户用记事本 / VSCode 写下的草稿本来就是文件，读它有
+  原文可归纳；以前这种情况被一律判成「没有可抓的网页正文」，所以导图只能退回
+  按词条关系画线 —— 那不是设计，那是个漏洞。本地只认 UTF-8(BOM) / UTF-8 /
+  GB18030 三种编码的**文本**文件（``.txt .md .html .htm`` 等）；PDF / Word
+  这类二进制格式没有第三方库解析不了，如实说「读不了」，不假装读了。
 
 隐私与边界：抓到的正文存在本机数据库（``articles`` 表，见 ``app/db.py``），
 只用于给用户自己的导图做归纳；发往模型的内容仍由上层
@@ -29,8 +36,9 @@ import re
 import zlib
 from dataclasses import dataclass
 from html.parser import HTMLParser
+from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from urllib.request import Request, build_opener
 
 from .logging_setup import get_logger
@@ -40,6 +48,25 @@ log = get_logger("article")
 #: 一次取回最多读多少字节（防「下整站」）。一篇长文按 UTF-8 也就几百 KB，
 #: 1 MiB 足够；超了直接截断并如实标注（不静默假装读完了）。
 MAX_BYTES = 1024 * 1024
+
+#: 本地文档（``file:///…`` 或裸路径）一次最多读多少字节。本地文件是用户自己的
+#: 草稿，不必像网页那样防「下整站」，但也别把 1 GB 的日志整个读进内存 ——
+#: 超了就只读前这么多，并在 ``note`` 里如实说「只读了前 N 字节」。
+MAX_LOCAL_BYTES = 4 * 1024 * 1024
+
+#: 认得出是「文本正文」的本地文件后缀。其余后缀（.pdf/.docx/.png…）一律
+#: 老实说读不了 —— 用文本解码器硬解二进制只会得到一堆乱码，那比「没取到」
+#: 更糟：模型会把乱码当原文来归纳。
+LOCAL_TEXT_SUFFIXES = (
+    ".txt", ".text", ".md", ".markdown", ".rst", ".log", ".csv", ".tsv",
+    ".json", ".yaml", ".yml", ".ini", ".cfg", ".toml",
+    ".html", ".htm", ".xhtml", ".xml",
+    ".py", ".js", ".ts", ".java", ".c", ".h", ".cpp", ".cs", ".go", ".rs",
+    ".sql", ".sh", ".ps1", ".bat", ".cmd",
+)
+
+#: 后缀认不出时，前 512 字节里出现这些就当成文本（用户自己的笔记常常没有后缀）。
+_LOCAL_TEXT_HINTS = ("\n", "。", "，", " ", "\t")
 
 #: 网络超时（秒）。取原文是**顺手**做的事，宁可抓不到也不能让界面等着。
 DEFAULT_TIMEOUT = 8.0
@@ -51,8 +78,9 @@ MIN_ARTICLE_CHARS = 200
 #: 抓取结果里的 ``status`` 取值。
 STATUS_OK = "ok"
 STATUS_FAILED = "failed"
-#: 这一页压根没有可抓的 http(s) 正文（本地 PDF、桌面软件、输入框手工词）——
-#: 不是失败，是「没有这回事」，界面不该报错。
+#: 这一页压根没有可归纳的正文：桌面软件窗口、输入框里手工敲的词、二进制文档
+#: （PDF / Word）—— 不是失败，是「没有这回事」，界面不该报错。
+#: 注意：**本地文本文件不在这一类**（批次 M21-A 起走 :func:`read_local_article`）。
 STATUS_SKIP = "skipped"
 
 #: 浏览器 UA：不伪装成爬虫（有些站点直接把非浏览器 UA 的响应换成验证页，
@@ -324,6 +352,20 @@ def _normalize_block(text: str) -> str:
     return t.strip()
 
 
+def _normalize_plain_text(text: str) -> str:
+    """纯文本文件的规范化：**保留段落结构**，不碰行内空格与缩进。
+
+    和 :func:`_normalize_block`（给 HTML 用的）刻意不同：Markdown 的缩进、
+    代码块的缩进、中文写作里刻意留的空格都是原文的一部分，压掉就不是原文了。
+    这里只统一换行符、去掉每行尾的空格、把连续空行收到一个空行。
+    """
+    t = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.rstrip() for line in t.split("\n")]
+    t = "\n".join(lines)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 def _score(text: str) -> float:
     """一段文字的「像正文」得分。
 
@@ -443,6 +485,23 @@ def detect_blocked(text: str) -> str:
             return f"页面返回的是「{hint}」这类提示，不是正文"
     return ""
 
+def decode_bytes(raw: bytes, candidates) -> tuple[str, str]:
+    """按 ``candidates`` 给的顺序逐个试解码。返回 ``(文本, 真正用上的编码)``。
+
+    一个能解出来就返回 —— 顺序就是「谁更可信」的排序，调用方负责给对顺序。
+    全都解不出来才退回 ``utf-8/replace``（保底不抛异常）。
+    """
+    for enc in candidates or ():
+        name = str(enc or "").strip().lower()
+        if not name:
+            continue
+        try:
+            return raw.decode(name), name
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return raw.decode("utf-8", "replace"), "utf-8/replace"
+
+
 def decode_html(raw: bytes, charset_hint: str = "") -> tuple[str, str]:
     """字节 → 文本。返回 ``(文本, 实际用的编码)``。
 
@@ -462,12 +521,8 @@ def decode_html(raw: bytes, charset_hint: str = "") -> tuple[str, str]:
     for extra in ("utf-8", "gb18030"):
         if extra not in candidates:
             candidates.append(extra)
-    for enc in candidates:
-        try:
-            return raw.decode(enc), enc
-        except (LookupError, UnicodeDecodeError):
-            continue
-    return raw.decode("utf-8", "replace"), "utf-8/replace"
+    return decode_bytes(raw, candidates)
+
 
 
 def _decompress(raw: bytes, encoding: str) -> bytes:
@@ -485,8 +540,13 @@ def _decompress(raw: bytes, encoding: str) -> bytes:
     return raw
 
 
-def is_fetchable_url(url: str) -> bool:
-    """这个 URL 值不值得去抓（只有 http/https 才抓）。"""
+#: 磁盘盘符开头（``D:\…`` / ``D:/…``）—— 划词时抓到的「来源 URL」经常就是一条
+#: 裸路径（记事本、VSCode、Typora 都是这么报的）。
+_WINDOWS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def is_http_url(url: str) -> bool:
+    """值不值得**联网**去抓（只有 http/https 才联网）。"""
     try:
         parts = urlsplit((url or "").strip())
     except ValueError:
@@ -494,18 +554,158 @@ def is_fetchable_url(url: str) -> bool:
     return parts.scheme.lower() in ("http", "https") and bool(parts.netloc)
 
 
+def local_path_of(url: str) -> str:
+    """从「来源值」里认出**本地文件路径**；认不出返回空串。纯函数：不碰磁盘。
+
+    认三种写法：
+
+    * ``file:///D:/笔记/需求.txt`` → ``D:\\笔记\\需求.txt``（URL 转义会还原）；
+    * ``D:\\笔记\\需求.txt`` / ``D:/笔记/需求.txt`` → 原样；
+    * ``\\\\服务器\\共享\\需求.txt``（UNC）→ 原样。
+
+    ``file://`` 指向网络位置（``file://server/share/x.txt``）也认，读不到就由
+    :func:`read_local_article` 如实报告 —— 那一步是纯本地 I/O，照样不联网。
+    """
+    raw = (url or "").strip().strip('"')
+    if not raw:
+        return ""
+    parts = None
+    try:
+        parts = urlsplit(raw)
+    except ValueError:  # pragma: no cover - 极罕见：URL 里有非法字符
+        parts = None
+    if parts is not None and parts.scheme.lower() == "file":
+        path = unquote(parts.path or "")
+        netloc = (parts.netloc or "").strip()
+        if netloc and netloc.lower() != "localhost":
+            # file://server/share/x.txt（UNC）：拼回 \\server\share\x.txt
+            return "\\\\" + netloc + path.replace("/", "\\")
+        if re.match(r"^/[A-Za-z]:", path):
+            path = path[1:]                      # /D:/x → D:/x
+        return path.replace("/", "\\") if path else ""
+    if parts is not None and parts.scheme and len(parts.scheme) > 1:
+        return ""                                # 别的协议（ftp:/mailto:…）不管
+    if _WINDOWS_PATH_RE.match(raw) or raw.startswith("\\\\"):
+        return raw
+    return ""
+
+
+def is_local_source(url: str) -> bool:
+    """这条来源值是不是一份**本地文件**（是 → 走读盘，不联网）。"""
+    return bool(local_path_of(url))
+
+
+def is_fetchable_url(url: str) -> bool:
+    """这条来源值能不能取到原文（http(s) 联网抓，或本地文件读盘）。
+
+    保留这个名字是因为它是既有调用点的入口；批次 M21-A 起它**不再只认 http**，
+    判定本身仍然不碰磁盘、不联网（能不能真的读到由取回那一步说）。
+    """
+    return is_http_url(url) or is_local_source(url)
+
+
+def read_local_article(path: str, *, max_bytes: int = MAX_LOCAL_BYTES,
+                       label: str = "") -> Article:
+    """读一份**本地文本文件**当原文（纯本地 I/O，一个数据包都不发）。
+
+    :param path: 文件路径（``file://`` 与裸路径都先过 :func:`local_path_of`）。
+    :param label: 落库时用的「来源值」（通常是划词时记下的原始写法），
+        没给就用 ``file:///`` + 路径。
+    :return: 和 :func:`fetch_article` 同样的 :class:`Article`；**所有失败都变成
+        一句人话原因**，不抛异常。
+
+    编码顺序刻意**不是**网页那套：本地中文笔记用 GB18030 存的很多，而 ``utf-8``
+    硬解 GBK 文件**不会报错**（只会得到乱码），所以先认 BOM、再严格 UTF-8、最后
+    GB18030 —— 顺序错了会把好文件读成乱码，比读不到更糟。
+    """
+    raw_value = (path or "").strip()
+    resolved = local_path_of(raw_value) or raw_value
+    target = str(label or "").strip()
+    if not target and resolved:
+        # 「来源值」是落库/界面用的可读写法：能查到文件就记成 file:/// 链接，
+        # 查不到（不存在 / 权限）就原样记 —— 别伪造一个不存在的地址。
+        candidate = Path(resolved)
+        target = candidate.as_uri() if candidate.is_absolute() else raw_value
+    if not resolved:
+        return Article(ok=False, url=target, status=STATUS_SKIP,
+                       note="这一份不是本地文件，也没有可抓的网页正文")
+
+    def fail(note: str) -> Article:
+        return Article(ok=False, url=target, title=Path(resolved).name, note=note)
+
+    file_path = Path(resolved)
+    suffix = file_path.suffix.lower()
+    if suffix and suffix not in LOCAL_TEXT_SUFFIXES:
+        return fail(f"这是 {suffix} 文件，本地读不了这种格式"
+                    "（只认纯文本 / Markdown / HTML 这类文本文件）")
+    try:
+        if not file_path.exists():
+            return fail("找不到这个本地文件（可能已改名、被移动或删掉了）")
+        if file_path.is_dir():
+            return fail("这是一条文件夹路径，不是文件")
+        size = file_path.stat().st_size
+        with file_path.open("rb") as handle:
+            raw = handle.read(max_bytes)
+    except PermissionError:
+        return fail("没有权限读这个本地文件（可能被别的程序独占或受系统保护）")
+    except OSError as exc:
+        return fail(f"读这个本地文件失败：{exc}")
+
+    if not raw:
+        return fail("这个本地文件是空的（0 字节）")
+    if b"\x00" in raw[:4096]:
+        return fail("这个文件看着是二进制（PDF / Word / 压缩包？），本地读不了；"
+                    "把它另存成纯文本再试")
+
+    truncated = size > len(raw)
+    text, charset = decode_bytes(raw, ("utf-8-sig", "utf-8", "gb18030"))
+    title = file_path.stem
+    method = "local"
+    if suffix in (".html", ".htm", ".xhtml", ".xml"):
+        document = _clean_document_title(text)
+        if document:
+            title = document
+        extracted, method, why = extract_article_text(text)
+        if not extracted:
+            return fail(why or "这个本地网页里没找到正文")
+        text = extracted
+        method = f"local:{method}"
+    text = _normalize_plain_text(text)
+    note = ""
+    if truncated:
+        note = f"文件较大，只读了前 {len(raw)} 字节（共 {size} 字节）"
+    if len(text) < MIN_ARTICLE_CHARS:
+        if text:
+            note = (f"只读到 {len(text)} 字，"
+                    + ("本地文件太短，不够当一篇原文"
+                       if not note else note))
+        else:
+            note = "这个本地文件里没有可读的文字（可能是空文档或纯符号）"
+        return Article(ok=False, url=target, title=title, text=text,
+                       note=note, method=method, raw_bytes=len(raw),
+                       charset=charset)
+    return Article(ok=True, url=target, title=title, text=text, status=STATUS_OK,
+                   note=note, method=method, raw_bytes=len(raw), charset=charset)
+
+
+
 def fetch_article(url: str, *, timeout: float = DEFAULT_TIMEOUT,
                   opener=None, max_bytes: int = MAX_BYTES) -> Article:
     """取回并识别一页的正文。**所有的失败都变成一句人话原因**，不抛异常。
+
+    本地文件（``file://`` / 裸路径）自动转到 :func:`read_local_article` ——
+    读盘，不联网。
 
     :param url: 划词时记下的页面地址（原样，不做归一化 —— 归一化后的
         ``doc_key`` 里的 URL 可能已经不是可访问地址）。
     :param opener: 测试注入用（假 opener 实现 ``open(request, timeout=…)``）。
     """
     target = (url or "").strip()
-    if not is_fetchable_url(target):
+    if is_local_source(target):
+        return read_local_article(target, max_bytes=MAX_LOCAL_BYTES)
+    if not is_http_url(target):
         return Article(ok=False, url=target, status=STATUS_SKIP,
-                       note="这一页没有可抓的网页正文（本地文档 / 桌面软件 / 手工输入）")
+                       note="这一页没有可归纳的正文（桌面软件 / 手工输入）")
     req = Request(target, headers={
         "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

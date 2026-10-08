@@ -857,6 +857,26 @@ class CaptureService:
         return entry_id, True
 
     # --------------------------------------------------------- 原文留档
+    def _article_source_value(self, src: SourceInfo) -> str:
+        """这次划词的「来源值」：能取到原文就返回它，取不到返回空串。
+
+        优先 ``src.url``（浏览器的地址、编辑器的文件路径都在这儿）。它认不出
+        本地文件时再退一步看 ``src.title`` —— 记事本 / Typora 这类程序在
+        UIA 里报不出 URL，但窗口标题往往就是文件路径或「文件名 - 程序名」。
+        只在标题里**确实能认出路径**时才用（:func:`article_source.local_path_of`），
+        免得把一句普通标题当成文件名去读盘。
+        """
+        raw = (src.url or "").strip() if src is not None else ""
+        if article_source.is_fetchable_url(raw):
+            return raw
+        title = (src.title or "").strip() if src is not None else ""
+        if not title:
+            return ""
+        for candidate in (title, *(part.strip() for part in title.split(" - "))):
+            if candidate and article_source.local_path_of(candidate):
+                return candidate
+        return ""
+
     def maybe_fetch_article(self, src: SourceInfo, doc_key: str | None = None) -> bool:
         """这一页还没留档就**在后台**去抓一次原文。返回是否真的起了线程。
 
@@ -867,14 +887,20 @@ class CaptureService:
         刻意**不阻塞**：抓取在守护线程里做，用户不等它 —— 他要的是浮条马上
         弹出来，原文到没到不影响这一次记录。抓不到也**不重试**（同一页只抓
         一次，失败原因写进 ``articles.note``），免得反复捶别人的服务器。
+
+        **本地文档照样留档**（批次 M21-A）：来源值既可能是网页地址，也可能是
+        ``file:///D:/笔记.txt`` 或一条裸路径 —— 后者由
+        :func:`app.article_source.fetch_article` 直接读盘，**不联网**。
+        记事本这类程序有时报不出完整路径（窗口标题里才带），所以路径可能在
+        ``src.url`` 也可能在 ``src.title``（见 :func:`_local_source_value`）。
         """
         key = (doc_key or "").strip() or self.page_doc_key(src)
         if not key:
             return False
         if not self.config.fetch_article:
             return False
-        url = (src.url or "").strip() if src is not None else ""
-        if not article_source.is_fetchable_url(url):
+        url = self._article_source_value(src)
+        if not url:
             return False
         if self.db.has_article(key):
             return False
