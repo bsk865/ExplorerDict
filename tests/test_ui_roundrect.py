@@ -1336,15 +1336,21 @@ class TestMapRelationValidation(unittest.TestCase):
         from app.ui.concept_map import edge_kind
 
         self.assertEqual(set(REL_TYPES),
-                         {"包含", "属于", "依赖", "用途", "因果", "对照"})
+                         {"包含", "属于", "依赖", "用途", "因果", "对照",
+                          "时序", "对策"},
+                         "词与词的老六种 + 按原文归纳新增的「时序 / 对策」")
         self.assertEqual(constraint_pair("包含", 1, 2), (1, 2), "包含：上位在前")
         self.assertEqual(constraint_pair("属于", 1, 2), (2, 1), "属于：下位在后")
         self.assertEqual(constraint_pair("依赖", 1, 2), (2, 1), "依赖：前提在前")
         self.assertEqual(constraint_pair("因果", 1, 2), (1, 2), "因果：因在前")
+        self.assertEqual(constraint_pair("时序", 1, 2), (1, 2), "时序：先在前")
+        self.assertEqual(constraint_pair("对策", 1, 2), (1, 2), "对策：问题在前")
         self.assertIsNone(constraint_pair("用途", 1, 2), "用途是跨边，不约束层级")
         self.assertIsNone(constraint_pair("对照", 1, 2))
         self.assertEqual(edge_kind("包含"), "hierarchy")
         self.assertEqual(edge_kind("依赖"), "direction")
+        self.assertEqual(edge_kind("时序"), "direction", "时序要分层，不是跨边")
+        self.assertEqual(edge_kind("对策"), "direction")
         self.assertEqual(edge_kind("用途"), "cross")
 
     # ------------------------------------------------ 第二次独立核对的判定回填

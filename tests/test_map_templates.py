@@ -478,7 +478,8 @@ class TestSkeletonsInTheRealLayout(unittest.TestCase):
     """走真正的 ``layout_graph`` / ``layout_extent``（连线、外框、固定位置都在里面）。"""
 
     def test_the_layout_reports_which_skeleton_it_used(self):
-        for key in KEYS:
+        #: 「双栏对比」只在按原文归纳给出了分组时才有意义，单独测（见 TestArticleBranches）
+        for key in ("tree", "org", "mindmap", "oneway", "fishbone", "flow-h", "flow-v", "flow-s"):
             layout = _layout(key)
             self.assertEqual(layout.template, key)
             self.assertEqual(layout.template_note, "", f"{key} 不该有失败说明")
@@ -544,6 +545,236 @@ class TestSkeletonsInTheRealLayout(unittest.TestCase):
         self.assertEqual(len(plain.edges), len(back.edges), "切回来连线也一模一样")
         self.assertAlmostEqual(plain.content_w, back.content_w, places=6)
         self.assertAlmostEqual(plain.content_h, back.content_h, places=6)
+
+
+class TestArticleBranches(unittest.TestCase):
+    """**按原文归纳**给出的分支怎么进布局（新能力，2026-10-09）。
+
+    分支目前只做一件事：**分组**（「对比」这类文章两组左右并排，``compare`` 模板）。
+    它**不改任何语义**：真实关系一条都不动，别的模板拿到它当没看见、一个像素都不挪，
+    一个词都不能因为「没被分进任何分支」而消失。``branch_order()`` /
+    ``branch_levels()`` 两个纯函数已经写好并测住，留给后续「真按分支分行」那一批。
+    """
+
+    #: 三个分支（问题 → 办法 → 结果），每个词都在里面
+    BRANCHES = ({"name": "问题", "entities": ["过拟合", "卷积层", "池化层"]},
+                {"name": "办法", "entities": ["正则化"]},
+                {"name": "结果", "entities": ["特征图", "感受野", "降采样"]})
+    #: 两组对比：左栏三个词、右栏两个词，第 6 个词**故意不放进任何分支**
+    COMPARE = ({"name": "传统方法", "entities": ["卷积层", "池化层", "降采样"]},
+               {"name": "新方法", "entities": ["正则化", "特征图"]})
+
+    def test_branch_order_flattens_the_article_order(self):
+        self.assertEqual(mt.branch_order(self.BRANCHES),
+                         ("过拟合", "卷积层", "池化层", "正则化",
+                          "特征图", "感受野", "降采样"))
+        self.assertEqual(mt.branch_order(()), ())
+        self.assertEqual(mt.branch_order(None), ())
+        self.assertEqual(mt.branch_order([{"name": "只有名字"}, {"name": "", "members": ["卷积层"]}]),
+                         ("卷积层",), "members 是 entities 的别名；空分支不算")
+
+    def test_branch_levels_use_the_branch_index_and_keep_the_written_order(self):
+        levels, order = mt.branch_levels(self.BRANCHES, sorted(LABELS), LABELS)
+        self.assertEqual(levels, {4: 0, 2: 0, 3: 0, 5: 1, 7: 2, 8: 2, 6: 2},
+                         "层号 = 第几个分支（同分支同层）")
+        self.assertEqual(order, (4, 2, 3, 5, 7, 8, 6),
+                         "分支内按文章顺序，不是按 entry_id 大小")
+        self.assertEqual(len(order), len(set(order)), "不许重复")
+        self.assertEqual(set(order), set(levels), "同一个分支里的词不许漏")
+        mapping = dict(zip(order, [levels[item] for item in order]))
+        self.assertEqual(list(mapping.values()), sorted(mapping.values()),
+                         "顺序必须是按分支排好的")
+
+    def test_branch_levels_ignore_words_that_only_exist_in_the_library(self):
+        """**关键**：没被分进任何分支的词既不进层号也不进顺序（交给调用方兜底）。"""
+        levels, order = mt.branch_levels(self.COMPARE, sorted(LABELS), LABELS)
+        for lonely in (1, 4, 8):                  # 卷积网络 / 过拟合 / 感受野 不在任何组里
+            self.assertNotIn(lonely, levels, f"{LABELS[lonely]} 不该被分进任何组")
+            self.assertNotIn(lonely, order)
+        self.assertEqual(set(order), {2, 3, 6, 5, 7}, "分过组的词一个不少、一个不多")
+        self.assertEqual(levels[6], 0)
+        self.assertEqual(levels[7], 1)
+        self.assertEqual(order[:3], (2, 3, 6), "左栏按文章给的顺序")
+
+    def test_branch_levels_survive_junk(self):
+        for junk in ((), None, [None, 42, "卷积层"], [{"name": "空"}]):
+            levels, order = mt.branch_levels(junk, sorted(LABELS), LABELS)
+            self.assertEqual(levels, {})
+            self.assertEqual(order, ())
+        levels, order = mt.branch_levels(["卷积层", "池化层"], sorted(LABELS), LABELS)
+        self.assertEqual(levels, {})
+        self.assertEqual(order, (), "纯字符串分支只有名字、没有成员，谁都不该被塞进去")
+        levels, order = mt.branch_levels([["卷积层", "池化层"]], sorted(LABELS), LABELS)
+        self.assertEqual(levels, {})
+        self.assertEqual(order, (), "列表不是分支的合法形状（只认对象与字符串）")
+        levels, order = mt.branch_levels([{"members": ["卷积层"]}, {"entities": ["池化层"]}],
+                                         sorted(LABELS), LABELS)
+        self.assertEqual(levels, {2: 0, 3: 1}, "名字缺了也认，只看成员")
+        levels, order = mt.branch_levels([{"name": "重名", "entities": ["卷积层"]},
+                                          {"name": "重名", "entities": ["池化层"]}],
+                                         sorted(LABELS), LABELS)
+        self.assertEqual(levels, {2: 0, 3: 1}, "组重名不该让先来的那组被吃掉")
+
+    def test_place_still_places_every_word_when_branches_are_given(self):
+        for key in KEYS:
+            placement = mt.place(key, ids=sorted(LABELS), rels=_relations(),
+                                 levels=_levels(), frame=_frame(), branches=self.BRANCHES,
+                                 names=LABELS)
+            self.assertIsNotNone(placement, key)
+            self.assertEqual(set(placement.spots), set(LABELS),
+                             f"{key} 因为分组丢了词："
+                             f"{sorted(set(LABELS) - set(placement.spots))}")
+
+    def test_branches_do_not_move_any_card(self):
+        """分组**只**用来分组：它不许偷偷改别的模板摆在哪。
+
+        层号（``levels``）在 ``_structure()`` 里只当**同层内排序**用，「谁在第几行」
+        永远由生成树的深度决定（``app/ui/map_templates.py:191`` 的
+        ``depth[node] = level``）。曾经想用「分支序号当层号」逼着「一层一行」的模板
+        按文章脉络分行，结果会把 ``tests/test_map_templates.py:280``
+        ``test_the_oneway_map_stacks_a_layer_into_one_column`` 打破，已整行回滚。
+        所以这里只断言**行为**：给了分组，位置一个像素都不动。
+        """
+        branches = ({"name": "先", "entities": ["卷积层", "正则化"]},
+                    {"name": "后", "entities": ["过拟合", "池化层"]})
+        for key in KEYS:
+            plain = mt.place(key, ids=sorted(TREE_LABELS), rels=_relations(TREE_RELATIONS),
+                             levels=_depths(TREE_LABELS, TREE_RELATIONS),
+                             frame=_frame(ids=sorted(TREE_LABELS)))
+            grouped = mt.place(key, ids=sorted(TREE_LABELS), rels=_relations(TREE_RELATIONS),
+                               levels=_depths(TREE_LABELS, TREE_RELATIONS),
+                               frame=_frame(ids=sorted(TREE_LABELS)),
+                               branches=branches, names=TREE_LABELS)
+            self.assertIsNotNone(grouped, key)
+            self.assertIsNotNone(plain, key)
+            if not plain.spots:
+                # 这个模板本来就摆不了这份夹具（例如鱼骨图需要因果边，而这里全是
+                # 「包含」）：它摆不出来与分组无关，不该拿来当分组的效果。
+                self.assertEqual(grouped.spots, {}, f"{key}：分组不该凭空变出位置")
+                continue
+            self.assertEqual(set(grouped.spots), set(plain.spots),
+                             f"{key}：分组不该改变「谁被画出来」")
+            self.assertEqual(set(grouped.spots), set(TREE_LABELS))
+            if key != "compare":                   # 只有双栏对比会按分组分栏
+                for entry_id, spot in plain.spots.items():
+                    self.assertAlmostEqual(grouped.spots[entry_id][0], spot[0], places=6,
+                                           msg=f"{key}：分组把 {entry_id} 挪走了")
+                    self.assertAlmostEqual(grouped.spots[entry_id][1], spot[1], places=6,
+                                           msg=f"{key}：分组把 {entry_id} 挪走了")
+
+    def test_place_falls_back_for_templates_that_do_not_take_branches(self):
+        """老模板签名不动：多给的 ``branches`` / ``names`` 不许让它们摆不出来。"""
+        for key in KEYS:
+            with_branches = mt.place(key, ids=sorted(LABELS), rels=_relations(),
+                                     levels=_levels(), frame=_frame(),
+                                     branches=self.BRANCHES, names=LABELS)
+            self.assertIsNotNone(with_branches, key)
+
+    def test_an_empty_branch_list_changes_nothing(self):
+        plain = mt.place("tree", ids=sorted(LABELS), rels=_relations(),
+                         levels=_levels(), frame=_frame())
+        for empty in ((), None, [], [{"name": "空分支"}]):
+            same = mt.place("tree", ids=sorted(LABELS), rels=_relations(),
+                            levels=_levels(), frame=_frame(), branches=empty,
+                            names=LABELS)
+            self.assertIsNotNone(same)
+            for entry_id, spot in plain.spots.items():
+                self.assertAlmostEqual(same.spots[entry_id][0], spot[0], places=6)
+                self.assertAlmostEqual(same.spots[entry_id][1], spot[1], places=6)
+
+    def test_compare_puts_the_two_groups_side_by_side(self):
+        placement = mt.place("compare", ids=sorted(LABELS), rels=_relations(),
+                             levels=_levels(), frame=_frame(), branches=self.COMPARE,
+                             names=LABELS)
+        self.assertIsNotNone(placement)
+        self.assertEqual(set(placement.spots), set(LABELS), "第 6 个词也必须画出来")
+        left = {2, 3, 6}
+        right = {5, 7}
+        self.assertTrue(all(placement.spots[item][0] < placement.spots[5][0]
+                            for item in left), "左栏必须在右栏左边")
+        self.assertTrue(all(placement.spots[item][0] > placement.spots[3][0]
+                            for item in right), "右栏必须在左栏右边")
+        self.assertEqual(len({placement.spots[item][0] for item in left}), 1,
+                         "左栏共用一条竖线")
+        self.assertEqual(len({placement.spots[item][0] for item in right}), 1,
+                         "右栏共用一条竖线")
+        self.assertNotAlmostEqual(placement.spots[2][0], placement.spots[5][0], places=3)
+        self.assertEqual(set(placement.hubs), left | right)
+        frame = _frame()
+        rects = {item: _rect(placement, item, frame) for item in placement.spots}
+        for first in sorted(rects):
+            for second in sorted(rects):
+                if second <= first:
+                    continue
+                self.assertFalse(_overlaps(rects[first], rects[second]),
+                                 f"compare：{first} 和 {second} 叠在一起了")
+
+    def test_compare_centers_both_groups_vertically(self):
+        placement = mt.place("compare", ids=sorted(LABELS), rels=_relations(),
+                             levels=_levels(), frame=_frame(), branches=self.COMPARE,
+                             names=LABELS)
+        frame = _frame()
+        left = [placement.spots[item][1] for item in (2, 3, 6)]
+        right = [placement.spots[item][1] for item in (5, 7)]
+        self.assertAlmostEqual((min(left) + max(left)) / 2.0,
+                               (min(right) + max(right)) / 2.0, places=6,
+                               msg="两组要各自居中，不能一组贴着顶")
+        self.assertGreaterEqual(min(left) - frame.height_of(2) / 2.0, frame.pad - 1e-3)
+        self.assertGreaterEqual(min(right) - frame.height_of(5) / 2.0, frame.pad - 1e-3)
+
+    def test_compare_puts_a_third_group_in_its_own_row_below(self):
+        branches = ({"name": "左", "entities": ["卷积层", "池化层"]},
+                    {"name": "右", "entities": ["正则化"]},
+                    {"name": "补充", "entities": ["过拟合", "特征图"]})
+        placement = mt.place("compare", ids=sorted(LABELS), rels=_relations(),
+                             levels=_levels(), frame=_frame(), branches=branches,
+                             names=LABELS)
+        self.assertEqual(set(placement.spots), set(LABELS), "一组都不许丢")
+        below = [placement.spots[item][1] for item in (4, 7)]
+        above = [placement.spots[item][1] for item in (2, 3, 5)]
+        self.assertGreater(min(below), max(above), "第三组要另起一行摆在下面")
+        frame = _frame()
+        rects = {item: _rect(placement, item, frame) for item in placement.spots}
+        for first in sorted(rects):
+            for second in sorted(rects):
+                if second <= first:
+                    continue
+                self.assertFalse(_overlaps(rects[first], rects[second]))
+
+    def test_compare_without_two_groups_says_so_instead_of_hard_failing(self):
+        for branches in ((), None, [{"name": "只有一组", "entities": ["卷积层"]}],
+                         [{"name": "空"}], [{"name": "只有一个", "entities": ["卷积层"]}]):
+            placement = mt.place("compare", ids=sorted(LABELS), rels=_relations(),
+                                 levels=_levels(), frame=_frame(), branches=branches,
+                                 names=LABELS)
+            self.assertIsNotNone(placement, f"{branches!r} 不该让图摆不出来")
+            if placement.spots:
+                self.assertEqual(set(placement.spots), set(LABELS))
+            else:
+                self.assertIn("对比", placement.note)
+
+    def test_compare_is_in_the_catalog_and_says_when_to_use_it(self):
+        spec = mt.spec_of("compare")
+        self.assertIsNotNone(spec)
+        self.assertEqual(spec.name, "双栏对比")
+        self.assertTrue(spec.summary.strip())
+        self.assertIn("对比", spec.fit)
+        self.assertEqual(spec.route_axis, "x")
+        self.assertIn("compare", mt.TEMPLATE_KEYS)
+        self.assertEqual(len(mt.TEMPLATE_KEYS), 10, "九项 + 双栏对比（「自动」另算首项）")
+
+    def test_compare_survives_the_real_layout(self):
+        """走真正的 ``layout_graph``（它是唯一会碰分组的地方，必须一个字都不丢）。"""
+        layout = cm.layout_graph(LABELS, _relations(), width=900.0, height=700.0,
+                                 topic_label="卷积网络", template="compare")
+        self.assertEqual({int(node.entry_id) for node in layout.nodes}, set(LABELS))
+        for node in layout.nodes:
+            self.assertIsNotNone(layout.find(int(node.entry_id)))
+        extent_w, extent_h = cm.layout_extent(LABELS, _relations(), width=900.0,
+                                              height=700.0, topic_label="卷积网络",
+                                              template="compare")
+        self.assertGreaterEqual(extent_w + 1e-6, layout.content_w)
+        self.assertGreaterEqual(extent_h + 1e-6, layout.content_h)
 
 
 if __name__ == "__main__":       # pragma: no cover

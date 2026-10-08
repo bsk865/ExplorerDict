@@ -653,6 +653,118 @@ def _flow_s(ids, rels, levels, frame):
     return _place_flow(ids, rels, levels, frame, mode="s")
 
 
+def _names_of(branches) -> list[tuple[str, tuple[str, ...]]]:
+    """归纳结果里的分支 → ``[(分支名, (词, ...)), ...]``（纯函数，脏数据一律跳过）。"""
+    out: list[tuple[str, tuple[str, ...]]] = []
+    for item in branches or ():
+        if isinstance(item, Mapping):
+            name = str(item.get("name") or "").strip()
+            members = item.get("entities") or item.get("members") or ()
+        elif isinstance(item, (str, bytes)):
+            name, members = str(item).strip(), ()
+        else:                                     # pragma: no cover - 脏数据
+            continue
+        words = tuple(str(word).strip() for word in members if str(word).strip())
+        out.append((name, words))
+    return out
+
+
+def _place_compare(ids, rels, levels, frame: Frame, *,
+                   groups=(), names=()) -> Placement:
+    """双栏对比：第一组词在左、第二组词在右，两组各自从上往下排、垂直居中。
+
+    ``groups`` 是**已经拆好的分组**（``place()`` 把分支摊成 ``[[词, ...], ...]``
+    才传进来，这里不再认识「分支」这种结构）。「对比」这类文章的两边**本来就该
+    并排看**，用其他任何模板都会把两组混在一条水平带上。分组名只是分组标题
+    （图上仍然是词条卡片），因此这里不画标题、不新增控件：只决定卡片站在哪一栏。
+    多于两组时，第三组起**另起一行**摆在两栏下方（绝不静默丢掉词）。
+    """
+    groups = [[str(word).strip() for word in group if str(word).strip()]
+              for group in (groups or ())]
+    groups = [group for group in groups if group]
+    known = {int(item) for item in ids}
+    by_word: dict[str, list[int]] = {}
+    for entry_id in known:
+        word = str(dict(names).get(int(entry_id), "") or "").strip()
+        if word:
+            by_word.setdefault(word, []).append(int(entry_id))
+    columns: list[list[int]] = []
+    for index in range(2):
+        chosen: list[int] = []
+        for word in (groups[index] if index < len(groups) else ()):
+            chosen.extend(by_word.get(word, ()))
+        columns.append(chosen)
+    spots: dict[int, tuple[float, float]] = {}
+    gap = float(frame.h_gap) if frame.h_gap else float(frame.card_w) * 0.25
+    left_x = float(frame.axis) - float(frame.card_w) / 2.0 - gap / 2.0
+    right_x = float(frame.axis) + float(frame.card_w) / 2.0 + gap / 2.0
+
+    def span_of(items: list[int]) -> float:
+        return (sum(frame.height_of(item) for item in items)
+                + float(frame.v_gap) * max(0, len(items) - 1))
+
+    tallest = max(span_of(columns[0]) if columns[0] else 0.0,
+                  span_of(columns[1]) if columns[1] else 0.0)
+    top = float(frame.pad)
+    for items, x in ((columns[0], left_x), (columns[1], right_x)):
+        if not items:
+            continue
+        cursor = top + max(0.0, (tallest - span_of(items)) / 2.0)
+        for item in items:
+            own = frame.height_of(item)
+            spots[item] = (x, cursor + own / 2.0)
+            cursor += own + float(frame.v_gap)
+
+    #: 一个词只站一个位置：先来的分组先占位，后面的分组不再重复摆它。
+    written = {item for column in columns for item in column}
+
+    def lay_out_row(items: list[int], cursor: float) -> float:
+        """把一串词横向铺在 ``cursor`` 这一行上（居中），返回这一行的高度。
+
+        只摆**还没站过位置**的词；返回 0 表示这一行什么都没摆（不占高度）。
+        """
+        fresh = [item for item in items if item not in written]
+        if not fresh:
+            return 0.0
+        step = float(frame.card_w) + float(frame.h_gap)
+        cursor_x = float(frame.axis) - (len(fresh) * step - float(frame.h_gap)) / 2.0 \
+            + float(frame.card_w) / 2.0
+        height = 0.0
+        for item in fresh:
+            own = frame.height_of(item)
+            spots[item] = (cursor_x, cursor + own / 2.0)
+            cursor_x += step
+            height = max(height, own)
+        written.update(fresh)
+        return height
+
+    # 第三组起另起一行，摆在两栏**下方**（不和两栏共用同一条水平带）
+    cursor = top + tallest + float(frame.v_gap)
+    for group in groups[2:]:
+        row: list[int] = []
+        for word in group:
+            row.extend(by_word.get(word, ()))
+        laid = lay_out_row(row, cursor)
+        if laid:
+            cursor += laid + float(frame.v_gap)
+    # **一个词都不许丢**：不在任何分组里的词（以及分组没覆盖到的）按行摆在下面。
+    leftovers = [item for item in sorted(known) if item not in written]
+    if leftovers:
+        step = float(frame.card_w) + float(frame.h_gap)
+        usable = max(step, 2.0 * (float(frame.axis) - float(frame.pad)))
+        per_row = max(1, int((usable + float(frame.h_gap)) // max(1.0, step)))
+        for start in range(0, len(leftovers), per_row):
+            laid = lay_out_row(leftovers[start:start + per_row], cursor)
+            cursor += laid + float(frame.v_gap)
+    if not any(columns):
+        spots, topic_pos, shift = _shift(spots, frame)
+        return Placement(spots=spots, topic_pos=topic_pos, axis_shift=shift,
+                         note="这一篇没有分出可对比的两组")
+    spots, topic_pos, shift = _shift(spots, frame)
+    return Placement(spots=spots, topic_pos=topic_pos, axis_shift=shift,
+                     hubs=tuple(columns[0] + columns[1]))
+
+
 #: 下拉里的全部模板（第一项是「自动」，永不删除：出问题永远能切回来）
 TEMPLATES: tuple[TemplateSpec, ...] = (
     TemplateSpec(TEMPLATE_AUTO, "自动（按关系分层）",
@@ -682,6 +794,10 @@ TEMPLATES: tuple[TemplateSpec, ...] = (
     TemplateSpec("flow-s", "流程线（S 型）",
                  "折行、来回走的链",
                  "步骤很多、想一屏看完的图", placer=_flow_s),
+    TemplateSpec("compare", "双栏对比",
+                 "两组词左右并排，各自从上往下排",
+                 "文章本身在讲「A 与 B 的对比」时（按原文归纳会给出两组）",
+                 placer=_place_compare, route_axis="x"),
 )
 #: 供下拉直接用的顺序（与 ``TEMPLATES`` 一致）
 TEMPLATE_KEYS: tuple[str, ...] = tuple(spec.key for spec in TEMPLATES)
@@ -705,6 +821,45 @@ def spec_of(key: str) -> TemplateSpec | None:
     return _BY_KEY.get(str(key or "").strip())
 
 
+def branch_order(branches) -> tuple[str, ...]:
+    """按分支顺序摊平出实体名（界面拿它决定同一个分支里谁先谁后）。"""
+    seen: dict[str, None] = {}
+    for _name, words in _names_of(branches):
+        for word in words:
+            seen.setdefault(word, None)
+    return tuple(seen)
+
+
+def branch_levels(branches, ids: Iterable[int], names: Mapping[int, str]
+                  ) -> tuple[dict[int, int], tuple[int, ...]]:
+    """分支 → 排序用的层号与顺序（纯函数）。
+
+    返回 ``(levels, order)``：``levels[entry_id]`` = 它在**第几个分支**（同一个分支
+    的词拿到同一个层号 ⇒ 「一层一行」的排序会把同分支的词排在一起、分支按文章顺序
+    依次排开）；``order`` 是分支内的词条顺序（文章先讲到的先排）。
+
+    **只用来排序和分组，不改任何语义**：真实关系一条都不动（见
+    :func:`place` 的 ``branches`` 参数）。叫不出名字的词条（不在任何分支里）
+    不参与，交给调用方自己的兜底逻辑。
+    """
+    mapping: dict[str, int] = {}
+    place_of: dict[str, int] = {}
+    for index, (_name, words) in enumerate(_names_of(branches)):
+        for position, word in enumerate(words):
+            mapping.setdefault(word, index)
+            place_of.setdefault(word, position)
+    levels: dict[int, int] = {}
+    ordered: list[tuple[tuple[int, int], int]] = []
+    for entry_id in ids:
+        word = str(names.get(int(entry_id), "") or "").strip()
+        if word not in mapping:
+            continue
+        levels[int(entry_id)] = mapping[word]
+        ordered.append(((mapping[word], place_of[word]), int(entry_id)))
+    ordered.sort()
+    return levels, tuple(entry_id for _key, entry_id in ordered)
+
+
 def name_of(key: str) -> str:
     """模板的中文名（未知 key 原样返回，便于把脏配置显示出来）。"""
     spec = spec_of(key)
@@ -712,16 +867,37 @@ def name_of(key: str) -> str:
 
 
 def place(key: str, *, ids: Iterable[int], rels: Iterable, levels: Mapping[int, int],
-          frame: Frame) -> Placement | None:
+          frame: Frame, branches=(), names: Mapping[int, str] | None = None
+          ) -> Placement | None:
     """按模板摆一遍（``auto`` / 未知 key → None = 让调用方走默认布局）。
+
+    ``branches`` 是**按原文归纳**给出的分组（``[{"name", "entities"}, ...]``）：
+    目前只有「双栏对比」用它（两组左右分列）。写在这里是为了让调用方只说一次
+    「这一篇分成了哪几组」，别的模板拿到它也只当没看见 —— 它们的签名与行为
+    一个字都不变。分组**只影响分组，不改任何语义**：真实关系一条不动，
+    一个词都不会因为「没被分进任何分支」而消失。
 
     绝不让一张图因为摆放失败而画不出来：任何异常都退回 None（并写一条日志）。
     """
     spec = spec_of(key)
     if spec is None or spec.placer is None:
         return None
+    extra: dict = {}
+    if branches:
+        extra = {"groups": [words for _word, words in _names_of(branches) if words],
+                 "names": dict(names or {})}
     try:
-        result = spec.placer(list(ids), list(rels or ()), dict(levels or {}), frame)
+        try:
+            result = spec.placer([int(item) for item in ids], list(rels or ()),
+                                 dict(levels or {}), frame, **extra)
+        except TypeError as exc:
+            # 只有「这个模板不吃 groups / names」才该退回（老模板签名一个字不改）。
+            # 摆放函数**内部**的 TypeError 必须原样抛出去，否则会被误当成
+            # 「这个模板不认 groups」，把真 bug 藏成「静默走了另一条路」（本次实测踩到）。
+            if not extra or "unexpected keyword argument" not in str(exc):
+                raise
+            result = spec.placer([int(item) for item in ids], list(rels or ()),
+                                 dict(levels or {}), frame)
     except Exception:                                  # pragma: no cover - 兜底
         log.exception("模板 %s 摆放失败，退回自动布局", key)
         return None

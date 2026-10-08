@@ -36,22 +36,28 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .api_client import (
-    MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES, ApiError,
+    ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES,
+    ApiError,
 )
+from .article_source import MIN_ARTICLE_CHARS
 from .config import model_signature
 from .logging_setup import get_logger, redact
 
 log = get_logger("map")
 
-#: 允许的关系类型（提示词、校验、缓存共用同一份白名单）
-REL_TYPES: tuple[str, ...] = ("包含", "属于", "依赖", "用途", "因果", "对照")
+#: 允许的关系类型（提示词、校验、缓存共用同一份白名单）。
+#: 前六种是「词与词」的老关系（批次 C 起就在用，**不动**）；后两种「时序 / 对策」
+#: 是「按原文归纳」新增的 —— 归纳出来的线（步骤先后、问题→办法）能直接落在图上，
+#: 不用硬塞进「因果」里（那会把「先做 A 再做 B」画成「A 导致 B」，是错的）。
+REL_TYPES: tuple[str, ...] = ("包含", "属于", "依赖", "用途", "因果", "对照",
+                              "时序", "对策")
 #: 层级关系：参与「谁在谁上面」的分组
 HIERARCHY_TYPES = frozenset({"包含", "属于"})
 #: 有向关系：参与前后分层
-DIRECTIONAL_TYPES = frozenset({"依赖", "因果"})
+DIRECTIONAL_TYPES = frozenset({"依赖", "因果", "时序", "对策"})
 #: 跨边关系：不参与分层，只画带方向的跨边
 CROSS_TYPES = frozenset({"用途", "对照"})
 #: 对称关系：A↔B 与 B↔A 视为同一条（不算矛盾）
@@ -69,7 +75,8 @@ MIN_EVIDENCE_CHARS = 6
 
 #: 缓存里的**校验版本**：候选 → 本地校验 → 独立核对 这一版校验的编号。
 #: 只有版本一致的缓存才允许直接展示；旧的「只做字串证据校验」缓存读到也不命中。
-MAP_VALIDATION_VERSION = 2
+#: v3：新增「按原文归纳」这条流水线（六种文章逻辑类型 + 分支/实体/关系校验）。
+MAP_VALIDATION_VERSION = 3
 
 #: 核对判定（唯一权威定义在 :mod:`app.api_client`，这里只做白名单）
 VERDICT_SUPPORTED = "supported"
@@ -84,10 +91,440 @@ REL_DIRECTION_TEXT = {
     "用途": "前件用于后件",
     "因果": "前件导致 / 造成后件",
     "对照": "前件与后件形成对照 / 对比",
+    "时序": "前件在文章中出现在后件之前（同一条主线上的先后两步）",
+    "对策": "后件是针对前件（问题 / 需求）提出的办法 / 措施",
 }
 
 RESULT_OK = "ok"
 RESULT_ERROR = "error"
+
+# ---------------------------------------------------- 按原文归纳（文章逻辑）
+#: 一篇文章的**主逻辑类型**（判断这篇文章在讲什么时用，由模型在 ``main_logic``
+#: 里回一个）。**注意**：真正画线的类型是上面的 :data:`REL_TYPES`，两套是
+#: 两回事 —— 文章是「时序」，画出来的线仍然叫「时序」（:data:`REL_TYPES` 已含）。
+LOGIC_TYPES: tuple[str, ...] = ("时序", "因果", "对策", "层级", "依赖", "对比")
+#: 有先后顺序的三种：它们的边**必须顺着分支顺序走**（逆着走 = 把文章的脉络讲反了）。
+LOGIC_ORDERED_TYPES = frozenset({"时序", "因果", "对策"})
+#: 至少要留几个分支才算归纳（只有一条分支 = 没分，等于没归纳）。
+LOGIC_MIN_BRANCHES = 2
+#: 一次归纳最多重试几轮（每轮都要重新问模型，花的是用户的钱，超过就如实报错）。
+LOGIC_MAX_ATTEMPTS = 2
+#: 实体「像原文」的判定阈值：至少这个比例的实体要能逐字出现在原文里。
+LOGIC_TEXT_MATCH_MIN = 0.6
+
+
+@dataclass(frozen=True)
+class LogicRelation:
+    """归纳出来的一条边（端点是**实体名**，不是 entry_id —— 原文里的词未必在词库里）。"""
+
+    src: str
+    dst: str
+    rel_type: str
+    reason: str = ""
+
+    def as_dict(self) -> dict:
+        return {"src": self.src, "dst": self.dst,
+                "type": self.rel_type, "reason": self.reason}
+
+
+@dataclass(frozen=True)
+class LogicGraph:
+    """一篇文章归纳出来的**骨架**：分支（谁和谁一组、谁先谁后）+ 边。"""
+
+    doc_key: str
+    title: str = ""
+    main_logic: str = ""
+    branches: tuple[dict, ...] = ()
+    relations: tuple[LogicRelation, ...] = ()
+    warnings: tuple[str, ...] = ()
+    #: 生成这份归纳时的模型签名（缓存用；换了模型就该重算）。
+    model_config: str = ""
+
+    def branch_of(self, entity: str) -> int | None:
+        """这个实体在第几个分支里（找不到 → None）。"""
+        name = str(entity or "").strip()
+        for index, branch in enumerate(self.branches):
+            if name in tuple(branch.get("entities") or ()):
+                return index
+        return None
+
+    def branch_names(self) -> tuple[str, ...]:
+        return tuple(str(branch.get("name") or "") for branch in self.branches)
+
+    def entity_count(self) -> int:
+        return sum(len(tuple(branch.get("entities") or ())) for branch in self.branches)
+
+    def as_dict(self) -> dict:
+        return {
+            "doc_key": self.doc_key,
+            "title": self.title,
+            "main_logic": self.main_logic,
+            "branches": [dict(branch) for branch in self.branches],
+            "relations": [rel.as_dict() for rel in self.relations],
+            "warnings": list(self.warnings),
+            "model_config": self.model_config,
+        }
+
+
+def logic_text_of(article) -> str:
+    """从「articles 表的一行」或普通字符串里取出正文（取不到就是空串）。"""
+    if article is None:
+        return ""
+    if isinstance(article, str):
+        return article
+    try:
+        return str(article["text"] or "")
+    except (IndexError, KeyError, TypeError):  # pragma: no cover - 老库缺列
+        return ""
+
+
+def validate_logic(data, *, text: str = "", terms=(), entities=(),
+                   main_logic: str = "") -> dict:
+    """**确定性**校验一份归纳输出（纯函数：零 token、无幻觉）。
+
+    这是这条流水线的第四步：不问模型「你觉得行不行」，而是拿代码算。
+    返回 ``{"branches", "relations", "problems", "warnings", "ok", "matches"}``：
+
+    * ``problems`` 里有任何一条 ⇒ ``ok=False``，调用方带着这份清单去重试或如实报错；
+    * ``warnings`` 只是提醒（实体名过长、原文里找不到这个说法），不挡画图；
+    * ``matches`` 是「能逐字在原文里找到的实体比例」，低于
+      :data:`LOGIC_TEXT_MATCH_MIN` 说明模型在编词，直接算错。
+    """
+    raw = data or {}
+    problems: list[str] = []
+    warnings: list[str] = []
+    #: 归一化后的原文：判断「这个词是不是原文里真有」全靠它（空 = 没有原文可比）。
+    body = normalize_material(text)
+
+    branches: list[dict] = []
+    seen_entities: set[str] = set()
+    for item in list(raw.get("branches") or ()):
+        if not isinstance(item, dict):
+            problems.append("分支不是对象")
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            problems.append("有一个分支没有名字")
+            continue
+        if name in ("其它", "其他", "杂项", "补充"):
+            problems.append(f"分支名「{name}」太笼统：请按文章的逻辑阶段命名")
+            continue
+        members: list[str] = []
+        for entity in list(item.get("entities") or ()):
+            word = str(entity).strip()
+            if not word:
+                continue
+            if word in seen_entities:
+                warnings.append(f"「{word}」在多个分支里重复出现，只保留第一次")
+                continue
+            seen_entities.add(word)
+            members.append(word)
+        if not members:
+            warnings.append(f"分支「{name}」是空的，已去掉")
+            continue
+        branches.append({"name": name, "entities": members})
+
+    if len(branches) < LOGIC_MIN_BRANCHES:
+        problems.append(f"只归纳出 {len(branches)} 个分支，至少要 {LOGIC_MIN_BRANCHES} 个")
+    names = [branch["name"] for branch in branches]
+    if len(set(names)) != len(names):
+        problems.append("有两个分支名字一样")
+
+    known = set(seen_entities)
+    for entity in known:
+        if len(entity) > ARTICLE_ENTITY_CHARS:
+            warnings.append(f"「{entity}」超过 {ARTICLE_ENTITY_CHARS} 个字，建议用文章里的短说法")
+
+    # 编词检查（第一道）：分支里的词必须能在原文里**逐字**找到。这是硬约束 ——
+    # 归纳出来的词一旦原文里没有，画到图上就是把读者往文章外面带。
+    absent = sorted(entity for entity in known
+                    if not body or normalize_material(entity) not in body)
+    if absent:
+        problems.append(
+            "这些词在原文里找不到（不许自己造词，原文怎么说就怎么写）："
+            + "、".join(f"「{entity}」" for entity in absent))
+        if not body:
+            problems.pop()          # 没有原文时下面已经有更准确的一条，别重复报
+
+    relations: list[LogicRelation] = []
+    seen_edges: set[tuple[str, str, str]] = set()
+    for item in list(raw.get("relations") or ()):
+        if not isinstance(item, dict):
+            problems.append("有一条关系不是对象")
+            continue
+        src = str(item.get("src") or "").strip()
+        dst = str(item.get("dst") or "").strip()
+        rel_type = str(item.get("type") or "").strip()
+        reason = str(item.get("reason") or "").strip()[:REASON_CHARS]
+        where = f"{src or '？'}→{dst or '？'}"
+        if rel_type not in LOGIC_TYPES:
+            problems.append(f"{where} 的关系类型「{rel_type or '空'}」不在允许的六种里")
+            continue
+        if not src or not dst:
+            problems.append(f"{where} 的起点或终点是空的")
+            continue
+        if src == dst:
+            problems.append(f"{where} 是自己连自己")
+            continue
+        if body:
+            for name in (src, dst):
+                if name not in known and normalize_material(name) not in body:
+                    problems.append(f"{where} 用到了原文里找不到的词「{name}」")
+        elif src not in known or dst not in known:
+            problems.append(f"{where} 用到了不在任何分支里的词")
+        if not reason:
+            warnings.append(f"{where} 没有写依据，已按「无依据」标注")
+        key = (src, dst, rel_type)
+        if key in seen_edges:
+            warnings.append(f"{where}（{rel_type}）重复，已去掉一条")
+            continue
+        seen_edges.add(key)
+        relations.append(LogicRelation(src=src, dst=dst, rel_type=rel_type, reason=reason))
+
+    # 逆行检查：有时序的三类边必须顺着分支顺序走，否则就是把文章的脉络讲反了
+    flow = logic_flow(branches, terms)
+    rank = {name: index for index, name in enumerate(flow)}
+    backwards = []
+    for rel in relations:
+        if rel.rel_type not in LOGIC_ORDERED_TYPES:
+            continue
+        if rel.src not in rank or rel.dst not in rank:
+            # 只归纳出一部分词是正常的（划到的词不一定都被写进分支）：
+            # 端点在主线之外就**没法判断先后**，提醒一句，不许当成「讲反了」。
+            warnings.append(f"{rel.src}→{rel.dst}（{rel.rel_type}）有一端不在分支里，"
+                            f"没法判断先后")
+            continue
+        if rank[rel.src] > rank[rel.dst]:
+            backwards.append(f"{rel.src}→{rel.dst}（{rel.rel_type}）")
+    if backwards:
+        problems.append("这些关系与分支顺序相反（文章的先后被讲反了）：" + "、".join(backwards))
+
+    # 编词检查：实体必须能在原文里逐字找到
+    if body and known:
+        found = sum(1 for entity in known if normalize_material(entity) in body)
+        matches = found / len(known)
+        if matches < LOGIC_TEXT_MATCH_MIN:
+            problems.append(
+                f"只有 {found}/{len(known)} 个词能在原文里逐字找到"
+                f"（低于 {int(LOGIC_TEXT_MATCH_MIN * 100)}%），像是在编造原文里没有的说法")
+    else:
+        matches = 0.0
+        if not body:
+            problems.append("没有原文可比对，不能凭空归纳")
+
+    declared = str(main_logic or raw.get("main_logic") or "").strip()
+    if declared and declared not in LOGIC_TYPES:
+        warnings.append(f"主逻辑类型「{declared}」不在六种里，已忽略")
+        declared = ""
+
+    return {
+        "branches": branches,
+        "relations": relations,
+        "problems": problems,
+        "warnings": warnings,
+        "ok": not problems,
+        "matches": matches,
+        "main_logic": declared,
+    }
+
+
+def logic_feedback(result) -> str:
+    """把校验结果里的问题压成**给模型看**的差异清单（纯函数）。"""
+    data = result or {}
+    lines = [f"- {item}" for item in list(data.get("problems") or ())]
+    lines.extend(f"- （提醒）{item}" for item in list(data.get("warnings") or ()))
+    return "\n".join(lines)
+
+
+def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
+                    terms=(), max_attempts: int = LOGIC_MAX_ATTEMPTS,
+                    model_config: str = "") -> LogicGraph:
+    """跑「按原文归纳」：问模型 → **代码校验** → 不合格就带着差异清单重试。
+
+    这是用户要的那条流水线的第 3、4、5 步，也是**唯一**会花 token 的地方。
+    每一步都留痕：
+
+    * 契约不符（不是 JSON / 没有 branches）⇒ 记一条问题后重试；
+    * 校验不通过 ⇒ 把 ``problems`` 原样回给模型，让它改，最多 ``max_attempts`` 轮；
+    * 用完轮次还不合格 ⇒ 返回最后一份带 ``problems`` 的结果（``relations`` 与
+      ``branches`` 保留，界面据此如实说明「这一版没通过校验」），**绝不假装成功**。
+    """
+    attempts = max(1, int(max_attempts))
+    body = str(text or "")
+    #: 划过的词（允许直接传词条行；只取名字 —— 提示词、校验、主线都用这一份）。
+    names = [str(getattr(item, "term", item) or "").strip() for item in (terms or ())]
+    names = [name for name in names if name]
+    last: dict = {"branches": [], "relations": [], "problems": [], "warnings": [],
+                  "ok": False, "matches": 0.0, "main_logic": ""}
+    feedback = ""
+    for attempt in range(attempts):
+        logic = {"text": body, "terms": list(names), "feedback": feedback}
+        try:
+            raw = client.article_logic(logic, title=title)
+        except ApiError as exc:
+            if exc.kind != "bad_response":
+                # 网络 / 鉴权 / 限流这类失败重试也是白花用户的钱：如实报错，不重试。
+                last = dict(last, problems=[f"模型调用失败：{exc.display()}"])
+                log.info("归纳第 %d 轮调用失败（不重试）：%s", attempt + 1, exc.display())
+                break
+            # 模型这次没按契约输出 —— 那是它自己的错，把要求再说一遍让它重写。
+            result = {"branches": [], "relations": [], "problems": [str(exc)],
+                      "warnings": [], "ok": False, "matches": 0.0, "main_logic": ""}
+            last = result
+            feedback = logic_feedback(result)
+            log.info("归纳第 %d 轮契约不符：%s（%s）", attempt + 1, exc,
+                     "重试" if attempt + 1 < attempts else "已达重试上限")
+            continue
+        result = validate_logic(raw, text=body, terms=names)
+        last = result
+        if result["ok"]:
+            log.info("归纳第 %d 轮通过校验：%d 个分支 / %d 条关系",
+                     attempt + 1, len(result["branches"]), len(result["relations"]))
+            break
+        feedback = logic_feedback(result)
+        log.info("归纳第 %d 轮没通过校验（%d 个问题），%s",
+                 attempt + 1, len(result["problems"]),
+                 "重试" if attempt + 1 < attempts else "已达重试上限")
+    return LogicGraph(
+        doc_key=str(doc_key or ""),
+        title=str(title or ""),
+        main_logic=str(last.get("main_logic") or ""),
+        branches=tuple(last.get("branches") or ()),
+        relations=tuple(last.get("relations") or ()),
+        warnings=tuple(last.get("warnings") or ()),
+        model_config=str(model_config or ""),
+    )
+
+
+def _graph_field(graph, name: str):
+    """从 ``LogicGraph`` 对象或它的 ``dict`` 形态里取一个字段（取不到给空元组）。
+
+    为什么两种都收：归纳结果一路会以 ``dict`` 形态出现（落库的 ``raw``、测试夹具、
+    界面回调），而生成侧手里是 ``LogicGraph``。这些纯函数不该因为「给的是字典」
+    就把整篇归纳当成空的。
+    """
+    if isinstance(graph, dict):
+        return graph.get(name) or ()
+    return getattr(graph, name, ()) or ()
+
+
+def logic_rel_pairs(graph) -> list[dict]:
+    """把归纳出来的边转成 ``(src, dst, type)`` 三元组清单（纯函数，给测试与界面用）。"""
+    pairs: list[dict] = []
+    for rel in _graph_field(graph, "relations"):
+        src = rel.get("src") if isinstance(rel, dict) else getattr(rel, "src", "")
+        dst = rel.get("dst") if isinstance(rel, dict) else getattr(rel, "dst", "")
+        kind = (rel.get("type") if isinstance(rel, dict)
+                else getattr(rel, "rel_type", ""))
+        reason = (rel.get("reason") if isinstance(rel, dict)
+                  else getattr(rel, "reason", ""))
+        pairs.append({"src": src, "dst": dst, "type": kind, "reason": reason})
+    return pairs
+
+
+def logic_to_map_relations(graph, nodes) -> tuple[list[MapRelation], list[str]]:
+    """归纳结果 → 现有导图能画的关系（只保留**两端都在本主题词库里**的边）。
+
+    为什么可以丢：这张图要落在词条卡片上，两端得是真词条。丢掉的边会被列进
+    第二条返回值（界面如实写「有 N 条关系涉及不在本主题的词，没有画上去」），
+    **不静默吞掉**。
+    """
+    by_term: dict[str, int] = {}
+    for node in nodes or ():
+        name = str(getattr(node, "term", "") or "").strip()
+        if name and name not in by_term:
+            by_term[name] = int(getattr(node, "entry_id", 0) or 0)
+    relations: list[MapRelation] = []
+    skipped: list[str] = []
+    seen: set[tuple[int, int, str]] = set()
+    for rel in _graph_field(graph, "relations"):
+        if isinstance(rel, dict):
+            src_name = str(rel.get("src") or "").strip()
+            dst_name = str(rel.get("dst") or "").strip()
+            rel_type = str(rel.get("type") or "")
+            reason = str(rel.get("reason") or "")
+        else:
+            src_name = str(getattr(rel, "src", "") or "").strip()
+            dst_name = str(getattr(rel, "dst", "") or "").strip()
+            rel_type = str(getattr(rel, "rel_type", "") or "")
+            reason = str(getattr(rel, "reason", "") or "")
+        src = by_term.get(src_name)
+        dst = by_term.get(dst_name)
+        if not src or not dst or src == dst or rel_type not in REL_TYPES:
+            skipped.append(f"{src_name}→{dst_name}（{rel_type}）")
+            continue
+        key = (src, dst, rel_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        relations.append(MapRelation(
+            src_entry_id=src, dst_entry_id=dst, rel_type=rel_type,
+            reason=reason[:REASON_CHARS],
+            evidence=reason[:EVIDENCE_CHARS],
+        ))
+    return relations, skipped
+
+
+def logic_levels(graph, nodes) -> dict[int, int]:
+    """每个词条落在第几个分支（界面用它分层摆放；``-1`` = 不在任何分支里）。"""
+    by_term: dict[str, int] = {}
+    for node in nodes or ():
+        name = str(getattr(node, "term", "") or "").strip()
+        if name and name not in by_term:
+            by_term[name] = int(getattr(node, "entry_id", 0) or 0)
+    levels: dict[int, int] = {}
+    for index, branch in enumerate(_graph_field(graph, "branches")):
+        if not isinstance(branch, dict):
+            continue
+        for entity in list(branch.get("entities") or ()):
+            entry_id = by_term.get(str(entity).strip())
+            if entry_id and entry_id not in levels:
+                levels[entry_id] = index
+    for node in nodes or ():
+        entry_id = int(getattr(node, "entry_id", 0) or 0)
+        levels.setdefault(entry_id, -1)
+    return levels
+
+
+def logic_flow(branches, entries=(), *, prefer_terms: bool = False) -> list[str]:
+    """把「分支里的实体」摊平成一条**唯一的主线**（纯函数）。
+
+    规则：按分支顺序走；每个分支内部默认**原样保留模型给的先后** —— 因为这条主线
+    同时是校验「有没有把先后讲反」的标尺（见 :func:`validate_logic` 的逆行检查），
+    顺序必须来自模型自己的归纳，不能被我方改写。
+
+    ``prefer_terms=True`` 时改成「用户划过的词排在本分支前面（按划词顺序），其余按
+    模型给的顺序跟在后面」：这是**落位 / 分行**用的顺序，不是校验用的顺序。两者必须
+    分开，否则用划词顺序去判「讲反了」会误伤（划词顺序与文章顺序本来就可以不一致）。
+
+    ``entries`` 里给字符串或 ``(entry_id, term)`` 这类行都能用：取 ``.term``，
+    取不到就当字符串本身。
+    """
+    order = {}
+    if prefer_terms:
+        # 注意：**不要**写 ``entries or ()`` —— 传进来的往往是一个字符串（一篇文章
+        # 或一个词），它会被整体当成一个可迭代对象、逐字符拆开，排序就全错了。
+        for index, item in enumerate(entries):
+            name = str(getattr(item, "term", item) or "").strip()
+            if name and name not in order:
+                order[name] = index
+    def _rank(name: str) -> tuple[int, int]:
+        """划过的词（且确实在这个分支里）排 0，其余排 1；同档内按原顺序。"""
+        if name in order:
+            return (0, order[name])
+        return (1, position[name])
+
+    flat: list[str] = []
+    for branch in list(branches or ()):
+        members = [str(name).strip() for name in list((branch or {}).get("entities") or ())
+                   if str(name).strip()]
+        if order:
+            position = {name: index for index, name in enumerate(members)}
+            # 划过、并且**确实被归纳进这个分支**的词排前面（按划词顺序）；其余按
+            # 模型给的先后跟着 —— 只把划过的词提前，不许因为「没划过」被挤到后面。
+            members.sort(key=_rank)
+        flat.extend(members)
+    return flat
 
 
 def normalize_material(text) -> str:
@@ -123,10 +560,17 @@ def evidence_supported(evidence, materials, *, terms=()) -> bool:
 def constraint_pair(rel_type: str, src_id: int, dst_id: int) -> tuple[int, int] | None:
     """把一条关系翻译成层级 / 方向约束 ``(before, after)``。
 
+    这是**唯一**一处「关系类型 → 谁在前」的权威口径：界面分层摆放直接调它，
+    免得界面里再写一份 if / else 然后和新加的类型漂移（``时序`` / ``对策`` 就是
+    这样漏过一次 —— ``edge_kind()`` 认它们是方向边，分层却不认，一条线画出来
+    但两张卡片并排）。
+
     * 包含 A→B：A 是上位（A 在 B 之前）；
     * 属于 A→B：B 是上位（B 在 A 之前）；
     * 依赖 A→B：B 是前提（B 在 A 之前）；
     * 因果 A→B：A 是因（A 在 B 之前）；
+    * 时序 A→B：A 先发生（A 在 B 之前）；
+    * 对策 A→B：问题 / 需求在前，办法在后（A 在 B 之前）；
     * 用途 / 对照：跨边，不产生层级约束（``None``）。
     """
     if rel_type == "包含":
@@ -135,7 +579,7 @@ def constraint_pair(rel_type: str, src_id: int, dst_id: int) -> tuple[int, int] 
         return (int(dst_id), int(src_id))
     if rel_type == "依赖":
         return (int(dst_id), int(src_id))
-    if rel_type == "因果":
+    if rel_type in ("因果", "时序", "对策"):
         return (int(src_id), int(dst_id))
     return None
 
@@ -265,6 +709,10 @@ class MapGraph:
     #: 这次生成里**沿用上次**的关系条数（材料没变、上次核对通过的边不丢）；
     #: 0 = 全新算的。见 :func:`carry_over_relations`。
     carried: int = 0
+    #: 「按原文归纳」这条流水线的产物：这篇文章的主逻辑类型 + 分支（谁和谁一组、
+    #: 谁先谁后）。为空 = 这张图是「按词条关系」生成的（没取到原文，或用户关了）。
+    main_logic: str = ""
+    branches: tuple[dict, ...] = ()
 
     def relation_for(self, src_id: int, dst_id: int, rel_type: str) -> MapRelation | None:
         for rel in self.relations:
@@ -369,6 +817,55 @@ def _load_verdicts(row) -> tuple[dict, ...]:
             "kept": bool(item.get("kept")),
         })
     return tuple(out)
+
+
+def _with_provenance(graph: MapGraph, row) -> MapGraph:
+    """把「按原文归纳」的来龙去脉从缓存那一行里读回来（纯函数）。
+
+    落库时 ``raw`` 那一列存的是归纳结果的 JSON（``main_logic`` / ``branches`` /
+    ``relations``），这里只认出自己写的那一种形状；认不出（老口径存的候选原文、
+    或者干脆不是 JSON）就原样返回 —— 界面上照样能画，只是说不出「按哪篇文章归纳的」。
+    """
+    data = _row_json(row, "raw")
+    if not isinstance(data, dict):
+        return graph
+    branches = data.get("branches")
+    if not isinstance(branches, list):
+        return graph
+    clean: list[dict] = []
+    for item in branches:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        members = [str(word).strip() for word in list(item.get("entities") or ())
+                   if str(word).strip()]
+        if name and members:
+            clean.append({"name": name, "entities": members})
+    if not clean:
+        return graph
+    return replace(
+        graph,
+        source="article",
+        main_logic=str(data.get("main_logic") or ""),
+        branches=tuple(clean),
+    )
+
+
+def article_is_usable(article) -> bool:
+    """这一行 **articles 留档**能不能拿来归纳（纯函数，界面与后台共用同一判据）。
+
+    条件是「``status='ok'`` 且正文够长」（:data:`MIN_ARTICLE_CHARS`）。抓失败的那一行
+    也留在库里（免得同一页每划一个词都重抓），它带着一句失败理由 —— 那句话**不是**
+    文章，用它归纳等于凭空编。传字符串 / ``None`` 时只看有没有正文。
+    """
+    if article is None or isinstance(article, str):
+        return bool(logic_text_of(article).strip())
+    try:
+        status = str(article["status"] or "").strip()
+        text = str(article["text"] or "")
+    except (IndexError, KeyError, TypeError):  # pragma: no cover - 老库缺列
+        return False
+    return status == "ok" and len(text.strip()) >= MIN_ARTICLE_CHARS
 
 
 def relation_locally_valid(rel_type, reason, evidence, src_node, dst_node) -> bool:
@@ -758,12 +1255,17 @@ def explanation_text(row) -> str:
 
 
 def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str = "",
-                        reasoning_effort: str = "") -> str:
-    """内容指纹：主题 + 每个词条的 (id, term, context, 释义) + 模型配置。
+                        reasoning_effort: str = "", source: str = "") -> str:
+    """内容指纹：主题 + 每个词条的 (id, term, context, 释义) + 模型配置 (+ 生成方式)。
 
     新词 / 改词 / 换模型 / 改推理强度 → 指纹变化 → 旧缓存不命中（过期检测）；
     同内容重复打开则稳定命中。词条按 id 排序，读库顺序变化不影响指纹。
     推理强度为空串时与旧口径逐字一致（老缓存不会因为这次改动失效）。
+
+    ``source`` 是**生成方式**（``""`` = 老口径按词条关系；``"article:<doc_key>#<状态>"``
+    = 按这篇文章的原文归纳）。为什么要算进指纹：同一批词「有原文」和「没有原文」
+    会得到两张完全不同的图，若指纹相同，切回旧库时会把另一条路的图当成缓存直接
+    显示 —— 那就成了拿旧图冒充新结果。默认空串保证老缓存照旧命中。
     """
     entries = [
         {
@@ -781,6 +1283,7 @@ def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str 
             "entries": entries,
             "base_url": str(base_url or "").strip().rstrip("/"),
             "model": signature,
+            "source": str(source or ""),
         },
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
@@ -875,6 +1378,66 @@ class MapService:
         nodes.sort(key=lambda item: int(item.entry_id))
         return nodes
 
+    def article_for_topic(self, topic_id: int):
+        """这个主题对应的**原文留档**（``articles`` 表的一行；没有 → ``None``）。
+
+        怎么找：主题就是一批词条（``entries.batch_id``），词条上带着 ``doc_key``
+        （「同一篇文章」的身份，划词那一刻就算好了）。取这一批里第一个**非空**
+        ``doc_key``，再拿它去 ``articles`` 表要正文。同一批词条来自同一页，
+        所以取第一个就是这一篇。
+
+        返回 ``None`` 的三种情况都要如实对待（调用方据此走「没有原文」那条路，
+        **绝不**拿词条上下文硬编一篇原文出来）：这批词条一个 ``doc_key`` 都没有
+        （老库 / 手工建的批次）、从没抓过、或者抓过但失败了（``status='failed'``
+        的行**不是** ``None``，调用方要看 ``status``）。
+        """
+        if not topic_id:
+            return None
+        try:
+            rows = self.db.query(
+                "SELECT DISTINCT doc_key FROM entries WHERE batch_id=? AND doc_key<>''",
+                (int(topic_id),))
+        except Exception:  # pragma: no cover - 读库失败按「没有原文」处理
+            log.exception("读取主题的 doc_key 失败 topic=%s", topic_id)
+            return None
+        for row in rows:
+            key = str(row["doc_key"] or "").strip()
+            if not key:
+                continue
+            try:
+                article = self.db.get_article(key)
+            except Exception:  # pragma: no cover
+                log.exception("读取原文留档失败 doc_key=%s", key)
+                continue
+            if article is not None:
+                return article
+        return None
+
+    def _article_usable(self, article) -> bool:
+        """这一行留档能不能用来归纳（见 :func:`article_is_usable`）。"""
+        return article_is_usable(article)
+
+    def source_tag(self, article, text: str = "") -> str:
+        """生成方式的指纹标签（纯函数；进 :func:`content_fingerprint`）。
+
+        * ``""`` —— 老路：按词条关系生成（没有可用原文）；
+        * ``"article:<doc_key>#ok:<字数>"`` —— 按这篇原文归纳。
+
+        为什么带上字数：同一篇原文改了（用户换了页面 / 重新抓过）就是另一张图，
+        不能让旧缓存顶上来。为什么带上 ``doc_key``：不同文章的同一批词也不该混。
+        留档不是成功原文（抓失败 / 太短）时一律返回 ``""`` —— 那就该退回老路。
+        """
+        if not self._article_usable(article):
+            return ""
+        try:
+            key = str(article["doc_key"] or "").strip()
+        except (IndexError, KeyError, TypeError):  # pragma: no cover - 传了别的行
+            return ""
+        body = logic_text_of(article) if text is None else text
+        if not key or not body:
+            return ""
+        return f"article:{key}#ok:{len(body)}"
+
     def material_payload(self, nodes) -> list[dict]:
         """发给模型的**受限**材料：编号 + 词语 + 截断上下文 + 截断释义。"""
         cut = max(1, int(self.config.get_int("map.material_chars", MAP_MATERIAL_CHARS)))
@@ -948,17 +1511,29 @@ class MapService:
     def model_config(self) -> str:
         return f"{self.config.base_url}|{self.config.model}"
 
-    def fingerprint(self, topic_id: int, nodes) -> str:
+    def fingerprint(self, topic_id: int, nodes, *, article=None) -> str:
+        """这个 (主题, 词条, 生成方式) 组合的内容指纹。
+
+        ``article`` 给了且可用时，指纹里带上「按这篇原文归纳」的标记 —— 同一批词
+        在「有原文」和「没有原文」下算出来的图是两张，指纹必须分得开，否则切回
+        旧库时会把另一条路的图当缓存直接显示。
+        """
+        text = logic_text_of(article)
         return content_fingerprint(topic_id, nodes, base_url=self.config.base_url,
                                    model=self.config.model,
-                                   reasoning_effort=self.config.reasoning_effort)
+                                   reasoning_effort=self.config.reasoning_effort,
+                                   source=self.source_tag(article, text))
 
     # ------------------------------------------------------------- 缓存
-    def cached_graph(self, topic_id: int, nodes=None, *, fingerprint: str | None = None):
+    def cached_graph(self, topic_id: int, nodes=None, *, fingerprint: str | None = None,
+                     article=None, source: str | None = None):
         """按 (主题, 内容指纹) 取缓存；没有 / 坏了 / 版本旧 / 模型不匹配都返回 ``None``。
 
         ``validation_version`` 是**第二道闸门**：旧版只做过字串证据校验（没有第二次
         独立核对）的缓存版本号不同，一律当没有缓存 —— 绝不直接展示。
+
+        ``article`` / ``source`` 二选一（``source`` 优先，两个都不给 = 老口径的
+        「按词条关系」指纹，老缓存照旧命中）。
 
         ``dropped`` / ``verdicts`` 两列与关系一起读回来：重开窗口照样能显示「筛除了
         什么」与「孤立词为什么孤立」；老缓存这两列是空串，就按「没记录」处理
@@ -969,7 +1544,16 @@ class MapService:
         nodes = list(nodes) if nodes is not None else self.nodes_for_topic(int(topic_id))
         if not nodes:
             return None
-        fp = fingerprint or self.fingerprint(int(topic_id), nodes)
+        if fingerprint is None:
+            tag = source
+            if tag is None:
+                tag = self.source_tag(article, logic_text_of(article))
+            fp = content_fingerprint(int(topic_id), nodes, base_url=self.config.base_url,
+                                     model=self.config.model,
+                                     reasoning_effort=self.config.reasoning_effort,
+                                     source=tag)
+        else:
+            fp = str(fingerprint)
         try:
             row = self.db.get_map_graph(int(topic_id), fp,
                                         base_url=self.config.base_url,
@@ -1006,7 +1590,7 @@ class MapService:
             relations.append(MapRelation(src_id, dst_id, rel_type,
                                          str(item.get("reason") or ""),
                                          str(item.get("evidence") or "")))
-        return MapGraph(
+        graph = MapGraph(
             topic_id=int(topic_id),
             fingerprint=fp,
             relations=tuple(relations),
@@ -1016,6 +1600,7 @@ class MapService:
             model_config=f"{row['base_url']}|{row['model']}",
             verdicts=_load_verdicts(row),
         )
+        return _with_provenance(graph, row)
 
     # ------------------------------------------------------------- 状态
     def is_inflight(self, topic_id: int | None = None,
@@ -1040,7 +1625,7 @@ class MapService:
 
     # ------------------------------------------------------------- 生成
     def generate(self, topic_id: int, *, nodes=None, force: bool = False,
-                 topic_name: str = "") -> int | None:
+                 topic_name: str = "", article=None) -> int | None:
         """为某个主题生成参考关系。返回**请求 token**（``None`` = 没有发起网络请求）。
 
         ``None`` 的四种情况（调用方据此决定提示）：
@@ -1048,6 +1633,13 @@ class MapService:
         * 命中有效缓存（非 ``force``）—— 已按 ``token=0`` 立刻投递缓存图；
         * 配置不完整（没有 Key / Base URL）—— 已按 ``token=0`` 投递配置错误；
         * 端点编号之类的内部错误（理论上不会发生）。
+
+        ``article`` 是 ``articles`` 表的一行（调用方用
+        :meth:`article_for_topic` 取；**抓失败的那一行也照传**，让指纹与状态说明
+        看到真实情况）：给了**且 ``status='ok'`` 且正文够长**（
+        :func:`article_is_usable`）时走「按原文归纳」那条流水线
+        （:func:`run_logic_graph`）；否则一律走老路（按词条关系），并且**如实说明**
+        没有原文可用 —— 绝不拿一句失败理由或 240 字上下文硬编一篇原文出来。
 
         迟到的结果带 ``(token, topic_id, fingerprint)``：UI 只接受与当前主题 +
         当前指纹都匹配的结果，因此切主题 / 改词后的旧结果不会串图。
@@ -1060,15 +1652,22 @@ class MapService:
             return None
         base_url = str(self.config.base_url or "")
         model = str(self.config.model or "")
+        text = logic_text_of(article)
+        if text and not self._article_usable(article):
+            # 留档里那一行不是成功的原文（抓失败 / 太短）：**退回老路**，
+            # 绝不拿一句「取原文失败」的理由当文章去归纳。
+            text = ""
+        source = self.source_tag(article, text)
         fp = content_fingerprint(topic_id, nodes, base_url=base_url, model=model,
-                                 reasoning_effort=self.config.reasoning_effort)
+                                 reasoning_effort=self.config.reasoning_effort,
+                                 source=source)
 
         if not force:
-            cached = self.cached_graph(topic_id, nodes, fingerprint=fp)
+            cached = self.cached_graph(topic_id, nodes, fingerprint=fp,
+                                       source=source)
             if cached is not None:
                 self._deliver(0, topic_id, fp, RESULT_OK, cached, None)
                 return None
-
         ok, msg = self.is_ready()
         if not ok:
             err = ApiError("config", msg)
@@ -1083,6 +1682,7 @@ class MapService:
             target=self._worker,
             args=(token, topic_id, fp, tuple(nodes), base_url, model,
                   float(self.config.timeout), str(self.config.api_key()), str(topic_name or "")),
+            kwargs={"article": (article, text) if text else None},
             name=f"map-t{token}",
             daemon=True,
         ).start()
@@ -1179,9 +1779,85 @@ class MapService:
             log.info("导图沿用上次已核对通过的关系 %s 条 topic=%s", len(carried_keys), topic_id)
         return merged, merged_verdicts, carried_keys
 
+    def _worker_article(self, token: int, topic_id: int, fp: str, nodes, article) -> None:
+        """后台线程（按原文归纳那条路）：归纳 → 代码校验 → 落到词条上 → 写缓存。
+
+        ``article`` 是 ``(articles 表的一行, 正文)``。这一路**不**做第二次模型核对：
+        归纳的每一步都由 :func:`validate_logic` 拿代码算过（实体必须在原文里逐字
+        找得到、时序不许讲反、分支要够），比再问一遍模型更硬，也少花一次钱。
+
+        分支落进 ``map_graphs.raw`` 那一列（存归纳结果的 JSON）：读缓存时由
+        :func:`_with_provenance` 认回来，界面才说得出「按哪篇文章归纳的」。
+        """
+        row, text = article
+        doc_key = title = ""
+        try:
+            doc_key = str(row["doc_key"] or "").strip()
+            title = str(row["title"] or "").strip()
+        except (IndexError, KeyError, TypeError):  # pragma: no cover - 传了别的行
+            pass
+        try:
+            client = self.make_client(base_url=str(self.config.base_url or ""),
+                                      model=str(self.config.model or ""),
+                                      timeout=float(self.config.timeout),
+                                      api_key=str(self.config.api_key()),
+                                      reasoning_effort=str(self.config.reasoning_effort or ""))
+            graph = run_logic_graph(
+                client, doc_key=doc_key, title=title, text=text,
+                terms=tuple(node.term for node in nodes),
+                model_config=self.model_config())
+            relations, skipped = logic_to_map_relations(graph, nodes)
+            dropped: dict[str, int] = {}
+            if skipped:
+                dropped["not_in_topic"] = len(skipped)
+        except ApiError as exc:
+            log.info("按原文归纳失败 token=%s: %s", token, exc.display())
+            self._deliver(token, topic_id, fp, RESULT_ERROR, None, exc)
+            return
+        except Exception as exc:  # pragma: no cover - 兜底，不让线程静默死掉
+            log.exception("按原文归纳异常 token=%s", token)
+            self._deliver(token, topic_id, fp, RESULT_ERROR, None,
+                          ApiError("unknown", redact(str(exc))))
+            return
+        finally:
+            with self._lock:
+                self._inflight.discard((topic_id, fp))
+
+        result = MapGraph(
+            topic_id=topic_id,
+            fingerprint=fp,
+            relations=tuple(relations),
+            nodes=tuple(nodes),
+            dropped=dict(dropped),
+            source="article",
+            model_config=self.model_config(),
+            main_logic=str(graph.main_logic or ""),
+            branches=tuple(dict(branch) for branch in graph.branches),
+        )
+        try:
+            self.db.put_map_graph(
+                topic_id=topic_id, fingerprint=fp,
+                base_url=str(self.config.base_url or ""),
+                model=str(self.config.model or ""),
+                relations=[rel.as_dict() for rel in relations],
+                raw=json.dumps(graph.as_dict(), ensure_ascii=False)[:4000],
+                validation_version=MAP_VALIDATION_VERSION,
+                dropped=dict(dropped), verdicts=[],
+            )
+        except Exception:  # 写缓存失败不影响本次显示
+            log.exception("写导图缓存失败（按原文归纳）topic=%s", topic_id)
+        self._deliver(token, topic_id, fp, RESULT_OK, result, None)
+
     def _worker(self, token: int, topic_id: int, fp: str, nodes, base_url: str,
-                model: str, timeout: float, api_key: str, topic_name: str) -> None:
+                model: str, timeout: float, api_key: str, topic_name: str,
+                article=None) -> None:
         """后台线程：候选 → 本地校验 → **独立核对** → 写缓存 → 投递结果。
+
+        有原文时走的是另一条路（``article=(行, 正文)``）：**按原文归纳**
+        （:func:`run_logic_graph`）—— 一次调用出分支 + 边，代码校验（零 token），
+        不合格带差异清单重试，最多 :data:`LOGIC_MAX_ATTEMPTS` 轮。归纳出来的边
+        同样要过 :func:`validate_relations`；**只有两端都在本主题词库里的边**才画
+        得上去（见 :func:`logic_to_map_relations`，丢掉的条数如实记进 ``dropped``）。
 
         第二次调用沿用**同一份冻结配置**（base_url / model / timeout / key 都是发起
         时抓下来的快照，改设置不会影响在途请求）。核对失败（网络 / 顶层格式）按错误
@@ -1198,6 +1874,9 @@ class MapService:
         records: tuple[dict, ...] = ()
         carried = 0
         try:
+            if article is not None:
+                self._worker_article(token, topic_id, fp, tuple(nodes), article)
+                return
             try:
                 client = self.make_client(base_url=base_url, model=model,
                                           timeout=timeout, api_key=api_key)

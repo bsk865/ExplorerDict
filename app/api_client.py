@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import urllib.error
 import urllib.request
@@ -119,7 +120,7 @@ def parse_chat_reply(content: str) -> str:
 
 # ------------------------------------------------------- 参考关系图（候选边）
 #: 允许的关系类型（唯一权威定义在 :mod:`app.map_service`，这里只用于提示词）
-MAP_REL_TYPES = ("包含", "属于", "依赖", "用途", "因果", "对照")
+MAP_REL_TYPES = ("包含", "属于", "依赖", "用途", "因果", "对照", "时序", "对策")
 #: 一次请求最多带多少个词条（受限输入：只带当前主题的词条，绝不带整篇文档）
 MAP_MAX_ENTRIES = 30
 #: 每个词条的上下文 / 释义截断长度（受限输入）
@@ -319,6 +320,178 @@ MAP_TEMPLATE_USER_TEMPLATE = """主题：{topic}
 
 这张图的关系（起点 类型 终点）：
 {pairs}"""
+
+
+# -------------------------------------------- 按原文归纳（文章逻辑流水线）
+#: 一篇文章的**主逻辑类型**（六种，唯一权威定义在 :mod:`app.map_service`）。
+ARTICLE_LOGIC_TYPES = ("时序", "因果", "对策", "层级", "依赖", "对比")
+#: 实体名上限（**软约束**）：逼模型用文章里的原词，而不要写一整句。
+ARTICLE_ENTITY_CHARS = 10
+#: 发出去的文章正文上限（字符）。论文级长文全发会撑爆上下文，也不能砍掉结论 ——
+#: 超长时在**段落边界**截断，并在材料里如实标注「（正文过长，以下省略）」。
+ARTICLE_TEXT_CHARS = 6000
+ARTICLE_MAX_BRANCHES = 9
+ARTICLE_MAX_ENTITIES = 60
+
+ARTICLE_LOGIC_SYSTEM_PROMPT = """你在**读一篇文章**，然后把它归纳成一张「脉络清晰、顺序正确」的思维导图。
+
+用户会给你一篇文章的正文（可能被截断，截断处会明确标注），以及**用户在这篇文章里划过的词**。
+严格只输出一个 JSON 对象，不要输出任何其它文字，不要使用 Markdown 代码围栏。结构：
+{"branches": [{"name": "分支名", "entities": ["实体", "实体"]}], "relations": [{"src": "实体", "dst": "实体", "type": "时序", "reason": "一句话依据"}]}
+
+怎么归纳（顺序就是阅读顺序，不是重要性排序）：
+1. 先通读全文，判断这篇文章**在讲什么**：它的主线是一条时间线、一条因果链、一个问题的对策、
+   一组层层包含的概念、一条单向的依赖，还是两方的对照；
+2. 再把文章切成 2~6 个**分支**：一个分支 = 文章里的一个逻辑阶段 / 一层 / 一方。
+   分支名用 4~12 个字概括这一步在讲什么（例如「问题提出」「方案设计」「实测结果」）；
+3. 每个分支里的实体，按**它们在文章中出现的先后顺序**排列（时序类文章尤其重要，
+   顺序错了这张图就是错的）。实体名必须是文章里出现过的说法，**尽量不超过 10 个字**；
+4. 如果用户划过词，把划过的那几个词放进它们**真正所属**的分支里（不是单独开一个分支）；
+5. 然后再给关系：src / dst 直接写**实体的名字**（与 branches 里写的**逐字一致**），
+   type 只能是这六个（与第 1 步判断文章结构用的六个词是两套，别混）：
+   - 时序 A→B：文章中 A 出现在 B 之前，且二者是同一条主线上的相邻两步；
+   - 因果 A→B：文章明确说 A 导致 / 造成 B；
+   - 对策 A→B：B 是针对问题 A 提出的办法 / 措施；
+   - 层级 A→B：A 是 B 的上位概念或整体；
+   - 依赖 A→B：A 依赖 B，没有 B 就做不成 A；
+   - 对比 A→B：文章把 A 与 B 摆在一起比较。
+   （「时序」与「对策」就是画线用的名字，不要再换成「因果」——那会把文章的
+   步骤先后画成因果关系，是错的。）
+6. relations 是给**画线**用的，宁可少也不要凑：**不要**把同一个分支里并列的词两两连线，
+   也**不要**为了「连成一张网」而造关系。分支归属已经表达了并列，线只表达分支之间的推进。
+
+红线（违反任何一条，这张图都算不合格）：
+* 只写文章里真的写了的内容，不许补充常识、不许编造数字 / 出处 / 人名；
+* 时序类文章的主线**不许写成并列从属**（那不是这篇文章的结构）；
+* 不要输出「其它」「杂项」这类分支名；某个词放在哪儿都不合适，就把它放进最接近的分支；
+* 分支名与实体名都不要带序号（不要写「1. 问题提出」）；
+* 拿不准的实体宁可不写，也不要写一个文章里没有的词。"""
+
+ARTICLE_LOGIC_USER_TEMPLATE = """标题：{title}
+
+用户在这篇文章里划过的词（可能为空，按先后顺序）：
+{terms}
+
+正文：
+{article}"""
+
+
+def build_article_material(text: str, *, limit: int = ARTICLE_TEXT_CHARS) -> str:
+    """把正文压成提示词材料（纯函数）。
+
+    压缩换行（连续空行只留一个）省 token；超过 ``limit`` 时在**段落边界**截断，
+    并如实写「（正文过长，以下省略）」—— 绝不假装这就是全文，否则模型会把
+    半篇文章当成完整脉络来归纳。
+    """
+    body = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    if not body:
+        return "（没有取到原文）"
+    cap = max(200, int(limit))
+    if len(body) <= cap:
+        return body
+    cut = body[:cap]
+    at = cut.rfind("\n\n")
+    if at > cap // 2:
+        cut = cut[:at]
+    return cut.rstrip() + "\n（正文过长，以下省略）"
+
+
+def build_article_logic_payload(model: str, logic, *, title: str = "",
+                                temperature: float = 0.0,
+                                reasoning_effort: str = "",
+                                thinking: str = "") -> dict:
+    """构造「按原文归纳」的请求体。
+
+    ``logic`` 由 :mod:`app.map_service` 构造：
+    ``{"text": 原文, "terms": [划过的词], "feedback": 上一轮的差异清单}``。
+    ``temperature`` 默认 **0.0**：同一篇文章的归纳必须稳定，重新生成不该换一张图。
+    """
+    data = logic or {}
+    text = str(data.get("text") or "")
+    terms = [str(t).strip() for t in list(data.get("terms") or []) if str(t).strip()]
+    feedback = str(data.get("feedback") or "").strip()
+    user = ARTICLE_LOGIC_USER_TEMPLATE.format(
+        title=(title or "").strip() or "（未知标题）",
+        terms="、".join(terms) if terms else "（没有划过词）",
+        article=build_article_material(text),
+    )
+    if feedback:
+        user += ("\n\n上一轮你的输出有这样一些问题，请**改掉它们**后重新输出完整 JSON：\n"
+                 + feedback)
+    return _with_thinking(_with_reasoning({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": ARTICLE_LOGIC_SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ],
+        "temperature": float(temperature),
+        "stream": False,
+        "response_format": {"type": "json_object"},
+    }, reasoning_effort), thinking)
+
+
+def parse_article_logic(content: str) -> dict:
+    """解析归纳响应：**只做形状整理**，合不合格由 :mod:`app.map_service` 判定。
+
+    顶层结构错误（空响应 / 非 JSON / 不是对象）一律抛 :class:`ApiError`。
+    ``branches`` 缺失（或空数组）同样抛错 —— 一张没有分支的图不是归纳，是失败。
+    """
+    if not isinstance(content, str) or not content.strip():
+        raise ApiError("bad_response", "模型返回内容为空")
+    raw = _strip_fence(content)
+    try:
+        obj = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ApiError("bad_response", f"归纳输出不是合法 JSON：{exc.msg}",
+                       preview=raw[:300]) from exc
+    if not isinstance(obj, dict):
+        raise ApiError("bad_response", "归纳输出的 JSON 不是对象", preview=raw[:300])
+    raw_branches = obj.get("branches")
+    if not isinstance(raw_branches, list):
+        raise ApiError("bad_response", "归纳输出缺少 branches 数组", preview=raw[:300])
+
+    branches: list[dict] = []
+    for item in raw_branches:
+        if isinstance(item, str):
+            name, members = item.strip(), []
+        elif isinstance(item, dict):
+            name = str(item.get("name") or item.get("branch") or "").strip()
+            members = item.get("entities")
+            if members is None:
+                members = item.get("members")
+        else:
+            continue
+        if not name:
+            continue
+        seen: set[str] = set()
+        entities: list[str] = []
+        for entity in list(members or []):
+            name_of = str(entity).strip()
+            if not name_of or name_of in seen:
+                continue
+            seen.add(name_of)
+            entities.append(name_of)
+        branches.append({"name": name, "entities": entities})
+    if not branches:
+        raise ApiError("bad_response", "归纳输出里没有一个带名字的分支", preview=raw[:300])
+
+    relations: list[dict] = []
+    for item in list(obj.get("relations") or []):
+        if not isinstance(item, dict):
+            continue
+        relations.append({
+            "src": str(item.get("src", item.get("source", ""))).strip(),
+            "dst": str(item.get("dst", item.get("target", ""))).strip(),
+            "type": str(item.get("type") or item.get("rel") or "").strip(),
+            "reason": str(item.get("reason") or item.get("evidence") or "").strip(),
+        })
+    return {
+        "title": str(obj.get("title") or "").strip(),
+        "main_logic": str(obj.get("main_logic") or "").strip(),
+        "branches": branches,
+        "relations": relations,
+    }
 
 
 def build_map_template_choices(choices) -> str:
@@ -745,6 +918,19 @@ class DeepSeekClient:
                                              reasoning_effort=self.reasoning_effort,
                                              thinking=self.thinking)
         return parse_map_template(self._extract_content(self._post(payload)), choices)
+
+    # ------------------------------------------------- 按原文归纳（文章逻辑）
+    def article_logic(self, logic, *, title: str = "", temperature: float = 0.0) -> dict:
+        """读**整篇文章**，归纳出分支与关系（返回 ``parse_article_logic`` 的结果）。
+
+        ``logic`` 由 ``MapService`` 构造：``{"text": 原文, "terms": 划过的词,
+        "feedback": 上一轮差异清单}``。和 ``map_relations`` 的区别是：这里看的是
+        文章本身（而不是每个词的 240 字上下文），所以能归纳出「这篇文章在讲什么」。
+        """
+        payload = build_article_logic_payload(
+            self.model, logic, title=title, temperature=temperature,
+            reasoning_effort=self.reasoning_effort, thinking=self.thinking)
+        return parse_article_logic(self._extract_content(self._post(payload)))
 
     # ------------------------------------------------------------- 内部
     def _post(self, payload: dict) -> str:

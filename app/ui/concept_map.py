@@ -36,8 +36,8 @@ from dataclasses import dataclass, replace
 
 from ..logging_setup import get_logger
 from ..map_service import (DIRECTIONAL_TYPES, HIERARCHY_TYPES, REL_TYPES,
-                           SYMMETRIC_TYPES, is_manual, manual_relations,
-                           normalize_material)
+                           SYMMETRIC_TYPES, article_is_usable, constraint_pair,
+                           is_manual, manual_relations, normalize_material)
 from . import map_templates, theme, widgets
 
 log = get_logger("conceptmap")
@@ -1230,10 +1230,13 @@ def _constraint_pairs(rels) -> tuple[dict, dict, set]:
     """把关系集翻成布局用的有向约束 —— 返回 ``(before_of, after_of, feedback)``。
 
     * **包含 / 属于**：层级约束；成环的层级边在这里被排除（绝不画成假层级）；
-    * **依赖 / 因果**：全部保留。同一个强连通分量内部的边不进 ``before_of`` /
-      ``after_of``（它们不参与分层，改由反馈跨边表达），但一定出现在 ``feedback``
-      里，绝不因为「成环」被丢掉；
+    * **依赖 / 因果 / 时序 / 对策**：全部保留。同一个强连通分量内部的边不进
+      ``before_of`` / ``after_of``（它们不参与分层，改由反馈跨边表达），但一定出现
+      在 ``feedback`` 里，绝不因为「成环」被丢掉；
     * 用途 / 对照：不产生层级约束。
+
+    谁在前一律问 :func:`app.map_service.constraint_pair` —— 这里**不重写**一份
+    类型判断，否则新加一个方向类型时「线画出来了、卡片却并排」这种漂移会重演。
     """
     hierarchy_adjacency: dict[int, set] = {}
     constraints: list[tuple[int, int, str]] = []
@@ -1253,7 +1256,7 @@ def _constraint_pairs(rels) -> tuple[dict, dict, set]:
     for src, dst, rel_type in constraints:
         if rel_type not in DIRECTIONAL_TYPES:
             continue
-        pair = (dst, src) if rel_type == "依赖" else (src, dst)
+        pair = constraint_pair(rel_type, src, dst) or (src, dst)
         adjacency.setdefault(int(pair[0]), set()).add(int(pair[1]))
     component_of: dict[int, int] = {}
     for index, component in enumerate(_strongly_connected(adjacency)):
@@ -1266,7 +1269,7 @@ def _constraint_pairs(rels) -> tuple[dict, dict, set]:
     seen_pairs: set[tuple[int, int]] = set()
     for src, dst, rel_type in constraints:
         if rel_type in DIRECTIONAL_TYPES:
-            before, after = (dst, src) if rel_type == "依赖" else (src, dst)
+            before, after = constraint_pair(rel_type, src, dst) or (src, dst)
             if component_of.get(int(before)) == component_of.get(int(after)):
                 feedback.add((int(before), int(after)))
                 continue                  # 反馈圈内部：同层 + 反馈弧，不做前后分层
@@ -2692,6 +2695,10 @@ class ConceptMapWindow:
         self._labels: dict[int, str] = {}      # entry_id → 唯一显示名
         self._graph = None                     # MapGraph | None（**已校验**的关系）
         self._fingerprint = ""
+        #: 这个主题对应的**原文留档**（``articles`` 表的一行；没有 = ``None``）。
+        #: 它参与内容指纹（「按原文归纳」与「按词条关系」是两张图），也决定状态行
+        #: 说的是「按《标题》原文归纳」还是「未取到原文，已按词条关系生成」。
+        self._article = None
         self._pending_token: int | None = None
         self._selected = None                  # 当前点选的 MapRelation
         self._selected_node = None             # 当前点选的词（entry_id；与连线二选一）
@@ -3095,6 +3102,38 @@ class ConceptMapWindow:
             text = str(getattr(graph, "model_config", "") or "").rsplit("|", 1)[-1].strip()
         return f" · {text}" if text else ""
 
+    def _article_title(self) -> str:
+        """留档里那篇文章的标题（读不到 → 空串，界面就不提标题）。"""
+        article = self._article
+        if article is None or isinstance(article, str):
+            return ""
+        try:
+            return str(article["title"] or "").strip()
+        except (IndexError, KeyError, TypeError):  # pragma: no cover - 老库缺列
+            return ""
+
+    def _source_note(self, graph=None) -> str:
+        """反馈行里的**生成方式**短说明（有原文 / 没原文是两件事，必须说出来）。
+
+        * 这张图是按某篇原文归纳的 → 「按《标题》原文归纳（N 个分支）」；
+        * 没有可用原文 → 「未取到原文，已按词条关系生成」—— 用户据此知道
+          为什么图和别的文章长得不一样，也不会以为归纳功能坏了。
+
+        标题以**图自己记的**为准（``main_logic`` / ``branches`` 随图落库），
+        拿不到才退回窗口当前读到的留档标题。
+        """
+        branches = tuple(getattr(graph, "branches", ()) or ())
+        title = self._article_title()
+        if branches or str(getattr(graph, "source", "") or "") == "article":
+            part = f"按《{title}》原文归纳" if title else "按原文归纳"
+            if branches:
+                part += f"（{len(branches)} 个分支）"
+            logic = str(getattr(graph, "main_logic", "") or "").strip()
+            return f" · {part}，主逻辑「{logic}」" if logic else f" · {part}"
+        if article_is_usable(self._article) is True:
+            return ""                      # 有原文却拿到老路的图：忙态里已经说过了
+        return " · 未取到原文，已按词条关系生成"
+
     def refresh(self, *, topic_id: int | None = None) -> None:
         """重建主题列表并重新载入当前主题的图（幂等，只读本地库）。
 
@@ -3148,7 +3187,9 @@ class ConceptMapWindow:
             return False
         try:
             all_nodes, nodes = self._scope_nodes(service, int(topic_id))
-            fingerprint = str(service.fingerprint(int(topic_id), nodes))
+            self._article = self._load_article(service, int(topic_id))
+            fingerprint = str(service.fingerprint(int(topic_id), nodes,
+                                                  article=self._article))
         except Exception:  # pragma: no cover - 读库失败不该炸窗口，保留当前显示
             log.exception("重读主题词条失败")
             return False
@@ -3181,6 +3222,22 @@ class ConceptMapWindow:
         self._reload_blocks()
         self._fill_entry_list(all_nodes)
         return changed
+
+    def _load_article(self, service, topic_id: int):
+        """读这个主题对应的**原文留档**（没有 / 抓失败都返回那一行，交给调用方判断）。
+
+        为什么窗口要自己拿着它：内容指纹里带「按这篇原文归纳」的标记（见
+        :meth:`MapService.source_tag`），界面算指纹时不带同样的标记就会「永远不命中
+        缓存、每次打开都重新花钱」；反之带上了才与后台线程算的一致。
+        """
+        getter = getattr(service, "article_for_topic", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(int(topic_id))
+        except Exception:  # pragma: no cover - 读留档失败按「没有原文」处理
+            log.exception("读取原文留档失败 topic=%s", topic_id)
+            return None
 
     def _scope_nodes(self, service, topic_id: int) -> tuple[list, list]:
         """按当前主题读**全部**词节点，再按 ``self._subset_ids`` 裁出本次分析的范围。
@@ -3265,7 +3322,8 @@ class ConceptMapWindow:
             return str(self._fingerprint)
         try:
             _all_nodes, nodes = self._scope_nodes(service, int(topic_id))
-            return str(service.fingerprint(int(topic_id), nodes))
+            return str(service.fingerprint(int(topic_id), nodes,
+                                           article=self._article))
         except Exception:  # pragma: no cover - 读库失败按原指纹处理
             log.exception("核对主题指纹失败")
             return str(self._fingerprint)
@@ -3330,6 +3388,7 @@ class ConceptMapWindow:
         self._nodes = []
         self._labels = {}
         self._fingerprint = ""
+        self._article = None                   # 换主题 = 换文章：留档跟着重读
         self._coverage_note = ""
         #: 换主题 = 换范围：词条列表不跨主题沿用（人工关系按主题各自读库）。
         #: 子集**通常也清空** —— 例外只有一个：主界面刚把「只画勾选的词」设在本主题上
@@ -3392,14 +3451,16 @@ class ConceptMapWindow:
             self._set_feedback("该主题还没有词条：先在阅读页解释并记录几个词")
             return
         cached = service.cached_graph(int(self._topic_id), nodes,
-                                      fingerprint=self._fingerprint)
+                                      fingerprint=self._fingerprint,
+                                      article=self._article)
         if cached is not None:
             self._graph = cached
             self._state = "ready"
             self._sync_button()
             self._draw()
             self._set_feedback(self._with_coverage(
-                f"已显示缓存：{cached.summary()}{self._model_note(cached)}"))
+                f"已显示缓存：{cached.summary()}{self._model_note(cached)}"
+                f"{self._source_note(cached)}"))
             return
         self._state = "idle"
         self._sync_button()
@@ -3448,14 +3509,22 @@ class ConceptMapWindow:
             return
         self._show_hint(False)
         token = service.generate(topic_id, nodes=self._nodes, force=bool(force),
-                                 topic_name=self._topic_name_text)
+                                 topic_name=self._topic_name_text,
+                                 article=self._article)
         if token is None:
             return                          # 命中缓存 / 没有可生成内容（结果走回调）
         self._pending_token = int(token)
         self._state = "loading"
         self._sync_button()
         self._set_feedback(self._with_coverage(
-            f"正在生成参考关系…（先按当前词节点显示）{note}"))
+            f"正在{self._generating_what()}…（先按当前词节点显示）{note}"))
+
+    def _generating_what(self) -> str:
+        """忙态里说清**正在按什么生成**（有原文 / 没原文是两件事，不能含糊）。"""
+        if article_is_usable(self._article):
+            title = self._article_title()
+            return f"按《{title}》原文归纳" if title else "按原文归纳"
+        return "生成参考关系"
 
     def _reject_stale(self, token: int, pending: int | None) -> None:
         """过期 / 迟到结果：只清理**它自己**那份忙态，绝不动更新请求的忙态。"""
@@ -3517,10 +3586,11 @@ class ConceptMapWindow:
         if str(status) == "ok" and graph is not None:
             self._graph = graph
             self._state = "ready"
-            note = "（缓存）" if str(getattr(graph, "source", "")) == "cache" else ""
+            note = "（缓存）" if str(getattr(graph, "source", "") or "") == "cache" else ""
             summary = getattr(graph, "summary", None)
             text = summary() if callable(summary) else ""
-            self._set_feedback(self._with_coverage(f"{text}{note}{self._model_note(graph)}"))
+            self._set_feedback(self._with_coverage(
+                f"{text}{note}{self._model_note(graph)}{self._source_note(graph)}"))
         else:
             # 错误 / 非法 JSON / schema 错误：**不画伪图**，只保留词节点 + 短状态 + 重试
             self._graph = None
@@ -3540,7 +3610,8 @@ class ConceptMapWindow:
         绝不是窗口刚打开时的旧快照。
         """
         if self._pending_token is not None:
-            self._set_feedback(self._with_coverage("正在生成参考关系…（完成后自动显示）"))
+            self._set_feedback(self._with_coverage(
+                f"正在{self._generating_what()}…（完成后自动显示）"))
             return
         if self._topic_id is None:
             self._set_feedback("先在阅读页解释并记录几个词，再回来生成参考关系")
