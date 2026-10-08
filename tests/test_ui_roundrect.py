@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import itertools
 import json
 import threading
 import time
@@ -57,6 +58,7 @@ from tests.support import FakeWidget, PanelProbe, _FakeTkEnv
 
 from app import win32util as w32
 from app.config import Config
+from app.map_service import article_is_usable as cm_article_is_usable
 from app.ui import panel_geometry as geo
 from app.ui import theme, widgets
 
@@ -3116,7 +3118,7 @@ class TestConceptMapWindow(unittest.TestCase):
                 win._zoom = 1.0
                 win._fit_pending = False
                 win._on_zoom_wheel(SimpleNamespace(delta=120, x=100, y=80))
-                self.assertAlmostEqual(win._zoom, cm.ZOOM_STEP, places=6,
+                self.assertAlmostEqual(win._zoom, cm.wheel_zoom_factor(120), places=6,
                                        msg="滚轮必须直接缩放")
                 self.assertEqual([call for call in canvas.yview_calls
                                   if call[0] == "scroll"], [],
@@ -4583,7 +4585,7 @@ class TestConceptMapCamera(unittest.TestCase):
                 world_before = (direct_x + cursor_x, win._view_top() + cursor_y)
 
                 win._on_zoom_wheel(SimpleNamespace(delta=120, x=cursor_x, y=cursor_y))
-                self.assertAlmostEqual(win._zoom, cm.ZOOM_STEP, places=6,
+                self.assertAlmostEqual(win._zoom, cm.wheel_zoom_factor(120), places=6,
                                        msg="滚轮必须**直接**缩放")
                 self.assertAlmostEqual(win._view_left(), direct_x, places=6,
                                        msg="合并重画的那十几毫秒里视图先别动"
@@ -4591,9 +4593,11 @@ class TestConceptMapCamera(unittest.TestCase):
                 win._flush_wheel_redraw()          # 定时器到点：先按新缩放重画，再落锚点
                 world_after_x = win._view_left() + cursor_x
                 world_after_y = win._view_top() + cursor_y
-                self.assertAlmostEqual(world_after_x, world_before[0] * cm.ZOOM_STEP,
+                self.assertAlmostEqual(world_after_x,
+                                       world_before[0] * cm.wheel_zoom_factor(120),
                                        delta=0.5, msg="缩放必须锚定在鼠标位置（x）")
-                self.assertAlmostEqual(world_after_y, world_before[1] * cm.ZOOM_STEP,
+                self.assertAlmostEqual(world_after_y,
+                                       world_before[1] * cm.wheel_zoom_factor(120),
                                        delta=0.5, msg="缩放必须锚定在鼠标位置（y）")
                 self.assertGreater(win._layout.find(1).w, 0)
 
@@ -4609,6 +4613,59 @@ class TestConceptMapCamera(unittest.TestCase):
                                        msg="缩放必须限幅在下限")
                 self.assertEqual(float(canvas.xview()[0]) >= 0.0, True)
                 self.assertEqual(float(canvas.xview()[0]) <= 1.0, True)
+
+    def test_wheel_zoom_is_stepless_instead_of_fixed_steps(self):
+        """★ 批次 M21-C：用户口径「缩放一卡一卡的，我要求无级变速」。
+
+        旧写法一格固定 ±10%（``ZOOM_STEP = 1.1``），不管系统送来 120 还是 12 都跳
+        同样一格 —— 那就是台阶。现在按 ``delta`` 连续换算，必须满足：
+
+        * 正负对称（放大再缩回原来那个刻度 = 回到原样）；
+        * 增量越大变得越多，**小增量真的只变一点点**（精密触控板 / 触控板两指滑）；
+        * 单个刻度与旧手感接近（不是「滚一下就飞了」）；
+        * 个别驱动送来的离谱 delta 要被限幅。
+        """
+        from app.ui import concept_map as cm
+
+        notch = cm.wheel_zoom_factor(120)
+        self.assertAlmostEqual(notch, 2 ** 0.2, places=9)
+        self.assertGreater(notch, 1.10, "一个刻度要比旧的 10% 稍微多一点")
+        self.assertLess(notch, 1.20, "但也别一下子跳太远")
+        self.assertAlmostEqual(cm.wheel_zoom_factor(0), 1.0, places=9)
+        self.assertAlmostEqual(cm.wheel_zoom_factor(120) * cm.wheel_zoom_factor(-120),
+                               1.0, places=9, msg="放大再缩回一个刻度要回到原样")
+        self.assertLess(cm.wheel_zoom_factor(12), 1.02,
+                        "小增量必须只变一点点 —— 这就是「无级」")
+        self.assertGreater(cm.wheel_zoom_factor(240), cm.wheel_zoom_factor(120))
+        self.assertLess(cm.wheel_zoom_factor(-240), cm.wheel_zoom_factor(-120))
+        self.assertAlmostEqual(cm.wheel_zoom_factor(100000),
+                               1.0 + cm.ZOOM_WHEEL_MAX_RATIO, places=9,
+                               msg="离谱的 delta 要限幅在上限")
+        self.assertAlmostEqual(cm.wheel_zoom_factor(-100000),
+                               1.0 - cm.ZOOM_WHEEL_MAX_RATIO, places=9)
+
+    def test_wheel_keeps_zooming_in_small_continuous_amounts(self):
+        """真窗口里滚 5 个小增量：缩放值必须连续累加，而不是跳 5 个台阶。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            self._big_content(db)
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win = self._window(db, env)
+                canvas = env.canvases[-1]
+                canvas.configure(width=400, height=300)
+                win._zoom = 1.0
+                win._fit_pending = False
+                seen = []
+                for _ in range(5):
+                    win._on_zoom_wheel(SimpleNamespace(delta=12, x=200, y=150))
+                    seen.append(float(win._zoom))
+                self.assertAlmostEqual(seen[-1], cm.wheel_zoom_factor(12) ** 5,
+                                       places=6, msg="每个事件都要立刻累加（合并的只是重画）")
+                self.assertLess(seen[-1], 1.10,
+                                "5 个 12 的小增量不该等于旧写法滚一整格")
+                self.assertEqual(sorted(seen), seen, "必须是单调放大，不许跳回去")
 
     def test_zoom_then_click_hits_the_edge_under_the_pointer(self):
         """缩放重绘后，命中判定仍然按**当前**布局 + **当前视图偏移**算。"""
@@ -4741,9 +4798,10 @@ class TestConceptMapCamera(unittest.TestCase):
                 snap_zoom, snap_drawn = float(win._zoom), float(win._drawn_zoom)
                 self.assertAlmostEqual(snap_zoom, snap_drawn, places=6,
                                        msg="前提：这一步没有合并重画，图上的缩放与状态一致")
+                one = cm.wheel_zoom_factor(120)
                 for _ in range(3):
-                    win.zoom_by(cm.ZOOM_STEP, anchor=(120.0, 90.0), coalesce=True)
-                self.assertAlmostEqual(float(win._zoom), snap_zoom * cm.ZOOM_STEP ** 3,
+                    win.zoom_by(one, anchor=(120.0, 90.0), coalesce=True)
+                self.assertAlmostEqual(float(win._zoom), snap_zoom * one ** 3,
                                        places=6, msg="缩放值照旧每个刻度立刻生效")
                 self.assertAlmostEqual(win._view_left(), left, places=6,
                                        msg="★ 串内视图一个像素都不许动（动了就是他说的「乱晃」）")
@@ -4773,7 +4831,8 @@ class TestConceptMapCamera(unittest.TestCase):
                 real_draw, real_anchor = win._draw, win._apply_anchor
                 win._draw = lambda *a, **kw: (order.append("draw"), real_draw(*a, **kw))[1]
                 win._apply_anchor = lambda *a: (order.append("anchor"), real_anchor(*a))[1]
-                win.zoom_by(cm.ZOOM_STEP, anchor=(120.0, 90.0), coalesce=True)
+                win.zoom_by(cm.wheel_zoom_factor(120), anchor=(120.0, 90.0),
+                            coalesce=True)
                 self.assertEqual(order, [], "串内既不许重画、也不许落锚点")
                 win._flush_wheel_redraw()
                 self.assertEqual(order, ["draw", "anchor"],
@@ -4801,6 +4860,224 @@ class TestConceptMapCamera(unittest.TestCase):
                 win.zoom_by(1.4)
                 self.assertAlmostEqual(float(win._drawn_zoom), float(win._zoom), places=6,
                                        msg="不合并的那条路当场重画，同样要同步")
+
+
+def _recording_generate(seen):
+    """把窗口的 ``service.generate`` 换成一个「只记账、不起线程」的替身。
+
+    **必须像真 ``generate`` 那样返回一个 token**：``_request`` 拿到 ``None`` 会当成
+    「命中缓存 / 没有可生成内容」直接返回，连忙态那句话都不写，测出来就像是
+    「点下去什么都没发生」。返回了 token 之后，窗口把这次点击登记成在途请求，
+    就与真实跑起来的那一瞬一模一样了。
+
+    真 ``generate`` 会在后台线程里跑完并把结果交回来，替身不还的话窗口一直停在
+    忙态，第二次点击会在 ``if self._pending_token is not None:`` 处直接返回。所以
+    每次点击之后由用例自己调 ``_settle(win)`` 收尾。
+    """
+    counter = itertools.count(1)
+
+    def generate(topic_id, **kwargs):
+        seen.append(dict(kwargs, topic_id=int(topic_id)))
+        return next(counter)
+
+    return generate
+
+
+def _settle(window):
+    """把窗口从「等后台线程」的忙态里放出来，好让下一次点击真的发得出去。"""
+    window._pending_token = None
+    return window
+
+
+class TestConceptMapRegenerateLadder(unittest.TestCase):
+    """★ 批次 M21-B：用户口径「重新生成本质上还是恢复布局，如果没有思考等级方式
+    的变化，重新生成导图可以说是毫无意义」。
+
+    这里守的是**窗口这一侧**的阶梯行为（纯逻辑那一半在 ``tests/test_article_logic.py``
+    的 ``TestVaryLadder``）：
+
+    * 有原文时，每点一次「重新生成」往上换一档，并且这一次请求**真的**带着新档位；
+    * 没有原文时不递进（那张图是代码按关系分层画的，换档没有意义）；
+    * 点了几次之后状态行要如实写出「第 N 档 · 换了什么思路」。
+
+    **为什么这个类要自己拿一个真 Tk 根**：``ConceptMapWindow`` 建的是
+    ``tk.Toplevel(master)``，没给 master 时 Tk 会**偷偷造一个隐藏根窗口**并把它
+    记成 ``tkinter._default_root``。那个隐藏根一旦被别人 ``destroy()`` 掉，
+    ``tkinter._default_root`` 就会指向一个已销毁的对象 —— 之后所有
+    ``tk.StringVar()``（不传 master 的那种）都会变成孤儿，绑不到任何解释器，
+    ``tests/test_ui_roundrect.py:8176 test_a_real_entry_keeps_its_textvariable_clean``
+    会莫名其妙地红（实测：``'' != '卷积'``，而单跑它是绿的）。所以本类在
+    ``setUpClass`` 先站住一个真根、``tearDownClass`` 才收，期间 Tk 的世界始终有人管。
+    """
+
+    root = None
+    _own_root = False
+
+    @classmethod
+    def setUpClass(cls):
+        import tkinter as tk
+
+        if tk._default_root is None:
+            cls.root = tk.Tk()
+            cls.root.withdraw()
+            cls._own_root = True
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._own_root and cls.root is not None:
+            cls.root.destroy()
+            cls.root = None
+
+    def _window_with_article(self, db, *, article=True):
+        """真实 ``MapService`` + 真实窗口；有原文时先把留档写进库。
+
+        ``generate`` 被换成只**记录**调用（不发请求、不起线程）：这一组用例要验的
+        是窗口怎么算档位，不是后台线程怎么跑。
+
+        原文用「真文章 + 一段够长的补充」：``MIN_ARTICLE_CHARS`` 门槛（200 字）
+        必须过，否则 ``article_is_usable`` 判不可用，窗口会正确地退回老路 ——
+        那样这一组用例就测不到阶梯了。
+        """
+        from app.article_source import Article
+        from app.ui import concept_map as cm
+        from tests.test_article_logic import ARTICLE
+        from tests.test_article_source import para
+
+        body = ARTICLE + "\n\n" + para("补充")
+        bid = int(db.create_batch("阶梯主题"))
+        for term in ("重排模型", "向量召回", "检索质量差"):
+            db.add_entry(batch_id=bid, term=term, context="上下文一句话",
+                         doc_key="url:https://a.example.com/p" if article else "")
+        if article:
+            db.put_article("url:https://a.example.com/p",
+                           Article(ok=True, url="https://a.example.com/p",
+                                   title="重排方案实测", text=body, status="ok",
+                                   method="test"))
+        service, _cfg = _map_service(db, key="", client=_MapClient([]))
+        service.is_ready = lambda: (True, "")
+        seen: list[dict] = []
+        service.generate = _recording_generate(seen)
+        app = SimpleNamespace(db=db, map_service=service,
+                              open_settings=lambda: None)
+        # 窗口一打开就会自动读缓存 / 发一次请求；真实情况下那次请求跑在后台线程里，
+        # 用户还没点按钮就已经有结果了。这里直接把忙态解开，让用例从「上一个请求
+        # 已经结束」这个真实起点开始点。
+        return _settle(cm.ConceptMapWindow(None, app)), seen
+
+    def test_every_click_goes_one_step_further_up_the_ladder(self):
+        from app.api_client import ARTICLE_VARY_MAX
+
+        with support.temp_db() as db:
+            win, seen = self._window_with_article(db)
+            self.assertTrue(cm_article_is_usable(win._article), "前提：这个主题有可用原文")
+            del seen[:]        # 窗口一打开就自动发过一次（缓存未命中），不算用户点的
+            got = []
+            for _ in range(ARTICLE_VARY_MAX + 3):
+                win._on_generate()
+                got.append(int(win._vary))
+                self.assertEqual(len(seen), len(got), "每一次点击都该真的发出去")
+                self.assertEqual(int(seen[-1]["vary"]), got[-1],
+                                 "发出去的必须是这一次算出来的档位")
+                _settle(win)
+            self.assertEqual(got[0], 1, "第一次点它就该换到第 2 档（不是原地重做）")
+            self.assertEqual(got[-1], ARTICLE_VARY_MAX, "到顶就停在顶，不许越界")
+            self.assertEqual(sorted(got), got, "档位只能往上走，不许回退")
+
+    def test_the_status_line_says_which_step_this_is(self):
+        from app.api_client import article_vary
+
+        with support.temp_db() as db:
+            win, _seen = self._window_with_article(db)
+            win._on_generate()
+            label = article_vary(1)[0]
+            self.assertIn("第 2 档", str(win.feedback.cget("text")))
+            self.assertIn(label, str(win.feedback.cget("text")),
+                          "忙态里要说清这一次换的是什么思路")
+
+    def test_without_an_article_the_ladder_stays_put(self):
+        with support.temp_db() as db:
+            win, seen = self._window_with_article(db, article=False)
+            self.assertFalse(cm_article_is_usable(win._article), "前提：这个主题没有原文")
+            for _ in range(3):
+                win._on_generate()
+                _settle(win)
+            self.assertGreaterEqual(len(seen), 3, "每一次点击都该真的发出去")
+            self.assertEqual({int(item["vary"]) for item in seen}, {0},
+                             "没有原文时不许递进（换档对那张图毫无意义）")
+
+    def test_changing_the_entries_restarts_the_ladder(self):
+        """词条变了 = 换了材料：阶梯要归零，否则用户看到的「第 3 档」从没按新词条想过。"""
+        from app.api_client import ARTICLE_VARY_MAX
+
+        with support.temp_db() as db:
+            win, seen = self._window_with_article(db)
+            del seen[:]        # 窗口一打开就自动发过一次，不算用户点的
+            win._on_generate()
+            _settle(win)
+            win._on_generate()
+            _settle(win)
+            self.assertEqual(int(win._vary), 2, "前提：已经走到第 3 档")
+            db.add_entry(batch_id=int(win._topic_id), term="新词", context="新上下文",
+                         doc_key="url:https://a.example.com/p")
+            win._on_generate()
+            self.assertEqual(int(seen[-1]["vary"]), 1,
+                             "词条集合变了要重新从第 2 档开始想")
+            self.assertLess(int(seen[-1]["vary"]), ARTICLE_VARY_MAX)
+
+    def test_the_step_comes_back_from_the_cache_too(self):
+        """读缓存回来的图也带着自己的档位：界面按**图自己记的**说，不许瞎标。"""
+        from app.article_source import Article
+        from app.map_service import MapGraph
+        from app.ui import concept_map as cm
+        from tests.test_article_logic import ARTICLE
+
+        with support.temp_db() as db:
+            win, _seen = self._window_with_article(db)
+            graph = MapGraph(topic_id=int(win._topic_id), fingerprint="x",
+                             relations=(), nodes=tuple(win._nodes),
+                             source="article", vary=2, vary_label="换一种结构",
+                             branches=({"name": "重排方案", "entities": ["重排模型"]},))
+            win._nodes = list(win._nodes)
+            win._vary_ids = tuple(int(n.entry_id) for n in win._nodes)
+            win._vary = 0
+            win.on_map_result((0, int(win._topic_id), str(win._current_fingerprint()),
+                               "ok", graph, None))
+            self.assertEqual(int(win._vary), 2,
+                             "下一次重新生成必须接着第 3 档，不许重复同一档")
+            self.assertIn("第 3 档", str(win.feedback.cget("text")))
+
+    def test_local_document_is_usable_as_an_article(self):
+        """批次 M21-A + M21-B 的交点：本地 txt 取到的原文同样能走阶梯、同样进状态行。
+
+        原文必须是**过得了门槛**的正文（``MIN_ARTICLE_CHARS``），否则窗口会正确地
+        判「没有可用原文」而不递进 —— 那样就测不到本地文档这一支了。
+        """
+        from app.article_source import Article
+        from app.ui import concept_map as cm
+        from tests.test_article_logic import ARTICLE
+        from tests.test_article_source import para
+
+        body = ARTICLE + "\n\n" + para("补充")
+        with support.temp_db() as db:
+            bid = int(db.create_batch("本地文档主题"))
+            for term in ("重排模型", "向量召回", "检索质量差"):
+                db.add_entry(batch_id=bid, term=term, context="上下文一句话",
+                             doc_key="file:///D:/测试/需求.txt")
+            db.put_article("file:///D:/测试/需求.txt",
+                           Article(ok=True, url="file:///D:/测试/需求.txt",
+                                   title="需求", text=body, status="ok",
+                                   method="local"))
+            service, _cfg = _map_service(db, key="", client=_MapClient([]))
+            service.is_ready = lambda: (True, "")
+            seen: list[dict] = []
+            service.generate = _recording_generate(seen)
+            win = _settle(cm.ConceptMapWindow(None, SimpleNamespace(
+                db=db, map_service=service, open_settings=lambda: None)))
+            self.assertTrue(cm_article_is_usable(win._article), "本地文档的原文要认得出来")
+            del seen[:]        # 窗口一打开就自动发过一次，不算用户点的
+            win._on_generate()
+            self.assertEqual(len(seen), 1, "点击要真的发出去")
+            self.assertEqual(int(seen[-1]["vary"]), 1, "本地文档同样要能换思路")
 
 
 class TestConceptMapEvidenceSource(unittest.TestCase):
