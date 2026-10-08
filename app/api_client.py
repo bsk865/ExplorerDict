@@ -136,21 +136,39 @@ MAP_SYSTEM_PROMPT = """你在为《探索词典》的一张「AI 参考关系图
 
 规则：
 1. src / dst 只能是给定词条的**编号**（整数），不能是词语文字，不能超出给定范围，也不能指向同一条；
-2. type 只能是这六个之一，方向含义固定：
+2. type 只能是这八个之一，方向含义固定：
    - 包含 A→B：A 是 B 的上位概念或整体（B 包含在 A 里）；
    - 属于 A→B：A 是 B 的下位概念或组成部分（A 属于 B）；
    - 依赖 A→B：A 依赖 B，B 是 A 的前提 / 基础；
    - 用途 A→B：A 用于 B；
    - 因果 A→B：A 导致 / 造成 B；
-   - 对照 A→B：A 与 B 形成对照 / 对比。
+   - 对照 A→B：A 与 B 形成对照 / 对比；
+   - 时序 A→B：A 发生在 B 之前（流程的前一步 → 后一步）；
+   - 对策 A→B：针对 A 采取 / 提出 B。
+   ★ **流程步骤之间绝不许写「包含 / 属于」**（这一条是本提示词最容易犯的错，必须
+   自检）。「包含 / 属于」只允许用在**真正的整体—部分 / 上位—下位**上（例如「卷积
+   神经网络」包含「卷积层」；「卷积层」属于「卷积神经网络」）。文章讲「先做 A，再
+   做 B」时，A 是流程的**一步**、B 是**下一步**，两步是并列的环节，**不是** A 包含 B：
+   这种情况写 **时序 A→B**；材料明说 B 以 A 为前提 / 依据（「B 必须依赖 A」）就写
+   **依赖 B→A**；材料明说 A 导致 B（「A 之后做 B，因为 A 的结论要用于 B」）就写
+   **因果 A→B**。
+   反例（**必须避免**，实测模型最容易这样写）：
+   - 「确定项目需求是项目开发流程的第一步」→ 不许写「项目开发 包含 确定项目需求」，
+     应写「项目开发 → 确定项目需求 时序」（或按材料写成依赖）；
+   - 「任务拆解是项目开发流程中的一环」→ 同上，写 **时序**，不许写「包含」。
    自检：写一条关系前，先在材料里找出一句能**直接读出**这个类型的话 —— 光有两个词
-   同时出现在一句里不算。下面这些**都不是**这六种关系，材料只写了这些就不要输出：
+   同时出现在一句里不算。下面这些**都不是**上面这些关系，材料只写了这些就不要输出：
    - 「A 在 B 中 / A 部署在 B 中 / A 出现在 B 里」＝ 场景描述，既不是依赖也不是因果；
    - 「A 在 B 里的开销高 / A 对 B 而言是个问题」＝ A 的困难发生在 B 里，不是 A 导致 B；
    - 「现有方案依赖 A」＝ 依赖的前件是那个方案；方案本身不在本次词条里时，不要把这条
      依赖挂到别的词上；
    - 两个词只是同属一个话题、总是结伴出现 ＝ 没有类型，不要输出。
    类型拿不准时**宁可不输出**：类型标错的候选会被核对判为不成立，反而让这个词变成孤立词；
+   ★ **每一个给出的词都要在候选里至少出现一次**：某个词是文章里一个独立的环节 /
+   概念时，它至少与相邻的那一步有一条边（时序 / 依赖 / 因果之外都不行时，也要按材料
+   写一条最贴切的）。一个词在候选里根本没出现，它在图上就会变成没有任何关系的
+   「孤立词」—— 那对用户是最糟的结果。但如果材料里真的找不到任何一句能支撑它与别的
+   词的关系，**宁可不写**，不要为了让它不孤立而编一条；
 3. reason 是一句简短依据（不超过 40 字）；evidence 必须**逐字**来自本次给出的上下文或释义，
    不许改写、不许编造出处 / 页码 / 引文；
 4. 材料不足以支持、只能靠常识猜测、或者需要主题以外的知识时：**不要输出这条关系**。
@@ -219,11 +237,42 @@ MAP_VERIFY_SYSTEM_PROMPT = """你在**独立核对**另一轮给出的候选关�
         依赖 / 因果 / 用途都不成立；② 材料支持的是**另一个方向**（例如材料说「方案依赖
         漂移检测方法」，候选却写成「<另一个词> 依赖 漂移检测方法」）时，方向错了；
 3. 只是重复端点词语本身、或者只有两三个字的片段，**不算依据**；证据必须真的表达出这条关系；
+   ★ **关系类型不同，依据的长相也不同**（批次 M23，别拿「层级」那一套去卡别的类型）：
+   - 时序 / 依赖 / 因果 / 对策这四种，材料写「先 A 后 B」「B 依赖 / 依据 A」「A 之后做 B」
+     「因 A 所以 B」**就是**正面依据 —— 材料不会专门写「A 是 B 的上位概念」这种话，
+     别因为它没写就判 uncertain；
+   - **包含 / 属于**要求更高：材料必须真的把 B 说成 A 的**整体 / 一部分、上位 / 下位**
+     （「B 是 A 的一个环节 / 组成部分 / 一类」）。只说 B 在流程里位于 A 之后、或者
+     只是同属一个话题，**不足以**支持包含 / 属于，这种情况判 contradicted 并说明
+     应该用哪种类型；
 4. 只依据本次给出的材料判断，不要引用其它主题、整篇文档、窗口标题或网址。"""
 MAP_VERIFY_USER_TEMPLATE = """主题：{topic}
 
 候选关系（序号 / 类型 / 方向 / 端点材料 / 候选依据 / 候选证据）：
 {items}"""
+
+#: ★ 补问（第三轮，批次 M23）：某个词被核对删成**孤立词**之后，只针对它再问一次。
+#: 与第一轮的区别：材料里**额外点名**那个还没连上的词，并明确「只为它提候选」。
+#: 实测（主题「项目开发」，2026-10-09）：第一轮 9 条候选的核对结果是 6 条通过、1 条
+#: ``uncertain``（「循环迭代」唯一那条「包含」）、2 条 ``contradicted`` ⇒ 那个词一个
+#: 关系都没有、在图上变成孤立词。补问带的是同一条类型红线（流程步骤用时序 / 依赖 /
+#: 因果），因此它有机会给出第一轮漏掉的那条边。
+MAP_RESCUE_SYSTEM_PROMPT = MAP_SYSTEM_PROMPT + """
+
+★ 本次是**补问**：材料里那几条已经有关系的词不必再提，请只为**还没连上的那个词**
+提出候选关系（它至少要出现在一条候选里）。依然遵守上面全部规则，尤其是「流程步骤
+之间不许写包含 / 属于」；材料确实支撑不了时返回 {"relations": []}，不要硬凑。"""
+
+MAP_RESCUE_USER_TEMPLATE = """主题：{topic}
+
+已保存词条（编号 / 词语 / 上下文 / 已有释义）：
+{material}
+
+这批词里，下面这些词已经至少有一条画出来的关系：
+{linked}
+
+**还没连上任何关系的词：{isolated}**（编号 {isolated_index}）。
+请只为它提候选关系：它跟上面哪个词之间有什么类型的关系？每条都要能在材料里直接读出。"""
 
 
 def build_map_verify_material(items, *, material_chars: int = MAP_MATERIAL_CHARS) -> str:
@@ -667,6 +716,39 @@ def build_map_material(entries, *, material_chars: int = MAP_MATERIAL_CHARS,
     return "\n".join(lines) if lines else MAP_EMPTY_MATERIAL
 
 
+def build_map_rescue_payload(model: str, entries, *, topic: str = "",
+                             linked=(), isolated=(), material_chars: int = MAP_MATERIAL_CHARS,
+                             max_entries: int = MAP_MAX_ENTRIES,
+                             temperature: float = 0.0,
+                             reasoning_effort: str = "",
+                             thinking: str = "") -> dict:
+    """构造**补问**请求体（批次 M23）：词被核对删成孤立词时，只针对它再问一次。
+
+    与 :func:`build_map_payload` 同源（同一份材料、同一条类型红线），只多两行点名：
+    已经连上的词、以及**还没连上**的那个词（含它的编号）。材料边界完全一致 ——
+    仍然只有当前主题的词条，不带窗口标题 / 网址 / 整篇文档。
+    """
+    material = build_map_material(entries, material_chars=material_chars,
+                                  max_entries=max_entries)
+    linked_text = "、".join(f"[{int(index)}] {str(term).strip()}"
+                            for index, term in list(linked or ())) or "（没有）"
+    words = "、".join(str(term).strip() for _index, term in list(isolated or ()))
+    indexes = "、".join(str(int(index)) for index, _term in list(isolated or ()))
+    return _with_thinking(_with_reasoning({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": MAP_RESCUE_SYSTEM_PROMPT},
+            {"role": "user", "content": MAP_RESCUE_USER_TEMPLATE.format(
+                topic=(topic or "").strip() or "（未命名主题）", material=material,
+                linked=linked_text, isolated=words or "（无）",
+                isolated_index=indexes or "（无）")},
+        ],
+        "temperature": float(temperature),
+        "stream": False,
+        "response_format": {"type": "json_object"},
+    }, reasoning_effort), thinking)
+
+
 def build_map_payload(model: str, entries, *, topic: str = "",
                       material_chars: int = MAP_MATERIAL_CHARS,
                       max_entries: int = MAP_MAX_ENTRIES,
@@ -962,6 +1044,27 @@ class DeepSeekClient:
                                     temperature=temperature,
                                     reasoning_effort=self.reasoning_effort,
                                     thinking=self.thinking)
+        return parse_map_relations(self._extract_content(self._post(payload)))
+
+    def map_isolated_rescue(self, entries, *, topic: str = "",
+                            linked=(), isolated=(),
+                            material_chars: int = MAP_MATERIAL_CHARS,
+                            max_entries: int = MAP_MAX_ENTRIES,
+                            temperature: float = 0.0) -> list:
+        """**补问**（批次 M23）：某个词被核对删成孤立词之后，只针对它再问一次。
+
+        ``entries`` 与 :meth:`map_relations` 完全同一份（当前主题的词条材料）；
+        ``linked`` / ``isolated`` 是 ``[(编号, 词语), ...]``。返回原始候选列表，
+        仍然要交给 ``MapService`` 做端点 / 类型 / 证据校验与**第二次核对**才能画 ——
+        本方法只负责发请求，绝不自己造边。
+        """
+        payload = build_map_rescue_payload(self.model, entries, topic=topic,
+                                           linked=linked, isolated=isolated,
+                                           material_chars=material_chars,
+                                           max_entries=max_entries,
+                                           temperature=temperature,
+                                           reasoning_effort=self.reasoning_effort,
+                                           thinking=self.thinking)
         return parse_map_relations(self._extract_content(self._post(payload)))
 
     def map_verify(self, items, *, topic: str = "",

@@ -5452,6 +5452,11 @@ class ConceptMapWindow:
             return "\n".join(lines)
         counts: dict[str, int] = {}
         for row in verdicts:
+            # 只数**真的没画上去**的那些：判定记录里还留着「上一轮判过、后来被补问
+            # 救回来」的边（``kept`` 是它在最终图上的实际状态），按条数全数一遍会
+            # 虚报「被否掉几条」。
+            if bool(row.get("kept", True)):
+                continue
             label = VERDICT_LABELS.get(str(row.get("verdict") or ""), "")
             if label:
                 counts[label] = counts.get(label, 0) + 1

@@ -1052,6 +1052,16 @@ def _put_map_cache(db, service, topic_id, relations, *, dropped=None,
     return fingerprint
 
 
+class _Missing:
+    """哨兵：``rescue_relations=MISSING`` ⇒ 替身上的补问方法**不存在**。"""
+
+    def __repr__(self) -> str:                     # pragma: no cover - 只在失败信息里出现
+        return "MISSING"
+
+
+MISSING = _Missing()
+
+
 class _MapClient:
     """假导图客户端：记录**实际发出去的受限材料**，绝不联网。
 
@@ -1063,13 +1073,34 @@ class _MapClient:
     """
 
     def __init__(self, relations=None, error=None, gate=None, *,
-                 verdicts=None, verify_error=None, verify_gate=None):
+                 verdicts=None, verify_error=None, verify_gate=None,
+                 rescue_relations=None, rescue_error=None, rescue_verdicts=None):
         self.relations = [dict(item) for item in (relations or [])]
         self.error = error
         self.gate = gate
         self.verdicts = None if verdicts is None else [dict(item) for item in verdicts]
         self.verify_error = verify_error
         self.verify_gate = verify_gate
+        #: 删边兜底（批次 M23）的假响应：
+        #: * ``None``（默认，历史行为）= **这个方法根本不存在** —— 老替身 / 老网关；
+        #: * ``[]`` = 方法在，但模型回空；
+        #: * 别的 = 正常回一份候选。
+        #: 想验证「客户端没有这个方法」而**不是**用 ``None``：那会让替身自己抛
+        #: ``AssertionError``，而兜底的 except 会把任何异常都吞掉 ⇒ 断言被静默吃掉、
+        #: 用例假绿。改用 ``rescue_relations=MISSING``（见下）。
+        if rescue_relations is MISSING:
+            # 「这个方法根本不存在」：先摘掉再取属性，避免落到下面的列表推导里
+            self.map_isolated_rescue = None        # type: ignore[assignment]
+            self.rescue_relations = None
+        else:
+            self.rescue_relations = (
+                None if rescue_relations is None
+                else [dict(item) for item in rescue_relations])
+        self.rescue_error = rescue_error
+        #: 补问那一轮的核对判定（序号是**补问批次内部**的序号）
+        self.rescue_verdicts = (None if rescue_verdicts is None
+                                else [dict(item) for item in rescue_verdicts])
+        self.rescue_calls: list[dict] = []
         self.calls: list[dict] = []
         self.verify_calls: list[dict] = []
 
@@ -1082,6 +1113,20 @@ class _MapClient:
             raise self.error
         return [dict(item) for item in self.relations]
 
+    def map_isolated_rescue(self, entries, *, topic="", linked=(), isolated=(), **_kw):
+        """假补问：只有显式给了 ``rescue_relations`` 才存在这个方法。"""
+        if self.rescue_relations is None:
+            raise AssertionError("假的 _MapClient 没配 rescue_relations，不该被调用")
+        self.rescue_calls.append({
+            "entries": [dict(item) for item in entries],
+            "topic": str(topic),
+            "linked": [tuple(item) for item in linked],
+            "isolated": [tuple(item) for item in isolated],
+        })
+        if self.rescue_error is not None:
+            raise self.rescue_error
+        return [dict(item) for item in self.rescue_relations]
+
     def map_verify(self, items, *, topic="", **_kw):
         items = [dict(item) for item in items]
         self.verify_calls.append({"items": items, "topic": str(topic)})
@@ -1089,6 +1134,11 @@ class _MapClient:
             self.verify_gate.wait(5.0)
         if self.verify_error is not None:
             raise self.verify_error
+        # 删边兜底的补问会**再核对一次**，而候选条数不同（通常只有 1 条）：
+        # 第一轮那条预置判定按序号回填，套到补问的边上会把序号搞错 ——
+        # 因此补问那一轮走 ``rescue_verdicts``（没配就默认「材料支持」）。
+        if len(self.verify_calls) > 1 and self.verdicts is not None:
+            return [dict(item) for item in (self.rescue_verdicts or [])]
         if self.verdicts is not None:
             return [dict(item) for item in self.verdicts]
         return [{"index": int(item.get("index", 0)), "verdict": "supported",
@@ -1549,7 +1599,9 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
                 {"index": 1, "verdict": "contradicted",
                  "note": "材料只是场景描述，并未表达因果。"},
                 {"index": 2, "verdict": "uncertain", "note": "材料不足"},
-            ])
+            # 这一条用例只关心「判定与筛除计数落库、读回来一致」：把补问固定成
+            # 「问得出、但模型回空」，免得补问批的额外判定混进这三条里。
+            ], rescue_relations=[])
             service, _cfg = _map_service(db, client=client)
             delivered: list = []
             service.set_result_sink(lambda *a: delivered.append(a))
@@ -1588,7 +1640,11 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
                              "判定必须随图落库（重开窗口没法再问一次模型）")
             self.assertEqual(json.loads(row["dropped"]),
                              {"verify_supported": 1, "verify_contradicted": 1,
-                              "verify_uncertain": 1},
+                              "verify_uncertain": 1,
+                              # 删边兜底（批次 M23）：过拟合两条候选全被删到零边，
+                              # 补问一次；这一版夹具让模型回空 ⇒ 没救回来，于是
+                              # 只有「问了几次」「还剩几个孤立」两条计数。
+                              "rescue_asked": 1, "rescue_still_alone": 1},
                              "三类判定计数都要落库（含通过核对的条数）")
 
             # 重开：命中缓存 —— 判定与筛除计数都要原样读回来
@@ -1891,6 +1947,205 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
                             and "沿用上次" in str(row.get("note") or "")]
             self.assertEqual(len(carried_rows), 1, "沿用也要有判定记录（点词看原因）")
             self.assertTrue(carried_rows[0]["kept"], "沿用的边确实在图上")
+
+
+class TestMapOrphanRescue(unittest.TestCase):
+    """删边兜底（批次 M23）：核对把某个词删到一个边都不剩时，**为它补问一次**。
+
+    真实缺陷（2026-10-08，主题「项目开发」）：第一轮 9 条候选里那条
+    「项目开发 —包含→ 循环迭代」被判 ``uncertain`` —— 而它是「循环迭代」唯一的关系。
+    删掉之后这个词一条边都没有，图上的 5 个词只画出 4 张、剩下一个降级成「孤立词」
+    那一行，用户看到的就是**文章里明明有的一个环节凭空消失**。
+
+    兜底只负责「再问一次」：新候选照样要过本地校验与第二次独立核对，核对说不行
+    就还是画不上；补问自己失败（网络 / 格式 / 客户端没这个方法）只少救一个词，
+    绝不把一次本来成功的生成变成错误。
+    """
+
+    #: 「项目开发」那一轮的候选 / 判定（同一形状：一条被判不确定、而它是某个词
+    #: **唯一**的边；另一条通过核对）。证据必须是材料里逐字出现的片段，
+    #: 否则本地校验会先把它筛掉 —— 那就测不到核对之后的那一步了。
+    ORPHAN_CANDIDATES = [
+        {"src": 2, "dst": 0, "type": "包含", "reason": "卷积核是卷积的单元",
+         "evidence": "卷积核在输入上滑动"},          # 核对：不确定 → 删（过拟合因此孤立）
+        {"src": 1, "dst": 0, "type": "因果", "reason": "池化导致过拟合",
+         "evidence": "池化用于降采样"},              # 核对：支持 → 画
+    ]
+    ORPHAN_VERDICTS = [
+        {"index": 0, "verdict": "uncertain",
+         "note": "卷积核是卷积的组成部分，不是过拟合的下位概念。"},
+        {"index": 1, "verdict": "supported", "note": "材料支持因果"},
+    ]
+
+    def test_a_client_without_the_rescue_hook_is_left_untouched(self):
+        """客户端没有补问方法（老替身 / 老网关）：退回「不补问」，行为与从前一致。"""
+        from app.map_service import MAP_VALIDATION_VERSION, apply_verdicts, validate_relations
+
+        self.assertGreaterEqual(MAP_VALIDATION_VERSION, 4, "兜底属于 v4 那一版校验")
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(self.ORPHAN_CANDIDATES, verdicts=self.ORPHAN_VERDICTS,
+                                rescue_relations=MISSING)
+            service, _cfg = _map_service(db, client=client)
+            nodes = service.nodes_for_topic(bid)
+            kept, _drops = validate_relations(self.ORPHAN_CANDIDATES, nodes)
+            relations, _counts = apply_verdicts(kept, nodes, self.ORPHAN_VERDICTS)
+            self.assertEqual(len(relations), 1, "前提：删完之后只剩一条边")
+            self.assertFalse(callable(getattr(client, "map_isolated_rescue", None)),
+                             "前提：这个替身真的没有补问方法")
+            out, verdicts, stats = service.rescue_orphan_relations(
+                client, "卷积网络", nodes, relations, [], limit=2)
+            self.assertEqual(client.rescue_calls, [], "没有补问能力 ⇒ 一个都不问")
+            self.assertEqual(stats["asked"], 0)
+            self.assertEqual(stats["still_alone"], 1,
+                             "没问也要如实报「还剩下几个词连不上」")
+            self.assertEqual(len(out), 1, "关系原样返回，不增不减")
+            self.assertEqual(verdicts, [])
+
+    def test_a_word_deleted_to_zero_edges_gets_asked_again(self):
+        with support.temp_db() as db:
+            bid, ids = _map_db(db)
+            client = _MapClient(
+                self.ORPHAN_CANDIDATES, verdicts=self.ORPHAN_VERDICTS,
+                rescue_relations=[
+                    {"src": 0, "dst": 2, "type": "因果", "reason": "卷积核滑动导致过拟合",
+                     "evidence": "卷积核在输入上滑动"},
+                ],
+                # 补问那一轮只有 1 条候选，序号必须按补问批次重新给
+                rescue_verdicts=[
+                    {"index": 0, "verdict": "supported", "note": "材料支持因果"},
+                ])
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered), "结果必须回来")
+            _t, _topic, _fp, status, graph, error = delivered[0]
+            self.assertEqual(str(status), "ok")
+            self.assertIsNone(error)
+            self.assertEqual(len(client.rescue_calls), 1,
+                             "第一轮被删到零边的那个词要**补问一次**")
+            self.assertEqual([term for _pos, term in client.rescue_calls[0]["isolated"]],
+                             ["过拟合"], "点名问的就是那个还没连上的词")
+            self.assertEqual([term for _pos, term in client.rescue_calls[0]["linked"]],
+                             ["卷积", "池化"], "已连上的词要作为「已经有的关系」给出")
+            pairs = {(int(rel.src_entry_id), int(rel.dst_entry_id), rel.rel_type)
+                     for rel in graph.relations}
+            self.assertEqual(pairs, {(int(ids["卷积"]), int(ids["过拟合"]), "因果"),
+                                     (int(ids["池化"]), int(ids["卷积"]), "因果")},
+                             "补问答对的那条边要真的画上去")
+            self.assertEqual(int(graph.dropped["rescue_asked"]), 1)
+            self.assertEqual(int(graph.dropped["rescue_supported"]), 1)
+            self.assertEqual(int(graph.dropped["rescue_still_alone"]), 0)
+            self.assertIn("为孤立词补问 1", graph.summary())
+            self.assertIn("补问答对并画上 1", graph.summary())
+            # 判定记录与**删边前**的关系表同一口径：第一轮两条候选都留档
+            # （没通过的那条 `kept=False`，就是「这个词为什么成了孤立词」的依据，
+            # 界面点孤立词查原因靠它），补问救回来的那条追加在最后。
+            records = {int(item["index"]): item for item in graph.verdicts}
+            self.assertEqual(len(records), 3, "第一轮两条 + 补问一条都要留档")
+            self.assertEqual(records[0]["verdict"], "uncertain")
+            self.assertFalse(records[0]["kept"], "这条被删了，正是它让过拟合成了孤立词")
+            self.assertEqual((int(records[0]["src"]), int(records[0]["dst"])),
+                             (int(ids["过拟合"]), int(ids["卷积"])),
+                             "孤立词查原因时要能指到这条")
+            self.assertEqual(records[1]["verdict"], "supported")
+            self.assertTrue(records[1]["kept"])
+            self.assertEqual((int(records[1]["src"]), int(records[1]["dst"])),
+                             (int(ids["池化"]), int(ids["卷积"])),
+                             "第一轮留下的那条")
+            self.assertEqual(records[2]["verdict"], "supported")
+            self.assertTrue(records[2]["kept"], "补问救回来的边在图上")
+            self.assertEqual((int(records[2]["src"]), int(records[2]["dst"])),
+                             (int(ids["卷积"]), int(ids["过拟合"])),
+                             "判定记录要用真实 entry id，点词才找得到")
+            # 缓存里同样要有救回来的边（重开窗口不该又少一个词）
+            row = list(db.query("SELECT payload FROM map_graphs"))[0]
+            cached = {(int(item["src"]), int(item["dst"]), str(item["type"]))
+                      for item in json.loads(row["payload"])}
+            self.assertIn((int(ids["卷积"]), int(ids["过拟合"]), "因果"), cached,
+                          "救回来的边必须一起落库")
+
+    def test_rescue_that_still_fails_leaves_the_word_alone_and_says_so(self):
+        """补问了但模型还是提不出可用关系：词照旧孤立，计数如实记。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(self.ORPHAN_CANDIDATES, verdicts=self.ORPHAN_VERDICTS,
+                                rescue_relations=[])
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            _t, _topic, _fp, status, graph, error = delivered[0]
+            self.assertEqual(str(status), "ok", "补问没救回来不是生成失败")
+            self.assertIsNone(error)
+            self.assertEqual(len(client.rescue_calls), 1, "补问过就是补问过")
+            self.assertEqual(int(graph.dropped["rescue_asked"]), 1)
+            self.assertEqual(int(graph.dropped["rescue_supported"]), 0)
+            self.assertEqual(int(graph.dropped["rescue_still_alone"]), 1)
+            self.assertIn("补问后仍没有关系 1", graph.summary())
+            self.assertEqual(len(graph.relations), 1,
+                             "补问没救回来 ⇒ 图还是只有那一轮通过核对的那条")
+
+    def test_rescue_failure_never_turns_a_good_generation_into_an_error(self):
+        """补问抛异常：只少救一个词，生成照旧成功。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(self.ORPHAN_CANDIDATES, verdicts=self.ORPHAN_VERDICTS,
+                                rescue_relations=[], rescue_error=RuntimeError("网络断了"))
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            _t, _topic, _fp, status, graph, error = delivered[0]
+            self.assertEqual(str(status), "ok", "补救措施的失败不能变成生成的失败")
+            self.assertIsNone(error)
+            self.assertEqual(int(graph.dropped["rescue_asked"]), 1)
+            self.assertEqual(int(graph.dropped["rescue_still_alone"]), 1)
+
+    def test_rescue_only_asks_about_words_that_really_have_no_edge(self):
+        """没有人孤立时**一次补问都不发**（兜底绝不平白多花两次调用）。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(
+                [{"src": 0, "dst": 1, "type": "包含", "reason": "卷积核是卷积的单元",
+                  "evidence": "卷积核在输入上滑动"},
+                 {"src": 2, "dst": 1, "type": "依赖", "reason": "过拟合依赖池化",
+                  "evidence": "正则化抑制过拟合"},
+                 {"src": 0, "dst": 2, "type": "因果", "reason": "卷积导致过拟合",
+                  "evidence": "正则化抑制过拟合"}],
+                rescue_relations=[])
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            self.assertEqual(client.rescue_calls, [], "三个词都连上了，不该补问")
+            self.assertEqual(len(client.verify_calls), 1, "也不该多一次核对调用")
+
+    def test_the_rescue_budget_is_a_hard_cap(self):
+        """补问有硬上限：孤立词再多也只问 ``limit`` 个（每个词两次调用）。"""
+        from app.map_service import RESCUE_MAX_ORPHANS
+
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient([], rescue_relations=[])   # 三个词全孤立，但补问问不出东西
+            service, _cfg = _map_service(db, client=client)
+            nodes = service.nodes_for_topic(bid)
+            self.assertEqual(len(nodes), 3)
+            relations, verdicts, stats = service.rescue_orphan_relations(
+                client, "卷积网络", nodes, [], [], limit=1)
+            self.assertEqual(stats["asked"], 1, "上限 1 ⇒ 只问一个词")
+            self.assertEqual(len(client.rescue_calls), 1)
+            self.assertEqual(
+                [term for _pos, term in client.rescue_calls[0]["isolated"]],
+                ["卷积"], "按词表顺序取第一个，不是随机挑")
+            self.assertEqual(relations, [])
+            self.assertEqual(verdicts, [])
+            self.assertEqual(stats["still_alone"], 3, "没人被救回来，如实记账")
+            self.assertGreaterEqual(RESCUE_MAX_ORPHANS, 1, "默认上限至少允许救一个词")
 
 
 class TestMapDeterminismAndCarryOver(unittest.TestCase):

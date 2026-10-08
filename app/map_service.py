@@ -76,7 +76,15 @@ MIN_EVIDENCE_CHARS = 6
 #: 缓存里的**校验版本**：候选 → 本地校验 → 独立核对 这一版校验的编号。
 #: 只有版本一致的缓存才允许直接展示；旧的「只做字串证据校验」缓存读到也不命中。
 #: v3：新增「按原文归纳」这条流水线（六种文章逻辑类型 + 分支/实体/关系校验）。
-MAP_VALIDATION_VERSION = 3
+#: v4：关系类型红线（流程步骤之间不许写「包含 / 属于」）+ 核对放宽时序/因果的证据
+#:     口径 + 删边兜底（孤立词补问）。同一份材料在这版下画出来的图与 v3 不同，
+#:     因此 v3 的缓存**一律不命中**，要重新生成才对得上。
+MAP_VALIDATION_VERSION = 4
+
+#: 删边兜底最多为几个孤立词补问（批次 M23）。实测一轮补问只救 0～1 个词，
+#: 但每个词 = 一次候选调用 + 一次核对调用，因此设硬上限，绝不让兜底把一次
+#: 生成的开销翻几倍。
+RESCUE_MAX_ORPHANS = 3
 
 #: 核对判定（唯一权威定义在 :mod:`app.api_client`，这里只做白名单）
 VERDICT_SUPPORTED = "supported"
@@ -1106,6 +1114,11 @@ def dropped_summary(dropped: dict) -> str:
         "verify_uncertain": "核对不确定",
         "verify_contradicted": "核对认为不成立",
         "verify_bad": "核对无效判定",
+        # 删边兜底（批次 M23）：这三个不是「被筛掉几条」，而是「为孤立词补问了几轮
+        # / 救回几个」—— 措辞必须让人一眼看出这是补救，不是又筛掉了东西。
+        "rescue_asked": "为孤立词补问",
+        "rescue_supported": "补问答对并画上",
+        "rescue_still_alone": "补问后仍没有关系",
     }
     parts = [f"{labels.get(key, key)} {int(value)}"
              for key, value in (dropped or {}).items() if int(value or 0) > 0]
@@ -1319,6 +1332,22 @@ def validate_relations(candidates, nodes, *,
     kept, cycles = _drop_layer_cycles(kept)
     dropped["cycle"] += cycles
     return kept, dropped
+
+
+def touched_entry_ids(relations) -> set[int]:
+    """这批关系**碰到的**词 id 集合（纯函数）。
+
+    词在图上是不是「孤立词」，判据只有一个：它的 id 在不在这个集合里 ——
+    界面侧用的是同一口径（``app/ui/concept_map.py`` 里
+    ``isolated = [entry_id for entry_id in ids if entry_id not in touched]``）。
+    批次 M23 的删边兜底（:meth:`MapService.rescue_orphan_relations`）也按它挑人。
+    """
+    touched: set[int] = set()
+    for rel in relations or ():
+        touched.add(int(getattr(rel, "src_entry_id", -1)))
+        touched.add(int(getattr(rel, "dst_entry_id", -1)))
+    touched.discard(-1)
+    return touched
 
 
 def apply_verdicts(relations, nodes, verdicts) -> tuple[list[MapRelation], dict]:
@@ -1898,6 +1927,110 @@ class MapService:
             })
         return items
 
+    def rescue_orphan_relations(self, client, topic_name: str, nodes, relations,
+                                verdicts, *, limit: int = RESCUE_MAX_ORPHANS
+                                ) -> tuple[list, list, dict]:
+        """删边兜底（批次 M23）：被核对删成**孤立词**的那些词，单独补问一次。
+
+        为什么需要它（实测，主题「项目开发」2026-10-09）：第一轮 9 条候选里有 6 条
+        通过、1 条 ``uncertain``、2 条 ``contradicted``。那条 ``uncertain`` 恰好是
+        「循环迭代」唯一的关系 —— 删掉之后这个词一个边都没有，界面把它降级成
+        「孤立词」行，用户看到的就是**文章里明明有的一个环节从图上消失了**。
+        静默降级不可接受，因此这里补一轮：把材料再发一次，**点名**那个还没连上的词，
+        「只为它提候选」；新候选照样要过 :func:`validate_relations` 与**第二次核对**，
+        核对通过才画 —— 兜底只负责「再问一次」，绝不自己造边、不降低任何判据。
+
+        返回 ``(relations, verdicts, stats)``：新边直接**追加**在传入列表尾部（核对的
+        序号是按位置回填的，因此追加不会打乱已有判定）；``stats`` 是给界面 / 日志用的
+        诚实计数（``asked`` / ``candidates`` / ``supported`` / ``still_alone``）。
+
+        任何一步失败（网络 / 格式 / 没配 Key）都只是**少救一个词**，绝不抛给调用方：
+        补问是补救措施，不能把一次本来成功的生成变成错误。
+        """
+        stats = {"asked": 0, "candidates": 0, "supported": 0, "still_alone": 0}
+        relations = list(relations or ())
+        verdicts = list(verdicts or ())
+        nodes = list(nodes or ())
+        if not nodes:
+            return relations, verdicts, stats
+        # 「谁还没连上」这件事与能不能补问无关：先算出来，界面 / 日志要如实说
+        alone_ids = {int(node.entry_id) for node in nodes} - touched_entry_ids(relations)
+        stats["still_alone"] = len(alone_ids)
+        if not callable(getattr(client, "map_isolated_rescue", None)):
+            return relations, verdicts, stats
+        try:
+            budget = max(0, int(limit))
+        except (TypeError, ValueError):       # pragma: no cover - 调用方给的都是 int
+            budget = RESCUE_MAX_ORPHANS
+        if budget <= 0:
+            return relations, verdicts, stats
+
+        entries = self.material_payload(nodes)
+        index_of = {int(node.entry_id): pos for pos, node in enumerate(nodes)}
+        linked = [(pos, str(getattr(node, "term", "") or ""))
+                  for pos, node in enumerate(nodes)
+                  if int(node.entry_id) not in alone_ids]
+        # 没连上的词按词表顺序（与界面上的孤立词网格同一序）
+        alone = [node for node in nodes if int(node.entry_id) in alone_ids]
+        for node in alone[:budget]:
+            stats["asked"] += 1
+            pos = index_of.get(int(node.entry_id))
+            if pos is None:                   # pragma: no cover - 节点一定来自同一份词表
+                continue
+            try:
+                raw = client.map_isolated_rescue(
+                    entries, topic=topic_name,
+                    linked=linked,
+                    isolated=[(pos, str(getattr(node, "term", "") or ""))])
+            except Exception as exc:           # 补救失败：如实记，不打断生成
+                log.info("孤立词补问失败 topic=%s term=%s: %s",
+                         topic_name, getattr(node, "term", ""), redact(str(exc)))
+                continue
+            if not raw:
+                continue
+            fresh, _drops = validate_relations(raw, nodes)
+            known = {_relation_key(rel.rel_type, rel.src_entry_id, rel.dst_entry_id)
+                     for rel in relations}
+            fresh = [rel for rel in fresh
+                     if _relation_key(rel.rel_type, rel.src_entry_id, rel.dst_entry_id)
+                     not in known]
+            if not fresh:
+                continue
+            stats["candidates"] += len(fresh)
+            try:
+                new_verdicts = client.map_verify(self.verify_payload(fresh, nodes),
+                                                 topic=topic_name)
+            except Exception as exc:           # 新一轮核对失败：这一轮整批不要
+                log.info("孤立词补问核对失败 topic=%s term=%s: %s",
+                         topic_name, getattr(node, "term", ""), redact(str(exc)))
+                continue
+            kept, _counts = apply_verdicts(fresh, nodes, new_verdicts)
+            if not kept:
+                continue
+            relations.extend(kept)
+            # 核对的判定按序号回填（序号是**补问批次内部**的，从 0 开始）
+            for item in list(new_verdicts or ()):
+                if not isinstance(item, dict):  # pragma: no cover - 解析层已挡
+                    continue
+                try:
+                    idx = int(item.get("index"))
+                except (TypeError, ValueError):  # pragma: no cover
+                    continue
+                moved = dict(item)
+                # 序号保持**补问批次内部**的（从 0 开始）：调用方把这一批与第一轮
+                # 的判定记录拼起来之后会统一重排 index，这里多挪一次反而会错位。
+                moved["index"] = idx
+                verdicts.append(moved)
+            stats["supported"] += len(kept)
+            for rel in kept:                   # 救上来的词不再算孤立
+                if int(rel.src_entry_id) == int(node.entry_id) or \
+                        int(rel.dst_entry_id) == int(node.entry_id):
+                    linked.append((pos, str(getattr(node, "term", "") or "")))
+                    break
+        # 补问之后**重新算一遍**：救回来的词已经不是孤立词了，剩下的才如实报
+        stats["still_alone"] = len(alone_ids - touched_entry_ids(relations))
+        return relations, verdicts, stats
+
     def node_budget(self) -> int:
         """单次生成最多分析多少个词（``MAP_MAX_ENTRIES`` 是硬上限）。"""
         cap = int(self.config.get_int("map.max_entries", MAP_MAX_ENTRIES))
@@ -2327,11 +2460,39 @@ class MapService:
                     dropped.setdefault("verify_supported", 0)
                 relations, verdicts, carried_keys = self._carry_previous(
                     topic_id, fp, nodes, relations, verdicts)
-                records = verdict_records(relations, nodes, verdicts)
+                base_relations = list(relations)
+                base_verdicts = list(verdicts)
                 if verdicts:
                     relations, checked = apply_verdicts(relations, nodes, verdicts)
                     for key, value in checked.items():
                         dropped[key] = int(dropped.get(key, 0)) + int(value or 0)
+                # 补问前后各切一刀：判定记录与**删边前**的关系表同一口径（第一轮每条
+                # 候选都留档，没通过的 ``kept=False`` 就是「这个词为什么成了孤立词」
+                # 的依据，界面点孤立词查原因靠它）；补问那一批只取真正追加进来的。
+                before_verdicts = len(verdicts)
+                kept_count = len(relations)
+                # 删边兜底（批次 M23）：核对把某个词删到一个边都不剩时，为它**单独
+                # 补问一次**，别让它在图上静默降级成「孤立词」。补救失败只少救一个词。
+                relations, verdicts, rescued = self.rescue_orphan_relations(
+                    client, topic_name, nodes, relations, verdicts)
+                # ★ 判定记录必须与**删边前**的关系表同一口径：拿「删过边的关系表 +
+                # 没删过的整份判定」回填会让后面的序号越界、判定全变空（实测踩过）。
+                records = list(verdict_records(base_relations, nodes, base_verdicts))
+                if rescued.get("asked"):
+                    dropped["rescue_asked"] = int(rescued["asked"])
+                    dropped["rescue_supported"] = int(rescued["supported"])
+                    dropped["rescue_still_alone"] = int(rescued["still_alone"])
+                    # 第一轮那几条判定**原样保留** —— 其中没通过的（``kept=False``）就是
+                    # 「这个词为什么成了孤立词」的唯一依据，界面点孤立词查原因靠它。
+                    # 补问批的判定追加在后面（两批各判各的），最后统一重排 ``index``：
+                    # 判定走的都是 ``src`` / ``dst``（点词查原因），序号只用来显示与
+                    # 排序，重排一次比在两处各挪一次更不容易错位。
+                    later = verdict_records(relations[kept_count:], nodes,
+                                            verdicts[before_verdicts:])
+                    records = records + list(later)
+                    for pos, item in enumerate(records):
+                        item["index"] = pos
+                records = tuple(records)
                 # 诚实的沿用计数：沿用的边也可能在核对阶段被本地校验挡掉，
                 # 那时就是没画出来，界面上不能说「沿用了几条」。
                 carried = sum(1 for rel in relations
