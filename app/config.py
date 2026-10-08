@@ -238,12 +238,24 @@ class Config:
         self.db.set_setting(key, value)
 
     def get_bool(self, key: str, default: bool = False) -> bool:
+        """读一个布尔开关。
+
+        **认不出的写法退回 ``default``，不是退回 False**（批次 M20-A 修的）：用户手改
+        `data\\config.json` 时打错一个字（写成 ``"也许"`` / ``"ture"``），过去会被静默当成
+        「关」—— 一个装上去就再也开不回来的开关比报错更糟。已知的「假」写法
+        （``0`` / ``false`` / ``no`` / ``off``）仍如实算关。
+        """
         v = self.db.get_setting(key)
         if v is None:
             v = DEFAULTS.get(key)
         if v is None:
             return default
-        return str(v).strip() in ("1", "true", "True", "yes", "on")
+        text = str(v).strip()
+        if text in ("1", "true", "True", "yes", "on"):
+            return True
+        if text in ("0", "false", "False", "no", "off"):
+            return False
+        return default
 
     def set_bool(self, key: str, value: bool) -> None:
         self.set(key, "1" if value else "0")
