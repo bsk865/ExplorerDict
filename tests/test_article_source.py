@@ -22,10 +22,12 @@ from email.message import Message
 from urllib.error import HTTPError, URLError
 
 from app.article_source import (
-    DEFAULT_TIMEOUT, MAX_BYTES, MAX_LOCAL_BYTES, MIN_ARTICLE_CHARS, STATUS_SKIP,
-    Article, decode_html, detect_blocked, extract_article_text, fetch_article,
-    is_fetchable_url, is_http_url, is_local_source, local_path_of,
-    read_local_article,
+    CLIP_HEAD_RATIO, DEFAULT_TIMEOUT, MAX_BYTES, MAX_LOCAL_BYTES, MIN_ARTICLE_CHARS,
+    STATUS_SKIP, Article, clip_article, clip_text, decode_html, detect_blocked,
+    extract_article_text, fetch_article, is_fetchable_url, is_http_url, is_local_source,
+    local_name_of, local_path_of, looks_like_file_name, read_local_article,
+    resolve_local_path, source_hint_of_doc_key, source_value_of, strip_title_marks,
+    title_candidates,
 )
 
 
@@ -519,6 +521,166 @@ class TestLocalArticle(unittest.TestCase):
         target = self.write("预算.txt", para("预算"))
         art = read_local_article(str(target), max_bytes=MAX_LOCAL_BYTES)
         self.assertTrue(art.ok, art.note)
+
+
+# ------------------------------------- 标题上的「已修改」标记（批次 M25）
+class TestTitleStateMarks(unittest.TestCase):
+    """真病根（2026-10-09，用户实测）：记事本改过没保存时窗口标题是
+    ``*新建 文本文档.txt - 记事本`` —— 标题里那个 ``*`` 是程序标的「已修改」，
+    磁盘上的文件叫 ``新建 文本文档.txt``。
+
+    ``looks_like_file_name`` 认得出带星号的名字（后缀对），于是**卡在找文件这一步**：
+    ``resolve_local_path`` 拿着 ``*新建 文本文档.txt`` 在桌面 / 文档 / 下载里找不到
+    任何东西，``source_value_of`` 返回空串 ⇒ 一个字都不抓 ⇒ ``articles`` 表空 ⇒
+    导图永远退回「按词条硬凑」。这一组用例把这三个环节逐一钉死。
+    """
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self._tmp.name)
+        self.name = "用例笔记-20261009.txt"
+        self.marked = "*" + self.name
+        (self.root / self.name).write_text(para("标记"), encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_strip_title_marks_only_touches_the_ends(self):
+        self.assertEqual(strip_title_marks(self.marked), self.name)
+        self.assertEqual(strip_title_marks(f"*{self.name} - 记事本"),
+                         f"{self.name} - 记事本")
+        self.assertEqual(strip_title_marks("• 报告.md"), "报告.md")
+        self.assertEqual(strip_title_marks(self.name), self.name,
+                         "没有标记时一个字都不改")
+        self.assertEqual(strip_title_marks(""), "")
+        self.assertEqual(strip_title_marks("*中间*有星号.txt"), "中间*有星号.txt",
+                         "只剥首尾，名字中间的星号不许动")
+
+    def test_title_candidates_offer_the_unmarked_name(self):
+        got = title_candidates(f"*{self.name} - 记事本")
+        self.assertIn(self.name, got, "★ 必须给出去掉标记的那一份")
+        self.assertIn(f"*{self.name}", got, "原样那一份也留着（有的程序名字真带星号）")
+        self.assertEqual(title_candidates(""), ())
+        self.assertEqual(title_candidates("*"), ("*",),
+                         "剥完是空串就不往里塞空的候选值")
+
+    def test_the_suffix_check_was_never_the_blocker(self):
+        self.assertTrue(looks_like_file_name(self.marked),
+                        "认得出是文件名 —— 所以病根不在这儿")
+        self.assertEqual(local_name_of(self.marked), self.marked)
+
+    def test_the_star_is_what_makes_the_file_unfindable(self):
+        self.assertEqual(resolve_local_path(self.marked, extra_dirs=(self.root,)), "",
+                         "带星号的名字在磁盘上找不到（复现旧现象）")
+        self.assertEqual(resolve_local_path(self.name, extra_dirs=(self.root,)),
+                         str(self.root / self.name))
+
+    def test_source_value_of_recovers_the_unmarked_name(self):
+        found = source_value_of("", f"*{self.name} - 记事本",
+                                extra_dirs=(str(self.root),))
+        self.assertEqual(found, self.name,
+                         "★ 标题带 * 也要认出文件：返回**没有星号**的那个名字")
+
+    def test_source_value_of_still_prefers_a_real_url(self):
+        self.assertEqual(source_value_of("https://a.example.com/p", "*x.txt"),
+                         "https://a.example.com/p")
+
+    def test_source_value_of_gives_up_loudly_enough(self):
+        self.assertEqual(source_value_of("", "某个聊天窗口"), "",
+                         "认不出来就是空串，绝不编一个来源")
+
+
+class TestClipText(unittest.TestCase):
+    """正文截断（批次 M26）：留档与「发给模型」共用同一套保头保尾写法。"""
+
+    @staticmethod
+    def body(paragraphs: int = 20) -> str:
+        return "\n\n".join(
+            f"第{i}段：" + "内容" * 100 + f"（本段结论{i}）" for i in range(paragraphs))
+
+    def test_short_text_is_returned_untouched(self):
+        text = self.body(2)
+        self.assertEqual(clip_text(text, 5000), text)
+
+    def test_head_and_tail_both_survive(self):
+        out = clip_text(self.body(20), 900)
+        self.assertIn("第0段", out, "头要留")
+        self.assertIn("（本段结论19）", out, "结论在最后一段，必须留")
+        self.assertNotIn("第10段", out, "中间那些段该被省掉")
+        self.assertIn("（正文过长，中间省略", out)
+        self.assertEqual(out.count("正文过长"), 1, "只写一处说明")
+
+    def test_it_says_how_much_it_dropped(self):
+        text = self.body(20)
+        out = clip_text(text, 900)
+        omitted = int(out.split("中间省略 ")[1].split(" 字")[0])
+        self.assertGreater(omitted, 0)
+        self.assertLessEqual(omitted, len(text), "省掉的字数不可能比原文还多")
+
+    def test_two_ends_say_it_the_same_way(self):
+        """留档（clip_text）与发模型（build_article_material）必须是同一句话。"""
+        from app.api_client import build_article_material
+
+        text = self.body(20)
+        self.assertEqual(clip_text(text, 900, head_ratio=CLIP_HEAD_RATIO),
+                         build_article_material(text, limit=900))
+
+
+class TestClipArticle(unittest.TestCase):
+    """``clip_article`` 就地截断一行留档，并把这件事写进 note。"""
+
+    def test_it_clips_in_place_and_leaves_a_trace(self):
+        article = Article(ok=True, url="u", title="长文", text="。" * 5000, method="http")
+        self.assertTrue(clip_article(article, 1000))
+        self.assertLessEqual(article.chars, 1100)
+        self.assertIn("5000", article.note, "原文多少字要写明")
+        self.assertTrue(article.ok, "截断后它依旧是这一页的原文")
+
+    def test_it_keeps_an_existing_note(self):
+        article = Article(ok=True, url="u", title="长文", text="。" * 5000,
+                          note="取回方式：正文密度", method="http")
+        clip_article(article, 1000)
+        self.assertIn("取回方式：正文密度", article.note)
+        self.assertIn("留档", article.note)
+
+    def test_short_text_is_left_alone(self):
+        article = Article(ok=True, url="u", title="短文", text="短句。" * 10)
+        self.assertFalse(clip_article(article, 1000))
+        self.assertEqual(article.note, "")
+
+
+class TestDocKeySourceHint(unittest.TestCase):
+    """``doc_key`` 里存着**当时的窗口标题**（批次 M26）—— 那是找回文件的最后线索。"""
+
+    def test_it_reads_the_window_title_out_of_an_app_key(self):
+        key = "app:notepad.exe|title:*新建 文本文档.txt - notepad"
+        self.assertEqual(source_hint_of_doc_key(key), "*新建 文本文档.txt - notepad")
+
+    def test_it_reads_the_address_out_of_a_url_key(self):
+        self.assertEqual(source_hint_of_doc_key("url:https://a.example.com/p"),
+                         "https://a.example.com/p")
+
+    def test_it_gives_up_on_keys_without_a_hint(self):
+        self.assertEqual(source_hint_of_doc_key(""), "")
+        self.assertEqual(source_hint_of_doc_key("app:notepad.exe"), "")
+
+    def test_the_hint_recovers_the_file_the_clean_title_lost(self):
+        """真病根：``source_title`` 是清洗过的（``.txt`` 被去掉），doc_key 没有。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = pathlib.Path(raw_root)
+            name = "用例笔记-20261009.txt"
+            (root / name).write_text("正文", encoding="utf-8")
+            clean_title = "*用例笔记-20261009"          # clean_document_title 的产物
+            hint = source_hint_of_doc_key(
+                f"app:notepad.exe|title:*{name} - notepad")
+            self.assertEqual(source_value_of("", clean_title,
+                                             extra_dirs=(str(root),)), "",
+                             "清洗过的标题认不出文件（复现旧现象）")
+            self.assertEqual(source_value_of("", hint, extra_dirs=(str(root),)), name,
+                             "★ doc_key 里的窗口标题认得出来")
 
 
 if __name__ == "__main__":

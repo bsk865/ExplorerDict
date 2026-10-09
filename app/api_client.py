@@ -13,6 +13,7 @@ import socket
 import urllib.error
 import urllib.request
 
+from .article_source import clip_text
 from .logging_setup import get_logger, redact
 from .models import ExplainResult
 
@@ -399,9 +400,16 @@ MAP_TEMPLATE_USER_TEMPLATE = """主题：{topic}
 ARTICLE_LOGIC_TYPES = ("时序", "因果", "对策", "层级", "依赖", "对比")
 #: 实体名上限（**软约束**）：逼模型用文章里的原词，而不要写一整句。
 ARTICLE_ENTITY_CHARS = 10
-#: 发出去的文章正文上限（字符）。论文级长文全发会撑爆上下文，也不能砍掉结论 ——
-#: 超长时在**段落边界**截断，并在材料里如实标注「（正文过长，以下省略）」。
-ARTICLE_TEXT_CHARS = 6000
+#: 发出去的**文章正文**上限（字符，批次 M25：6000 → 30000）。
+#: 为什么是 30000：中文 1 字 ≈ 0.6 token，30000 字 ≈ 1.8 万 token，加上提示词
+#: 与输出，一次调用仍在 deepseek-chat 的 128K 上下文里绰绰有余；而 25 秒的旧
+#: 超时（现默认 120 秒）在长文上根本答不完。常见来源（公众号 / 博客 / 产品文档 /
+#: 论文页）绝大多数在 3 万字以内，一次就能交给模型看清全文。
+#: 超长时**保头也保尾**（见 ARTICLE_TEXT_HEAD_RATIO）：文章的结论与收口句几乎
+#: 总在最后，只留头部会把层级与总结整段砍掉 —— 而导图最需要的恰恰是那几句。
+ARTICLE_TEXT_CHARS = 30000
+#: 超长截断时留给**头部**的比例，剩下的给尾部（0.6 = 头 60% / 尾 40%）。
+ARTICLE_TEXT_HEAD_RATIO = 0.6
 ARTICLE_MAX_BRANCHES = 9
 ARTICLE_MAX_ENTITIES = 60
 
@@ -521,22 +529,25 @@ def build_article_vary_note(step: int) -> str:
 def build_article_material(text: str, *, limit: int = ARTICLE_TEXT_CHARS) -> str:
     """把正文压成提示词材料（纯函数）。
 
-    压缩换行（连续空行只留一个）省 token；超过 ``limit`` 时在**段落边界**截断，
-    并如实写「（正文过长，以下省略）」—— 绝不假装这就是全文，否则模型会把
+    压缩换行（连续空行只留一个）省 token；超过 ``limit`` 时**保头也保尾**
+    （头 :data:`ARTICLE_TEXT_HEAD_RATIO`，其余给尾），中间如实写
+    「（正文过长，中间省略 N 字）」—— 绝不假装这就是全文，否则模型会把
     半篇文章当成完整脉络来归纳。
+
+    为什么必须保尾（批次 M25 改）：文章的主旨句、收口句、「A、B、C 共同构成
+    完整的 X」这类**整体—部分总结**几乎总在最后一段。旧写法 ``body[:cap]``
+    只留头部，等于每次把结论丢掉，图上就少了层级与总结那几条边。
+    两端各自按段落边界收口，免得句子被从中间劈开。
+
+    掐头去尾这件事本身住在 :func:`app.article_source.clip_text`（批次 M26）：
+    留档时按 ``capture.article_max_chars`` 截的是同一个动作，两处必须用同一套
+    写法，否则「省略了多少字」这句话在界面与提示词里会对不上。
     """
     body = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     body = re.sub(r"\n{3,}", "\n\n", body).strip()
     if not body:
         return "（没有取到原文）"
-    cap = max(200, int(limit))
-    if len(body) <= cap:
-        return body
-    cut = body[:cap]
-    at = cut.rfind("\n\n")
-    if at > cap // 2:
-        cut = cut[:at]
-    return cut.rstrip() + "\n（正文过长，以下省略）"
+    return clip_text(body, limit, head_ratio=ARTICLE_TEXT_HEAD_RATIO)
 
 
 def build_article_logic_payload(model: str, logic, *, title: str = "",

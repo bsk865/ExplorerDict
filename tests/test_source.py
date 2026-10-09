@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from unittest import mock
 
 from tests.support import FakeBridge, foreground, make_service, ok_response, temp_db, fail_response
+from app.article_source import STATUS_OK, Article
 from app.capture_service import (complete_word_tail, make_doc_key, normalize_url_key,
                                  strip_page_marker)
 
@@ -573,6 +574,56 @@ class TestSelectionTailCompletion(unittest.TestCase):
                 sel, reason = svc.attempt_capture(10, 10, "double_click")
             self.assertIsNotNone(sel, reason)
             self.assertEqual(sel.term, "shiftin", "位置对不上：不许凭空补字母")
+
+
+class TestArticleArchive(unittest.TestCase):
+    """原文留档的长度上限（批次 M26）。
+
+    留档的意义是「这一页的原文」，所以默认上限给得很宽（20 万字）；但**有人
+    会碰到比上限还长的页面**，那时候必须①真的截断、②如实写明截过多少 ——
+    悄悄少一截会让以后读留档的人以为那就是全文。
+    """
+
+    def test_a_long_article_is_clipped_before_it_is_archived(self):
+        body = "开头：这份文档要解决的问题。\n\n" + ("正文句。" * 2000) + "\n\n收口句：以上就是结论。"
+        calls = []
+
+        def fetcher(url, **_kwargs):
+            calls.append(url)
+            return Article(ok=True, url=url, title="长文", text=body,
+                           status=STATUS_OK, method="http")
+
+        with temp_db() as db:
+            svc, _cfg = make_service(db, article_fetcher=fetcher,
+                                     capture__article_max_chars=2000)
+            svc._fetch_article_worker("url:https://example.com/long",
+                                      "https://example.com/long", "长文")
+            row = db.get_article("url:https://example.com/long")
+
+        self.assertIsNotNone(row, "留档必须写进去（截断不等于放弃）")
+        self.assertLessEqual(int(row["text_chars"]), 2200)
+        self.assertIn("开头：这份文档要解决的问题。", row["text"], "头要留")
+        self.assertIn("收口句：以上就是结论。", row["text"], "结论句在最后，必须留")
+        self.assertIn("留档", row["note"], "截过就要写明，不能悄悄少一截")
+        self.assertEqual(calls, ["https://example.com/long"], "只抓一次")
+
+    def test_a_short_article_is_archived_untouched(self):
+        body = "短文档：" + "正文。" * 100
+
+        def fetcher(url, **_kwargs):
+            return Article(ok=True, url=url, title="短文", text=body,
+                           status=STATUS_OK, method="http")
+
+        with temp_db() as db:
+            svc, _cfg = make_service(db, article_fetcher=fetcher,
+                                     capture__article_max_chars=2000)
+            svc._fetch_article_worker("url:https://example.com/short",
+                                      "https://example.com/short", "短文")
+            row = db.get_article("url:https://example.com/short")
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row["text"], body, "没超上限就一个字都不许改")
+        self.assertEqual(row["note"], "", "没截过就不许留截断说明")
 
 
 if __name__ == "__main__":

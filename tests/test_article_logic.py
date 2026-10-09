@@ -24,19 +24,26 @@
 from __future__ import annotations
 
 import json
+import pathlib
+import tempfile
+import time
 import unittest
+from unittest import mock
 
 from app.api_client import (
     ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, ARTICLE_VARY_MAX,
     ARTICLE_VARY_STEPS, ApiError, article_vary, build_article_logic_payload,
     build_article_material, build_article_vary_note, parse_article_logic,
 )
+from app.article_source import STATUS_OK, STATUS_SKIP, Article
+from app.config import Config
 from app.map_service import (
     LOGIC_MAX_ATTEMPTS, LOGIC_MIN_BRANCHES, LOGIC_TEXT_MATCH_MIN, LogicRelation,
-    MapNode, content_fingerprint, logic_feedback, logic_levels, logic_rel_pairs,
-    logic_flow, logic_text_of, logic_to_map_relations, logic_vary_label,
-    run_logic_graph, validate_logic, vary_plan,
+    MapNode, MapService, content_fingerprint, logic_feedback, logic_levels,
+    logic_rel_pairs, logic_flow, logic_text_of, logic_to_map_relations,
+    logic_vary_label, run_logic_graph, validate_logic, vary_plan,
 )
+from tests.support import temp_db
 
 #: 一篇「先讲问题、再讲方案、最后实测」的时序文章（测试用的最小原文）。
 ARTICLE = (
@@ -134,13 +141,17 @@ class TestArticleMaterial(unittest.TestCase):
         self.assertEqual(build_article_material(""), "（没有取到原文）")
         self.assertEqual(build_article_material(None), "（没有取到原文）")
 
-    def test_long_article_is_cut_at_a_paragraph_and_says_so(self):
-        text = "\n\n".join(f"第{i}段：" + "内容" * 200 for i in range(20))
+    def test_long_article_keeps_head_and_tail_and_says_what_it_dropped(self):
+        text = "\n\n".join(f"第{i}段：" + "内容" * 200 + f"（本段结论{i}）"
+                           for i in range(20))
         out = build_article_material(text, limit=600)
-        self.assertLessEqual(len(out), 600 + len("\n（正文过长，以下省略）"))
-        self.assertTrue(out.endswith("（正文过长，以下省略）"),
-                        "截断了就必须如实写，不许假装这是全文")
-        self.assertNotIn("第19段", out)
+        self.assertIn("正文过长，中间省略", out)
+        self.assertEqual(out.count("正文过长"), 1, "只准标注一次")
+        self.assertIn("第0段", out, "头部要留着（开头交代问题与背景）")
+        self.assertIn("（本段结论19）", out,
+                      "★ 尾部也要留着：主旨句 / 收口句几乎总在最后一段")
+        self.assertNotIn("第19段", out, "中间那段确实被省掉了")
+        self.assertLess(len(out), 600 + 80, "标注本身不该把预算撑破")
 
     def test_payload_pins_temperature_and_carries_terms(self):
         payload = build_article_logic_payload(
@@ -717,6 +728,100 @@ class TestVaryLadder(unittest.TestCase):
                         plan=vary_plan(2, reasoning_effort="", model="deepseek-chat"))
         self.assertEqual(client.vary[0], client.vary[1],
                          "重试是「同一档再想一次」，不许在重试里偷偷换档")
+
+
+class TestArticleBackfill(unittest.TestCase):
+    """老主题的原文补抓（批次 M26）。
+
+    划词那一刻没认出原文（记事本的「已修改」星号、或者当时还没打开自动取原文），
+    不该让这个主题**永远**只能按词条关系画线。规矩与划词那一刻一致：
+
+    * 有线索就补一次、**抓过就不再抓**（成功失败都算抓过）；
+    * ``capture.fetch_article`` 关掉时一个字都不抓；
+    * 本地文件当场读（读盘几毫秒），网址交给后台线程（界面绝不为网络卡住）；
+    * 补上的留档与窗口看到的指纹天然一致 —— 因为窗口读的就是这个方法。
+    """
+
+    KEY = "app:notepad.exe|title:*新建 文本文档.txt - notepad"
+
+    def topic(self, db, *, title="*新建 文本文档", url="", key=None):
+        """建一个有来源线索的主题（一条词条就够）。"""
+        batch = db.create_batch("项目开发体系")
+        db.add_entry(batch_id=batch, term="项目开发", doc_key=key or self.KEY,
+                     source_app="Notepad.exe", source_title=title, source_url=url)
+        return batch
+
+    def test_a_local_file_is_read_on_demand_and_archived(self):
+        body = "项目开发需要一套持续迭代的工作流程，先说清楚边界与交付标准。" * 8
+        with temp_db() as db, tempfile.TemporaryDirectory() as raw:
+            path = pathlib.Path(raw) / "新建 文本文档.txt"
+            path.write_text(body, encoding="utf-8")
+            batch = self.topic(db)
+            with mock.patch("app.map_service.article_source.source_value_of",
+                            return_value=str(path)) as probe:
+                svc = MapService(db, Config(db))
+                row = svc.article_for_topic(batch)
+                again = svc.article_for_topic(batch)
+            self.assertIsNotNone(row, "当场读盘就该拿到原文")
+            self.assertEqual(row["text"], body)
+            self.assertEqual(row["status"], STATUS_OK)
+            self.assertIn("新建 文本文档", row["title"], "留档记着是哪一篇")
+            self.assertEqual(again["text"], body, "第二次直接读留档，不再抓")
+            self.assertEqual(probe.call_count, 1,
+                             "已经能用了就不再解析来源、更不重抓")
+
+    def test_a_page_that_was_already_tried_is_never_tried_again(self):
+        with temp_db() as db:
+            batch = self.topic(db)
+            db.put_article(self.KEY, Article(ok=False, url="", title="*新建 文本文档",
+                                             status=STATUS_SKIP,
+                                             note="这一页没有可归纳的正文（桌面软件 / 手工输入）"))
+            with mock.patch("app.map_service.article_source.source_value_of") as probe:
+                row = MapService(db, Config(db)).article_for_topic(batch)
+            self.assertIsNotNone(row, "抓过的那一行照样返回（调用方自己看 status）")
+            self.assertEqual(row["status"], STATUS_SKIP)
+            self.assertFalse(probe.called, "抓过就不再解析来源、更不重抓")
+            self.assertEqual(db.get_article(self.KEY)["note"],
+                             "这一页没有可归纳的正文（桌面软件 / 手工输入）",
+                             "一个字都不许改动")
+
+    def test_nothing_is_fetched_when_the_switch_is_off(self):
+        with temp_db() as db:
+            batch = self.topic(db)
+            cfg = Config(db)
+            cfg.set("capture.fetch_article", "0")
+            with mock.patch("app.map_service.article_source.source_value_of") as probe:
+                row = MapService(db, cfg).article_for_topic(batch)
+            self.assertIsNone(row, "关掉就是没有原文，不许偷偷抓")
+            self.assertFalse(probe.called)
+            self.assertIsNone(db.get_article(self.KEY))
+
+    def test_a_web_page_is_fetched_in_the_background(self):
+        body = "网页正文。" * 60
+        calls = []
+
+        def fake_fetch(value, title="", **_kw):
+            calls.append((value, title))
+            return Article(ok=True, url=value, title=title, text=body,
+                           status=STATUS_OK, method="http")
+
+        with temp_db() as db:
+            batch = self.topic(db, title="某篇文章", url="https://example.com/p")
+            with mock.patch("app.map_service.article_source.fetch_source",
+                            side_effect=fake_fetch):
+                svc = MapService(db, Config(db))
+                row = svc.article_for_topic(batch)
+                self.assertIsNone(row, "网络请求不许挡住这一轮：本轮还是老路")
+                for _ in range(200):
+                    if db.get_article(self.KEY) is not None:
+                        break
+                    time.sleep(0.02)
+                again = svc.article_for_topic(batch)
+            stored = db.get_article(self.KEY)
+        self.assertIsNotNone(stored, "后台线程抓完要写留档")
+        self.assertEqual(stored["text"], body)
+        self.assertEqual(calls, [("https://example.com/p", "某篇文章")])
+        self.assertEqual(again["text"], body, "抓到了：下一次就是按原文归纳")
 
 
 if __name__ == "__main__":  # pragma: no cover

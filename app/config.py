@@ -8,7 +8,11 @@ DEFAULTS: dict[str, str] = {
     # API
     "api.base_url": "https://api.deepseek.com/v1",
     "api.model": "deepseek-chat",
-    "api.timeout": "25",
+    # 单次请求超时（秒）。默认 120 而不是 25（批次 M25）：整篇归纳那一轮要把
+    # 几千到几万字的正文发出去，而请求体里全是 ``stream=False``（非流式 =
+    # 等模型把整段话写完才返回），25 秒在长文上必然超时。实测口径见
+    # 任务交接.md「文章大小与超时」。
+    "api.timeout": "120",
     # 推理强度：空串 = 请求体里根本不带 reasoning_effort（兼容所有网关，
     # 包括不认识这个字段的第三方端点）。**档位随模型不同**（DeepSeek 官方只有
     # low / high / max，思考模式默认 high），界面档位见 effort_choices()。
@@ -33,6 +37,11 @@ DEFAULTS: dict[str, str] = {
     # 不挡解释；同一页只抓一次，抓不到就如实记「未取到原文」。
     # 关掉它 = 完全不联网取原文，导图退回「词与词的关系」那一套。
     "capture.fetch_article": "1",
+    # 留档正文的**字数上限**（字符，批次 M25）。200000 字 ≈ 12 万 token，仍在
+    # deepseek-chat 的 128K 上下文之内；再长就只是防呆（万一抓到一本书 /
+    # 一个日志文件）。**发模型时另有一道更小的上限**（ARTICLE_TEXT_CHARS），
+    # 两个数各管各的：留档尽量全留，发出去的按预算截。
+    "capture.article_max_chars": "200000",
     # 前台环境门控：默认放开普通窗口，只挡「手动游戏模式 / 已知游戏进程 / 全屏」。
     "gate.game_mode": "0",
     # 界面
@@ -408,6 +417,17 @@ class Config:
         「按词条关系生成」，界面上会如实写明没取到原文。
         """
         return self.get_bool("capture.fetch_article", True)
+
+    @property
+    def article_max_chars(self) -> int:
+        """留档正文的**字数上限**（批次 M25）。
+
+        管的是「抄一份留档」这件事，不是「发多少给模型」（那个是
+        :data:`app.api_client.ARTICLE_TEXT_CHARS`）。下限 2000 是为了不让人把
+        上限调到几百字把留档弄残；上限 200 万只是防呆。
+        """
+        return max(2000, min(2_000_000,
+                             self.get_int("capture.article_max_chars", 200_000)))
 
     # ---------------------------------------------------------- 门控
     @property

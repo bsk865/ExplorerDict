@@ -718,12 +718,37 @@ def is_local_source(url: str) -> bool:
     return bool(local_path_of(url))
 
 
+#: 窗口标题上那种「当前状态」标记（纯装饰，不是文件名的一部分）。
+#: 记事本改过还没保存时标题前面挂一个 ``*``；有的编辑器用 ``•`` / ``●``。
+#: 只认这几个 —— 加得太野会把一个正常以 ``*`` 开头的文件名改得认不出来。
+TITLE_STATE_MARKS = "*•●∙"
+
+
+def strip_title_marks(value: str) -> str:
+    """剥掉窗口标题首尾的「未保存 / 已修改」标记（纯函数）。
+
+    真病根（批次 M25 实测复现）：记事本改过没保存时，窗口标题是
+    ``*新建 文本文档.txt - 记事本``；磁盘上的文件叫 ``新建 文本文档.txt``。
+    带星号的名字 :func:`looks_like_file_name` 认得出（后缀对、字符也像），
+    但 :func:`resolve_local_path` 拿着带星号的名字在桌面里找不到任何文件，
+    于是 :func:`source_value_of` 返回空串 ⇒ **一个字都不抓**：留档里连一行
+    「没找到」都没有，用户看到的现象就是「导图永远按词条硬凑」。
+
+    实测（2026-10-09，本机）：``source_value_of('', '*新建 文本文档.txt - 记事本')``
+    → ``''``；把星号剥掉之后 → ``'新建 文本文档.txt'`` → 桌面上的文件确实读到了。
+    """
+    text = (value or "").strip()
+    return text.strip(TITLE_STATE_MARKS).strip()
+
+
 def title_candidates(title: str) -> tuple[str, ...]:
-    """窗口标题里的**候选来源值**（纯函数）：原样 + 按 ``" - "`` 拆出来的每一段。
+    """窗口标题里的**候选来源值**（纯函数）：原样 + 按 ``" - "`` 拆出来的每一段，
+    每段再带上一个**剥掉状态标记**的版本（批次 M25）。
 
     记事本 / Typora / VSCode 这类程序报不出 URL，窗口标题往往是
     「文件全路径 - 程序名」或「文件名 - 程序名」；按 ``" - "`` 拆开逐段试，
-    才认得出哪一段是文件。
+    才认得出哪一段是文件。剥标记的那一份必须一起给：标题上的 ``*`` 是程序标的
+    「已修改」记号，磁盘上的真名里没有它（见 :func:`strip_title_marks`）。
     """
     text = (title or "").strip()
     if not text:
@@ -731,8 +756,9 @@ def title_candidates(title: str) -> tuple[str, ...]:
     parts = [text, *(part.strip() for part in text.split(" - "))]
     out: list[str] = []
     for part in parts:
-        if part and part not in out:
-            out.append(part)
+        for candidate in (part, strip_title_marks(part)):
+            if candidate and candidate not in out:
+                out.append(candidate)
     return tuple(out)
 
 
@@ -964,3 +990,95 @@ def fetch_article(url: str, *, timeout: float = DEFAULT_TIMEOUT,
     return Article(ok=True, url=target, title=title, text=text,
                    status=STATUS_OK, note="", method=method,
                    raw_bytes=len(raw), charset=charset)
+
+
+# --------------------------------------------------------------------- 长度口径
+#
+# 正文有**两道**口子，各管各的（批次 M26）：
+#
+# * **留档**（:func:`clip_article`）：取回来的正文写进 ``articles`` 表之前按
+#   ``capture.article_max_chars``（默认 20 万字）留一份。留档的意义就是「这一页
+#   的原文」，宁可长一点：3 万字的一篇文章被砍成 3 万，用户以后再想按原文归纳
+#   就永远少一截。20 万字能盖住绝大多数文章，再长就是拿数据库换一个几乎不会
+#   被读到的尾巴。
+# * **发给模型**（``app/api_client.py`` 的 ``ARTICLE_TEXT_CHARS``）：模型窗口有限，
+#   只发 3 万字，超了保头保尾。
+#
+# 两处共用 :func:`clip_text`，所以「省略了多少字」这句话在两边写法完全一致 ——
+# 用户在界面上看到的数字和实际发出去的内容对得上。
+
+#: 保头保尾时头部占的比例（批次 M25 定下）。文章的开头交代问题与做法，结尾给
+#: 结论，中间往往是例子与推导 —— 掐中间损失最小。
+CLIP_HEAD_RATIO = 0.6
+
+
+def clip_text(text: str, limit: int, *, head_ratio: float = CLIP_HEAD_RATIO) -> str:
+    """把正文压到 ``limit`` 字以内：**保头保尾**，中间明说省了多少字。
+
+    为什么不是「从头截到 limit」（旧写法）：文章最要紧的两句话是开头（要解决
+    什么问题）与收口（所以结论是什么），而收口句永远在最后。只留开头等于把结论
+    丢掉 —— 归纳出来的图会缺一整条因果链（批次 M25 的真实病根）。
+
+    段落边界只在「省下的长度值得」时才收口（收口点必须过半），否则宁可按字符切，
+    免得为了一行空行把大段正文浪费掉。
+    """
+    body = str(text or "")
+    cap = max(200, int(limit))
+    if len(body) <= cap:
+        return body
+    head_len = max(1, int(cap * head_ratio))
+    tail_len = max(1, cap - head_len)
+    head = body[:head_len]
+    at = head.rfind("\n\n")
+    if at > head_len // 2:
+        head = head[:at]
+    tail = body[len(body) - tail_len:]
+    at = tail.find("\n\n")
+    if 0 <= at < tail_len // 2:
+        tail = tail[at + 2:]
+    omitted = max(0, len(body) - len(head) - len(tail))
+    return (head.rstrip()
+            + f"\n（正文过长，中间省略 {omitted} 字）\n"
+            + tail.lstrip())
+
+
+def clip_article(article: "Article", limit: int) -> bool:
+    """**就地**把这一行留档的正文压到 ``limit`` 字以内；返回是否真的截过。
+
+    只动 ``text``（``chars`` 属性跟着变）并把这件事写进 ``note`` ——
+    留档被截过是**事实**，得留下痕迹，不能悄悄少一截字数让以后的人以为
+    那就是全文。截断后仍然 ``status='ok'``：它依旧是这一页的原文，只是长了。
+    """
+    if not isinstance(article, Article) or not article.text:
+        return False
+    original = len(article.text)
+    clipped = clip_text(article.text, limit)
+    if clipped == article.text:
+        return False
+    article.text = clipped
+    note = str(article.note or "").strip()
+    extra = f"原文 {original} 字，留档按上限 {int(limit)} 字保头保尾"
+    article.note = f"{note}；{extra}" if note else extra
+    return True
+
+
+def source_hint_of_doc_key(doc_key: str) -> str:
+    """从文档键里取回「当时那一页的地址或窗口标题」（批次 M26）。
+
+    为什么需要它：``entries.source_title`` 记的是**清洗过的文档标题**
+    （:func:`app.source_enrich.clean_document_title` 会把 ``.txt`` 这类扩展名去掉），
+    于是记事本里的 ``*新建 文本文档.txt - notepad`` 只剩 ``*新建 文本文档`` ——
+    拿它去磁盘上找文件永远找不到。而 ``doc_key`` 里**逐字**存着当时的窗口标题
+    （``app:notepad.exe|title:*新建 文本文档.txt - notepad``），那才是能找回文件
+    的依据。只做字符串解析，不碰磁盘、不联网：解析不出线索就返回 ``""``。
+    """
+    key = str(doc_key or "").strip()
+    if not key:
+        return ""
+    if key.startswith("url:"):
+        return key[len("url:"):].strip()
+    marker = "|title:"
+    at = key.find(marker)
+    if at < 0:
+        return ""
+    return key[at + len(marker):].strip()

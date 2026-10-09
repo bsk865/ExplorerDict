@@ -39,6 +39,7 @@ import re
 import threading
 from dataclasses import dataclass, field, replace
 
+from . import article_source
 from .api_client import (
     ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, LOGIC_TYPES as _API_LOGIC_TYPES,
     MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES, ApiError, article_vary,
@@ -98,8 +99,17 @@ RESCUE_MAX_ORPHANS = 3
 #: 第零轮「逻辑链分析」发出去的正文上限（字符，批次 M24）。
 #: 这一轮存在的意义就是让模型看见全文，但也不能把论文级长文整篇发出去 ——
 #: 4000 字足够覆盖用户实际在用的短文，超长时按 :func:`app.api_client.build_article_material`
-#: 在段落边界截断，并在材料里如实标注「（正文过长，以下省略）」。
+#: 保头保尾（批次 M25 改：原先只留头部，把文章最末的收口句丢了）。
+#: **注意**：这条路（按词条上下文拼回一篇）本来就只有几个 240 字窗口；真正读
+#: 整篇的是「按原文归纳」那条路，它的上限是 :data:`app.api_client.ARTICLE_TEXT_CHARS`。
 LOGIC_CHAIN_TEXT_CHARS = 4000
+
+#: 导图这一路**单次请求超时的下限**（秒，批次 M25）。
+#: 为什么要有下限：整篇归纳那一轮把几千到几万字的正文一次性发出去，而请求是
+#: 非流式的（等模型写完才返回）—— 用户库里存着老默认值 ``api.timeout=25``
+#: 时，长文必然「读取超时」，而界面上只会说一句请求失败。用户把超时调小是他的
+#: 自由，但导图这几轮不接受比这更短的口径（见 :meth:`MapService.make_client`）。
+MAP_MIN_TIMEOUT = 120.0
 
 #: 核对判定（唯一权威定义在 :mod:`app.api_client`，这里只做白名单）
 VERDICT_SUPPORTED = "supported"
@@ -2199,6 +2209,9 @@ class MapService:
         self._on_result = on_result
         self._lock = threading.RLock()
         self._inflight: set[tuple[int, str]] = set()
+        #: 正在补抓原文的 ``doc_key``（批次 M26）：同一页连点两次「生成导图」
+        #: 不该起两个线程去抓同一篇。
+        self._article_pending: set[str] = set()
         self._next_token = 1
 
     # ------------------------------------------------------------- 回调
@@ -2220,14 +2233,22 @@ class MapService:
                     timeout: float | None = None, api_key: str | None = None,
                     reasoning_effort: str | None = None,
                     thinking: str | None = None):
-        """构造客户端（测试替换本方法注入假客户端，绝不联网）。"""
+        """构造客户端（测试替换本方法注入假客户端，绝不联网）。
+
+        ★ 超时**取配置与 :data:`MAP_MIN_TIMEOUT` 里的大者**（批次 M25）：导图这一路
+        每一步都要把整篇文章发下去（第零轮读全文、第一轮归纳、核对），而请求体是
+        非流式的 —— 模型写完才返回。用户库里可能还存着老默认值 ``api.timeout=25``
+        （``Config.__init__`` 只补缺失的键，不会覆盖已存的值），25 秒在长文上必然
+        超时。宁可等久一点，也不要答不完。
+        """
         from .api_client import DeepSeekClient
 
+        wanted = self.config.timeout if timeout is None else float(timeout)
         return DeepSeekClient(
             base_url=self.config.base_url if base_url is None else base_url,
             model=self.config.model if model is None else model,
             api_key=self.config.api_key() if api_key is None else api_key,
-            timeout=self.config.timeout if timeout is None else timeout,
+            timeout=max(MAP_MIN_TIMEOUT, wanted),
             reasoning_effort=self.config.reasoning_effort
             if reasoning_effort is None else reasoning_effort,
             # 导图要确定输出：DeepSeek 系默认关掉思考模式（见 Config.map_thinking）
@@ -2277,7 +2298,7 @@ class MapService:
         nodes.sort(key=lambda item: int(item.entry_id))
         return nodes
 
-    def article_for_topic(self, topic_id: int):
+    def article_for_topic(self, topic_id: int, *, ensure: bool = True):
         """这个主题对应的**原文留档**（``articles`` 表的一行；没有 → ``None``）。
 
         怎么找：主题就是一批词条（``entries.batch_id``），词条上带着 ``doc_key``
@@ -2289,7 +2310,19 @@ class MapService:
         **绝不**拿词条上下文硬编一篇原文出来）：这批词条一个 ``doc_key`` 都没有
         （老库 / 手工建的批次）、从没抓过、或者抓过但失败了（``status='failed'``
         的行**不是** ``None``，调用方要看 ``status``）。
+
+        ``ensure=True``（默认，批次 M26）时，读不到可用留档就**再给一次机会**
+        （见 :meth:`_ensure_article`）：划词那一刻没认出原文（例如记事本标题上
+        那个「已修改」星号）不该让这个主题**永远**只能按词条关系画线。补抓只
+        发生在「词条里记着来源、而且从没抓过」时，绝不复写已有的行。
         """
+        row = self._article_row(topic_id)
+        if ensure and not self._article_usable(row):
+            row = self._ensure_article(topic_id, row) or row
+        return row
+
+    def _article_row(self, topic_id: int):
+        """纯读留档：按 ``doc_key`` 找，**能用的优先**（找不到 → ``None``）。"""
         if not topic_id:
             return None
         try:
@@ -2299,6 +2332,7 @@ class MapService:
         except Exception:  # pragma: no cover - 读库失败按「没有原文」处理
             log.exception("读取主题的 doc_key 失败 topic=%s", topic_id)
             return None
+        fallback = None
         for row in rows:
             key = str(row["doc_key"] or "").strip()
             if not key:
@@ -2308,9 +2342,162 @@ class MapService:
             except Exception:  # pragma: no cover
                 log.exception("读取原文留档失败 doc_key=%s", key)
                 continue
+            if article is None:
+                continue
+            if self._article_usable(article):
+                return article
+            # 抓失败的那一行不算「有原文」，但也要留着：同一批词条换过页面时，
+            # 后面的 doc_key 也许真有一篇能用的原文（下面继续找）。
+            if fallback is None:
+                fallback = article
+        return fallback
+
+    #: 补抓时最多看几个 ``doc_key``（同一批词条通常只有一个；给几个是防
+    #: 「同一个主题里换过页面」的批次）。
+    ARTICLE_LOOKUP_KEYS = 5
+
+    def _ensure_article(self, topic_id: int, current):
+        """读不到原文时**补一次**：从词条记着的来源把这一页的正文取回来。
+
+        只在四件事同时成立时才动手（少一件都原样返回）：
+
+        1. ``capture.fetch_article`` 开着 —— 用户关掉了自动取原文就绝不偷偷抓；
+        2. 这一批词条里某一条有 ``doc_key``；
+        3. 那个 ``doc_key`` 在 ``articles`` 里**查无此行** —— 抓过（哪怕失败）
+           就绝不重抓，这与划词那一刻同一条规矩（见 ``maybe_fetch_article``）；
+        4. 能从这个 ``doc_key`` 或词条的 ``source_url`` / ``source_title`` 里解析出
+           一个**来源值**。
+
+        来源值怎么来：先看词条记的 ``source_url`` + ``source_title``；解析不出来，
+        再从 ``doc_key`` 里取回**当时的窗口标题**（:func:`app.article_source.
+        source_hint_of_doc_key`）—— ``source_title`` 是清洗过的（扩展名被去掉），
+        记事本那条只留下 ``*新建 文本文档``，而 ``doc_key`` 里逐字存着
+        ``*新建 文本文档.txt - notepad``，那才是能在磁盘上找到文件的依据。
+
+        **本地文件当场读**（读盘几毫秒，UI 线程可以接受）；**网址交给后台线程**
+        抓一次、抓完写留档，这一轮仍走「没有原文」那条路并如实说明 —— 界面
+        绝不为了一个网络请求卡住。返回新写的留档行（没动手 / 没成功 → ``None``）。
+        """
+        if not topic_id or not self.config.fetch_article:
+            return None
+        try:
+            keys = self._topic_doc_keys(topic_id)
+        except Exception:  # pragma: no cover - 读库失败按「没有线索」处理
+            log.exception("补抓原文时读取 doc_key 失败 topic=%s", topic_id)
+            return None
+        for key, title, url in keys[:self.ARTICLE_LOOKUP_KEYS]:
+            try:
+                if self.db.get_article(key) is not None:
+                    continue                      # 抓过就不再抓（成功失败都算）
+            except Exception:  # pragma: no cover
+                log.exception("补抓原文前查留档失败 doc_key=%s", key)
+                continue
+            value = self._article_source_value(key, title, url)
+            if not value:
+                continue
+            if article_source.is_http_url(value):
+                if self._start_article_fetch(key, value, title):
+                    log.info("主题 %s 的原文不在本地留档里，已开始后台取回：%s",
+                             topic_id, key)
+                    return None                  # 这一轮按老路走，抓到了下次就是原文
+                continue
+            article = self._read_article_now(key, value, title)
             if article is not None:
                 return article
         return None
+
+    def _topic_doc_keys(self, topic_id: int) -> list[tuple[str, str, str]]:
+        """这一批词条的 ``(doc_key, source_title, source_url)``（去重，保序）。"""
+        rows = self.db.query(
+            "SELECT doc_key, source_title, source_url FROM entries "
+            "WHERE batch_id=? AND doc_key<>'' ORDER BY id",
+            (int(topic_id),))
+        out: list[tuple[str, str, str]] = []
+        seen: set[str] = set()
+        for row in rows:
+            key = str(row["doc_key"] or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append((key, str(row["source_title"] or ""), str(row["source_url"] or "")))
+        return out
+
+    @staticmethod
+    def _article_source_value(doc_key: str, title: str, url: str) -> str:
+        """能拿去取原文的来源值（认不出来 → ``""``，绝不编一个）。"""
+        value = article_source.source_value_of(url or "", title or "")
+        if value:
+            return value
+        hint = article_source.source_hint_of_doc_key(doc_key)
+        return article_source.source_value_of("", hint) if hint else ""
+
+    def _read_article_now(self, doc_key: str, value: str, title: str):
+        """本地来源：当场读盘、写留档、返回新行（读不到 → ``None``）。"""
+        try:
+            article = article_source.fetch_source(value, title)
+        except Exception:  # pragma: no cover - 读盘异常不该炸窗口
+            log.exception("补抓本地原文失败 doc_key=%s", doc_key)
+            return None
+        return self._keep_article(doc_key, article, title)
+
+    def _start_article_fetch(self, doc_key: str, value: str, title: str) -> bool:
+        """网址来源：起一个后台线程抓一次（已在抓 / 起不来 → ``False``）。"""
+        with self._lock:
+            if doc_key in self._article_pending:
+                return False
+            self._article_pending.add(doc_key)
+        thread = threading.Thread(
+            target=self._article_worker, args=(doc_key, value, title),
+            name="map-article", daemon=True)
+        try:
+            thread.start()
+        except Exception:  # pragma: no cover - 起不了线程就退回老路
+            with self._lock:
+                self._article_pending.discard(doc_key)
+            log.exception("补抓原文的线程起不来 doc_key=%s", doc_key)
+            return False
+        return True
+
+    def _article_worker(self, doc_key: str, value: str, title: str) -> None:
+        """后台线程：抓一次、写留档，任何异常都不许冒出来（跑在独立线程里）。"""
+        try:
+            article = article_source.fetch_source(value, title)
+        except Exception:  # pragma: no cover - 网络异常一律记流水账
+            log.exception("补抓原文失败 doc_key=%s", doc_key)
+            article = None
+        finally:
+            with self._lock:
+                self._article_pending.discard(doc_key)
+        if article is None or not getattr(article, "ok", False):
+            note = getattr(article, "note", "") or "补抓原文失败（详见日志）"
+            log.info("补抓原文未成功 doc_key=%s：%s", doc_key, note)
+            return
+        self._keep_article(doc_key, article, title)
+        log.info("补抓原文成功 doc_key=%s：%d 字（%s）",
+                 doc_key, article.chars, article.method)
+
+    def _keep_article(self, doc_key: str, article, title: str):
+        """把取回的原文写进留档（含长度上限）；返回写进去的那一行。"""
+        if article is None:
+            return None
+        if not getattr(article, "title", "") and title:
+            article.title = title
+        try:
+            article_source.clip_article(article, self.config.article_max_chars)
+        except Exception:  # pragma: no cover - 截断不该挡住留档
+            log.exception("补抓原文截断失败 doc_key=%s", doc_key)
+        try:
+            self.db.put_article(doc_key, article)
+        except Exception:  # pragma: no cover - 写库失败就当没抓到
+            log.exception("补抓原文写入失败 doc_key=%s", doc_key)
+            return None
+        if not getattr(article, "ok", False):
+            log.info("补抓原文未成功 doc_key=%s：%s", doc_key, article.note)
+            return None
+        try:
+            return self.db.get_article(doc_key)
+        except Exception:  # pragma: no cover
+            return None
 
     def _article_usable(self, article) -> bool:
         """这一行留档能不能用来归纳（见 :func:`article_is_usable`）。"""

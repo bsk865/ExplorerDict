@@ -100,7 +100,7 @@ class SettingsDialog:
         #: 单选框直接绑裸值，界面文案只出现在按钮与说明行里。可选的档位由模型名决定，
         #: 见 :meth:`_rebuild_efforts`。
         self.var_effort = tk.StringVar(value=self.cfg.reasoning_effort)
-        self.var_timeout = tk.StringVar(value=str(self.cfg.get_int("api.timeout", 25)))
+        self.var_timeout = tk.StringVar(value=str(self.cfg.get_int("api.timeout", 120)))
         self.var_key = tk.StringVar(value="")
 
         #: 服务商一键模板：点一下只**预填**地址与模型名（不落库、不联网、不含任何
