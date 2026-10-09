@@ -89,7 +89,12 @@ MIN_EVIDENCE_CHARS = 6
 #: v5：生成流程最前面加**第零轮「逻辑链分析」**（先通读全文写出骨架，骨架作为
 #:     第一轮的前置认知；用户要求这一步不可省略）。方向定调变了 ⇒ 同一份材料在
 #:     v4 与 v5 下画出来的图会不同，v4 缓存**一律不命中**。
-MAP_VALIDATION_VERSION = 5
+#: v6：逻辑图 → 导图的**词表断层**修好（批次 M26）——「层级」按骨架的
+#:     ``hierarchy`` / ``synthesis`` 定方向后折成「包含」，「对比」折成「对照」，
+#:     「类型不认识」与「端点不在本主题」从此分开计数。同一篇文章在 v5 下画出来的
+#:     图会**少掉整块层级结构**（真机实测：一章有 3 条层级边全被丢），因此 v5 的
+#:     缓存一律不命中，要重新生成才对得上。
+MAP_VALIDATION_VERSION = 6
 
 #: 删边兜底最多为几个孤立词补问（批次 M23）。实测一轮补问只救 0～1 个词，
 #: 但每个词 = 一次候选调用 + 一次核对调用，因此设硬上限，绝不让兜底把一次
@@ -136,6 +141,12 @@ RESULT_ERROR = "error"
 #: 里回一个）。**注意**：真正画线的类型是上面的 :data:`REL_TYPES`，两套是
 #: 两回事 —— 文章是「时序」，画出来的线仍然叫「时序」（:data:`REL_TYPES` 已含）。
 LOGIC_TYPES: tuple[str, ...] = ("时序", "因果", "对策", "层级", "依赖", "对比")
+#: 归纳提示词里「整体—部分」那一种（批次 M26）。**导图那边没有「层级」这个名字**：
+#: 它只认「包含 / 属于」（:data:`REL_TYPES`）。两套词表对不上，模型按文章写出来的
+#: 层级边就会一条都画不出来 —— 见 :func:`logic_to_map_relations`。
+LOGIC_LEVEL_TYPE = "层级"
+#: 同一件事在两套词表里的两个名字（批次 M26）：逻辑图写「对比」，导图叫「对照」。
+LOGIC_MAP_TYPE_ALIASES: dict[str, str] = {"对比": "对照"}
 #: 有先后顺序的三种：它们的边**必须顺着分支顺序走**（逆着走 = 把文章的脉络讲反了）。
 LOGIC_ORDERED_TYPES = frozenset({"时序", "因果", "对策"})
 #: 至少要留几个分支才算归纳（只有一条分支 = 没分，等于没归纳）。
@@ -696,21 +707,164 @@ def logic_rel_pairs(graph) -> list[dict]:
     return pairs
 
 
-def logic_to_map_relations(graph, nodes) -> tuple[list[MapRelation], list[str]]:
+LEVEL_MAX_HOPS = 8          # 往上找层级最多走几跳（骨架坏了也不至于转不出来）
+
+
+def _level_key(name: str) -> str:
+    """层级名字的轻量归一：去掉空白 + **字符排序**（纯函数）。
+
+    真机实测同一件事有「拆解任务」与「任务拆解」两种写法（批次 M26），
+    字符序一样就当同一个词。只做这一种归一 —— 不做真正的模糊匹配：
+    对不上就承认对不上，比硬猜一个方向把线画到错的卡片上强。
+    """
+    text = "".join(str(name or "").split())
+    if len(text) < 2:
+        return text
+    return "".join(sorted(text))
+
+
+def hierarchy_index(chain) -> dict:
+    """骨架里的「整体—部分」索引（纯函数）。
+
+    返回 ``{"parts_of", "wholes_of", "depth", "names"}``：键都是
+    :func:`_level_key` 归一后的名字，``names`` 里留着骨架原样写的名字。
+    两个来源都收：``hierarchy`` 是一组行（一篇文章可以有好几处层级划分），
+    ``synthesis`` 是收口句那一条总括（「谁由谁构成」）。
+
+    ``depth`` = 往上数几层才到根。**谁浅谁是整体** —— 这一条比模型在关系里
+    随手写的方向可靠：真机实测它把 ``项目开发体系`` 的整体—部分写成了
+    ``确定项目需求 → 项目开发（层级）``（部分 → 整体）。
+    """
+    rows: list[tuple[str, list]] = []
+    if isinstance(chain, dict):
+        for row in list(chain.get("hierarchy") or ()):
+            if isinstance(row, dict):
+                rows.append((str(row.get("whole") or "").strip(),
+                             list(row.get("parts") or ())))
+        synthesis = chain.get("synthesis")
+        if isinstance(synthesis, dict):
+            rows.append((str(synthesis.get("whole") or "").strip(),
+                         list(synthesis.get("parts") or ())))
+    parts_of: dict[str, set[str]] = {}
+    wholes_of: dict[str, set[str]] = {}
+    names: dict[str, str] = {}
+    parent: dict[str, str] = {}
+    for whole, parts in rows:
+        if not whole:
+            continue
+        whole_key = _level_key(whole)
+        if not whole_key:
+            continue
+        names.setdefault(whole_key, whole)
+        for item in parts:
+            part = str(item or "").strip()
+            part_key = _level_key(part)
+            if not part_key or part_key == whole_key:
+                continue          # 自己包含自己：不算层级
+            names.setdefault(part_key, part)
+            parts_of.setdefault(whole_key, set()).add(part_key)
+            wholes_of.setdefault(part_key, set()).add(whole_key)
+            parent.setdefault(part_key, whole_key)
+    depth: dict[str, int] = {}
+    for key in names:
+        node, seen, hops = key, {key}, 0
+        while node in parent and hops < LEVEL_MAX_HOPS:
+            node = parent[node]
+            hops += 1
+            if node in seen:      # 骨架自己绕成了环：停在原地，不许转圈
+                break
+            seen.add(node)
+        depth[key] = hops
+    return {"parts_of": parts_of, "wholes_of": wholes_of, "depth": depth, "names": names}
+
+
+def _level_node(name: str, index: dict) -> str:
+    """把用户划的词对到骨架里的节点上（对不上返回空串）。
+
+    两级：字符序一致 → 前缀 / 后缀关系（「项目开发」是「项目开发体系」的简称）。
+    刻意**不用**「任意位置包含」：像「项目」这种两字词会同时命中一堆节点。
+    """
+    text = "".join(str(name or "").split())
+    if not text:
+        return ""
+    names: dict[str, str] = index.get("names") or {}
+    key = _level_key(text)
+    if key in names:
+        return key
+    if len(text) < 2:
+        return ""
+    best = ""
+    for other, display in names.items():
+        if len(display) < 2:
+            continue
+        if (display.startswith(text) or text.startswith(display)
+                or display.endswith(text) or text.endswith(display)):
+            if not best or len(display) > len(names[best]):
+                best = other
+    return best
+
+
+def level_edge(src, dst, index) -> tuple[str, str, bool]:
+    """把一条「层级」边折成导图的 **包含**（整体 → 部分）。
+
+    批次 M26。返回 ``(整体名, 部分名, 方向是不是靠骨架定下来的)``：
+
+    * 两个名字都能在骨架里对上、且一个比另一个浅 → 浅的是整体：
+      真机实测模型写的是 ``确定项目需求 → 项目开发（层级）``（部分 → 整体），
+      而骨架里 ``项目开发体系`` 才是那个整体 ⇒ 图上画成 ``项目开发 → 确定项目需求``。
+    * 对不上 → 只能按提示词的口径信模型写的方向，第三项为 ``False``：调用方把
+      它单独数一遍，界面才说得清「有几条方向是猜的」。
+    """
+    src_name = str(src or "").strip()
+    dst_name = str(dst or "").strip()
+    left = _level_node(src_name, index)
+    right = _level_node(dst_name, index)
+    depth: dict[str, int] = index.get("depth") or {}
+    if left and right and left != right:
+        left_depth = depth.get(left)
+        right_depth = depth.get(right)
+        if left_depth is not None and right_depth is not None and left_depth != right_depth:
+            return ((src_name, dst_name, True) if left_depth < right_depth
+                    else (dst_name, src_name, True))
+    return src_name, dst_name, False
+
+
+def logic_to_map_relations(graph, nodes,
+                           chain=None) -> tuple[list[MapRelation], list[str], dict[str, int]]:
     """归纳结果 → 现有导图能画的关系（只保留**两端都在本主题词库里**的边）。
 
     为什么可以丢：这张图要落在词条卡片上，两端得是真词条。丢掉的边会被列进
     第二条返回值（界面如实写「有 N 条关系涉及不在本主题的词，没有画上去」），
     **不静默吞掉**。
+
+    批次 M26 修的是**两套词表对不上**这一处真缺陷（真机实测：一篇文章 9 条边，
+    最该画的 3 条层级边一条都没进图）：
+
+    * **层级 → 包含**：归纳提示词让模型按文章写「层级」，导图这边只认「包含 /
+      属于」，于是收口句那个整体—部分结构被当成「类型不合法」丢掉。方向**不信
+      模型写的**（实测它写反了），拿骨架 ``chain`` 的 ``hierarchy`` / ``synthesis``
+      现算：谁在骨架里更浅谁是整体，统一折成 ``包含``（整体 → 部分）。
+    * **对比 → 对照**：同一件事，两套词表各叫一个名字。
+
+    第三条返回值是**按原因分开的计数**（``not_in_topic`` / ``type`` / ``self`` /
+    ``level_guessed``）：以前两种原因共用一个数字，界面上的话就是假的（真机实测
+    8 条里有 3 条其实是类型问题，却被写成「涉及不在本主题的词」）。
     """
     by_term: dict[str, int] = {}
     for node in nodes or ():
         name = str(getattr(node, "term", "") or "").strip()
         if name and name not in by_term:
             by_term[name] = int(getattr(node, "entry_id", 0) or 0)
+    index = hierarchy_index(chain)
     relations: list[MapRelation] = []
     skipped: list[str] = []
+    counts: dict[str, int] = {}
     seen: set[tuple[int, int, str]] = set()
+
+    def _drop(text: str, key: str) -> None:
+        skipped.append(text)
+        counts[key] = counts.get(key, 0) + 1
+
     for rel in _graph_field(graph, "relations"):
         if isinstance(rel, dict):
             src_name = str(rel.get("src") or "").strip()
@@ -722,10 +876,37 @@ def logic_to_map_relations(graph, nodes) -> tuple[list[MapRelation], list[str]]:
             dst_name = str(getattr(rel, "dst", "") or "").strip()
             rel_type = str(getattr(rel, "rel_type", "") or "")
             reason = str(getattr(rel, "reason", "") or "")
-        src = by_term.get(src_name)
-        dst = by_term.get(dst_name)
-        if not src or not dst or src == dst or rel_type not in REL_TYPES:
-            skipped.append(f"{src_name}→{dst_name}（{rel_type}）")
+        if rel_type == LOGIC_LEVEL_TYPE:
+            whole_name, part_name, settled = level_edge(src_name, dst_name, index)
+            whole = by_term.get(whole_name)
+            part = by_term.get(part_name)
+            if not whole or not part or whole == part:
+                _drop(f"{src_name}→{dst_name}（层级 → 包含：{whole_name}→{part_name}）",
+                      "not_in_topic")
+                continue
+            if not settled:
+                counts["level_guessed"] = counts.get("level_guessed", 0) + 1
+            key = (whole, part, "包含")
+            if key in seen:
+                continue
+            seen.add(key)
+            relations.append(MapRelation(
+                src_entry_id=whole, dst_entry_id=part, rel_type="包含",
+                reason=reason[:REASON_CHARS],
+                evidence=reason[:EVIDENCE_CHARS],
+            ))
+            continue
+        rel_type = LOGIC_MAP_TYPE_ALIASES.get(rel_type, rel_type)
+        if not src_name or not dst_name or not by_term.get(src_name) or not by_term.get(dst_name):
+            _drop(f"{src_name}→{dst_name}（{rel_type}）", "not_in_topic")
+            continue
+        src = by_term[src_name]
+        dst = by_term[dst_name]
+        if src == dst:
+            _drop(f"{src_name}→{dst_name}（{rel_type}）", "self")
+            continue
+        if rel_type not in REL_TYPES:
+            _drop(f"{src_name}→{dst_name}（{rel_type}）", "type")
             continue
         key = (src, dst, rel_type)
         if key in seen:
@@ -736,7 +917,7 @@ def logic_to_map_relations(graph, nodes) -> tuple[list[MapRelation], list[str]]:
             reason=reason[:REASON_CHARS],
             evidence=reason[:EVIDENCE_CHARS],
         ))
-    return relations, skipped
+    return relations, skipped, counts
 
 
 def logic_levels(graph, nodes) -> dict[int, int]:
@@ -1172,6 +1353,11 @@ def dropped_summary(dropped: dict) -> str:
         "verify_uncertain": "核对不确定",
         "verify_contradicted": "核对认为不成立",
         "verify_bad": "核对无效判定",
+        # 按原文归纳那一路的「画不出来」（批次 M26 前它们共用一个数字）：
+        # 「端点不是本主题的词」与「类型不认识」是两件事，混着写等于说假话。
+        "not_in_topic": "关系里有不是本主题的词",
+        # 「层级」边的方向没能在骨架里对上，只能按提示词口径信模型写的方向（M26）。
+        "level_guessed": "层级边方向靠提示词口径判断",
         # 删边兜底（批次 M23）：这三个不是「被筛掉几条」，而是「为孤立词补问了几轮
         # / 救回几个」—— 措辞必须让人一眼看出这是补救，不是又筛掉了东西。
         "rescue_asked": "为孤立词补问",
@@ -3062,10 +3248,16 @@ class MapService:
                 client, doc_key=doc_key, title=title, text=text,
                 terms=tuple(node.term for node in nodes),
                 model_config=self.model_config(), plan=plan, logic_sink=sink)
-            relations, skipped = logic_to_map_relations(graph, nodes)
-            dropped: dict[str, int] = {}
+            # 「层级」边的方向要拿第零轮骨架现算（批次 M26）：骨架就在 sink 里，
+            # 不额外花一次调用。猜方向的那几条会单独计数，界面上说得清。
+            relations, skipped, counts = logic_to_map_relations(
+                graph, nodes, chain=dict(sink.get("chain") or {}))
+            dropped: dict[str, int] = {key: int(value) for key, value in counts.items()
+                                       if int(value or 0) > 0}
             if skipped:
-                dropped["not_in_topic"] = len(skipped)
+                # 丢掉的边要留痕（不静默吞掉）：日志里逐条，界面上按原因计数。
+                log.info("按原文归纳：%s 条边没能画上图（%s）",
+                         len(skipped), "；".join(skipped[:12]))
         except ApiError as exc:
             log.info("按原文归纳失败 token=%s: %s", token, exc.display())
             self._deliver(token, topic_id, fp, RESULT_ERROR, None, exc)

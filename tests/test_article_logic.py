@@ -466,12 +466,94 @@ class TestFlowAndLevels(unittest.TestCase):
     def test_relations_outside_the_topic_are_reported_not_swallowed(self):
         nodes = [MapNode(entry_id=1, term="检索质量差", context="", explanation=""),
                  MapNode(entry_id=2, term="重排方案", context="", explanation="")]
-        relations, skipped = logic_to_map_relations(GOOD, nodes)
+        relations, skipped, counts = logic_to_map_relations(GOOD, nodes)
         pairs = {(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations}
         self.assertIn((1, 2, "对策"), pairs)
         self.assertEqual(len(relations), 1, "两端不在词库里的边不能画")
         self.assertEqual(len(skipped), 2, "丢掉的边要列出来给用户看")
         self.assertTrue(any("重排模型" in s for s in skipped))
+        self.assertEqual(counts, {"not_in_topic": 2},
+                         "两条都是「端点不在本主题」，计数要落在这个原因上")
+
+    # ------------------------------------------------ 两套词表的断层（批次 M26）
+    def _level_case(self, src: str, dst: str, chain, *, terms=("项目开发", "确定项目需求")):
+        """造一张「层级」边的图：模型写 ``src→dst``，骨架给整体—部分。"""
+        graph = type("G", (), {"relations": (
+            LogicRelation(src, dst, "层级", "文章里这么写的"),)})()
+        nodes = [MapNode(entry_id=index + 1, term=term, context="", explanation="")
+                 for index, term in enumerate(terms)]
+        return logic_to_map_relations(graph, nodes, chain=chain)
+
+    def test_level_edges_become_contains_with_the_direction_from_the_chain(self):
+        """「层级」→「包含」：方向按骨架算（真机实测模型把方向写反了）。"""
+        relations, skipped, counts = self._level_case(
+            "确定项目需求", "项目开发",
+            {"hierarchy": [{"whole": "项目开发",
+                            "parts": ["确定项目需求", "任务拆解"]}]})
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations],
+                         [(1, 2, "包含")], "模型写的是「部分→整体」，图上也必须是「整体→部分」")
+        self.assertEqual(skipped, [])
+        self.assertEqual(counts, {}, "骨架对得上方向，就不该有「猜方向」这一笔")
+
+    def test_level_edges_read_the_synthesis_row_too(self):
+        relations, _skipped, counts = self._level_case(
+            "确定项目需求", "项目开发",
+            {"synthesis": {"whole": "项目开发", "parts": ["确定项目需求"]}})
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations],
+                         [(1, 2, "包含")])
+        self.assertEqual(counts, {})
+
+    def test_level_edges_without_a_chain_row_fall_back_and_are_counted(self):
+        relations, _skipped, counts = self._level_case("项目开发", "确定项目需求", {})
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations],
+                         [(1, 2, "包含")], "骨架查不到这一对 → 按提示词口径信模型写的方向")
+        self.assertEqual(counts.get("level_guessed"), 1, "猜的方向要单独数一遍")
+
+    def test_level_edges_read_the_real_machine_shape(self):
+        """真机那一张图的样子（批次 M26）：骨架的整体叫「项目开发体系」，
+
+        模型写的却是「确定项目需求 → 项目开发」，而零件里「拆解任务」与划过的
+        词「任务拆解」又是同一个词的两种写法 —— 三条层级边都得画成整体 → 部分。
+        """
+        chain = {"hierarchy": [
+            {"whole": "项目开发体系", "parts": ["确定项目需求", "拆解任务", "项目复盘"]},
+            {"whole": "确定项目需求", "parts": ["项目目标边界", "交付标准"]},
+            {"whole": "任务拆解", "parts": ["小型可执行任务"]},
+        ]}
+        graph = type("G", (), {"relations": (
+            LogicRelation("确定项目需求", "项目开发", "层级", "共同构成完整的项目开发体系"),
+            LogicRelation("任务拆解", "项目开发", "层级", "共同构成完整的项目开发体系"),
+            LogicRelation("项目复盘", "项目开发", "层级", "共同构成完整的项目开发体系"),
+        )})()
+        nodes = [MapNode(entry_id=index + 1, term=term, context="", explanation="")
+                 for index, term in enumerate(("项目开发", "确定项目需求", "任务拆解", "项目复盘"))]
+        relations, skipped, counts = logic_to_map_relations(graph, nodes, chain=chain)
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations],
+                         [(1, 2, "包含"), (1, 3, "包含"), (1, 4, "包含")],
+                         "整体是「项目开发」（骨架写的是「项目开发体系」），三条都指向它")
+        self.assertEqual((skipped, counts), ([], {}), "骨架里对得上，就没有「猜方向」这一笔")
+
+    def test_compare_is_renamed_to_contrast(self):
+        graph = type("G", (), {"relations": (
+            LogicRelation("项目开发", "确定项目需求", "对比", "两种做法"),)})()
+        nodes = [MapNode(entry_id=1, term="项目开发", context="", explanation=""),
+                 MapNode(entry_id=2, term="确定项目需求", context="", explanation="")]
+        relations, skipped, counts = logic_to_map_relations(graph, nodes)
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in relations],
+                         [(1, 2, "对照")], "「对比」在导图这边叫「对照」")
+        self.assertEqual((skipped, counts), ([], {}))
+
+    def test_unknown_type_and_foreign_word_are_counted_apart(self):
+        """两种「画不出来」分开计数：以前写成一个数字，界面上的话就是假的。"""
+        graph = type("G", (), {"relations": (
+            LogicRelation("项目开发", "确定项目需求", "相关", "不是任何一种类型"),
+            LogicRelation("项目开发", "没划过的词", "时序", "端点不在词库里"))})()
+        nodes = [MapNode(entry_id=1, term="项目开发", context="", explanation=""),
+                 MapNode(entry_id=2, term="确定项目需求", context="", explanation="")]
+        relations, skipped, counts = logic_to_map_relations(graph, nodes)
+        self.assertEqual(relations, [])
+        self.assertEqual(len(skipped), 2)
+        self.assertEqual(counts, {"type": 1, "not_in_topic": 1})
 
     def test_relation_pairs_keep_type_and_reason(self):
         graph = type("G", (), {"relations": (LogicRelation("A", "B", "时序", "先 A"),
