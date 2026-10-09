@@ -4221,3 +4221,115 @@ A 是 B 的上位概念或整体」（**整体 → 部分**）。同一批数据
   小型可执行任务` 现在只是被丢掉的理由）、卡片上的「加入词条库」按钮、**只补同一个父的
   孩子**、有更细划分就下钻一层（每层 ≤ 8 / 总卡片 ≤ 24）；
 - **第 4 步**：布局与导出跟上层级（两套层叠着画）。
+
+## 55. 浮窗「没任何响应」的真根因 —— 跨进程正文被自己的身份核对接成了冒名（批次 M27）
+
+你的原话是「没任何响应」：在 WPS 里划词，浮窗一次都不弹。这一批查清了原因、修好了，
+并用真机日志证明修好了。
+
+### 55.1 现场：不是没反应，是读到的选区被自己的闸门拒了
+
+日志里两行连起来就是结论（`data\logs\app.log`）：
+
+```
+21:02:44 [fg-watcher] 前台阅读窗口切换 395702 → 3478794，门控世代 +1（作废旧窗口在途结果）
+21:02:48 [capture-worker] 取词未成功：candidate_element_pid_mismatch（累计 1 次）
+```
+
+也就是说：**取词线程真的跑了、UIA helper 真的读到了元素，然后我们自己把它拒了**。
+
+那扇「WPS 主窗」`3478794`（`0x35150A`）属于 wps **pid 80168**：类名 `Qt5QWindowIcon`、标题
+`测试.docx - WPS Office`，`vis=True`，但 rect 是 `(-21333,-21333)-(-21175,-21107)` ——
+**158x26、停在屏幕外**（这是 Windows 的「停靠位」；WPS / 微信 / Edge 都各有一个这样的窗，
+它同时也是 pid 80168 的 `MainWindowHandle`）。
+
+而**正文根本不在这个进程的树里**：拿 `_check\uia_tree_probe.ps1 -Handle 3478794` 走完
+305 个元素，只有 **2** 个带 TextPattern，还都是输入框。真正的正文宿主是**另一个 wps.exe
+（pid 54676）**的 `_WwG` 窗（标题 `DocView`，hwnd `7864866`，同样停在屏幕外）——
+WPS 主窗的 UIA 树里那个焦点元素就是这个进程提供的（`element_class = KxWpsView`，金山自绘文档视图）。
+
+一句话：**「谁提供这个元素」和「谁是前台窗口」本来就可以不是同一个进程**，
+而旧代码把这个情况一律当成冒名。
+
+### 55.2 改法：白名单「已知浏览器」→「同一个应用」
+
+全部落在 `scripts/uia_helper.ps1`：
+
+1. 删掉 `$script:BrowserWindowClasses` 与 `$script:BrowserExeNames` 两处白名单；
+   `Test-Candidate($el, $exp)`（`:185-208`）的判断顺序一点没动，只把最后一跳
+   `Test-BrowserChildCandidate` 换成 `Test-SameAppChildCandidate` ——
+   **失败串仍是 `candidate_element_pid_mismatch`**（日志与既有静态用例照旧能 grep）；
+2. 新增 `Get-ProcessImagePath($processId)`：`(Get-Process -Id …).Path` 小写化，
+   拿不到就返回 `''`，**绝不抛**；
+3. 新增 `Test-SameAppChildCandidate($el, $exp)`：两边 `Get-ProcessImageName()` 必须非空且相等；
+   **两个完整路径都读得到时还必须路径相等**（读不到就只按映像名放行，与旧的浏览器口径一致）。
+
+为什么这样是安全的：`Test-Candidate` 在前面**已经验证过**「候选元素的顶层窗口 == 期望窗口」，
+放宽的只是「同一棵树里的元素由**同一应用**的另一个进程提供」这一种。Chromium / Gecko
+本来就是这么工作的，CEF 系套件（WPS 的 Prome 壳、豆包）同理。
+
+★ 这里有个比代码更容易漏的坑：**打包版读的是 `_runtime\scripts\uia_helper.ps1`，不是仓库里的
+`scripts\uia_helper.ps1`**（`app/paths.py:87-93`：冻结后 `scripts_dir() = resource_root()/"scripts"
+= sys._MEIPASS/"scripts"`）⇒ 改完必须 `Copy-Item` 同步过去，否则 exe 毫无变化（本批已同步，
+两份 SHA256 相同）。
+
+应用侧一行没改：helper 响应里的 `process_id` / `hwnd` 一直是**验证过的顶层身份**，
+子进程 pid 另走 `element_process_id` ⇒ `CaptureService._verify_uia_identity`
+（`app/capture_service.py:1021-1044`）拿到的仍是顶层那一份。
+
+### 55.3 A/B 实测（同一扇 WPS 窗、同一时刻）
+
+两个 helper 都用 .NET `ProcessStartInfo`（`RedirectStandardInput/Output`）**预热**再发请求
+（新进程的启动延迟会输给前台变化），发的是 `cmd:"check"`：只查焦点元素、**不需要选区**，
+所以不会被 WPS 的划选浮条抢前台。
+
+| helper | 响应 |
+| --- | --- |
+| 旧（`git show HEAD:scripts/uia_helper.ps1` → `%TEMP%\uia_helper_old.ps1`） | `{"ok":false,"reason":"candidate_element_pid_mismatch","id":5}` |
+| 新（本批改动后） | `{"ok":true,"focused":{"control_type":"ControlType.Group","element_class":"KxWpsView","process_id":54676,"top_title":"测试.docx - WPS Office","hwnd":7864866},"textpattern_available":false}` |
+
+⇒ 根因确认 + 改法生效：跨进程的正文元素现在能过闸门了。
+
+### 55.4 真机效果（你当晚自己划的词）
+
+修复后（21:06 起带新 helper 重启）日志里 **6 次真实划词全部取到选区**：
+
+```
+21:08:00 取到选区：「我为布鲁内尔大学中英双学位项目学生，目前在国内合作校区就读…」（Doubao.exe，53 字，drag）
+21:11:31 取到选区：「https://education.github.com/pack」（Doubao.exe，33 字，drag）
+21:11:37 取到选区：「https://github.com」（msedge.exe，18 字，drag）
+21:14:54 / 21:14:58 / 21:15:08 取到选区：「GitHub Copilot Student 完整版…」等（Doubao.exe，31–42 字）
+```
+
+另有 4 次 `empty_text`（拖了但没选到字）与 5 次 `no_textpattern`（在微信的「图片和视频」窗上拖 ——
+那扇窗本来就没有文字），都是如实记录、不是故障。
+
+★ **豆包也在旧白名单之外**（`Doubao.exe` ∉ `BrowserExeNames`）⇒ 旧版在豆包里同样读不到选区，
+这批顺手把那条路也修好了。
+
+**WPS 真机确认还没拿到**：当晚只切到过 WPS 窗口（21:07:23 / 21:07:36 两条前台切换）而没造选区。
+我自己合成的那一次，因为 WPS 是停靠态（158x26、屏幕外），Ctrl+A 之后前台被系统还给了 Edge ⇒
+如实报 `foreground_changed`；但同一次响应里 `reads=4`（那扇窗里确实有 4 个带 TextPattern 的元素）
+⇒ 路是通的，只差真机划一次。
+
+### 55.5 测试
+
+- `tests/test_runtime_recovery.py` 的静态用例 `test_browser_child_pid_is_separate_and_verified`
+  改名 `test_child_process_pid_is_separate_and_verified`，断言换成 `Test-SameAppChildCandidate` /
+  `Get-ProcessImagePath` / `Get-ProcessImageName` / `$topName -ne $elName` / `$topPath -ne $elPath`，
+  `candidate_element_pid_mismatch` 与响应字段三条断言照旧。
+- 目标模块：`tests.test_runtime_recovery + tests.test_uia_bridge + tests.test_desktop_packaging`
+  → `run=73 fail=0 err=0 skip=2` + `OK`。
+- 全量（当晚，本机有真实 UI 会话在跑）：`Ran 1312 / failures=9~11 / errors=1~5 / skipped=6~15`，
+  红的是 `tests.test_explain_scoping` ×4、`tests.test_gate_runtime`、`tests.test_launch`、
+  `tests.test_ui_smoke` 与原有那 7 条。**用 `git stash` 把本批改动全收起来重跑，红的还是同一批**
+  ⇒ 这是当晚的环境漂移（用例拿到的 `self.app` 是 `ReadingPanel` ⇒ `AttributeError`），
+  **与本批无关**；§54.6 记的 `1311 / 7 / 0 / 26` 是白天无人用机时的读数，两者不可直接比。
+
+### 55.6 还没做的（不假装做了）
+
+- **WPS 真机划词确认**（等你划一次词看日志）：出现 `取到选区：「…」` ⇒ 收工；
+  若出现 `no_textpattern` / `empty_selection` ⇒ 上**剪贴板回退**（UIA 读不到时发 Ctrl+C 读剪贴板、
+  读完还原；要防终端里 Ctrl+C 变 SIGINT），**MSAA / IAccessible2 回退**列为备选。
+- 本批只动了 helper 与一条静态断言，`app\` 一个字节没改（所以 exe 不用重打包，
+  但 **`_runtime\scripts\` 那份必须同步**，已同步）。

@@ -1320,6 +1320,60 @@ skipped** ⇒ 界面上那句「有 8 条关系涉及不在本主题的词」在
 
 **下一步**（第 2–4 步）与欠账写进了 `改进清单.md` 批次 M26 与 `README.md` §54。
 
+### 7.29 交付之后第二十句：「没任何响应。」（批次 M27）
+
+用户原话（逐字）：「没任何响应。」——用户在 WPS 里划词，浮窗一次都不弹。
+
+**先别猜，先把现场量出来**：日志（`data\logs\app.log`）两行连起来就是结论 ——
+`21:02:44 [fg-watcher] 前台阅读窗口切换 395702 → 3478794，门控世代 +1` →
+`21:02:48 [capture-worker] 取词未成功：candidate_element_pid_mismatch（累计 1 次）`。
+**不是没反应，是取词线程真跑了、UIA helper 真读到了元素，然后我们自己的身份核对把它拒了。**
+
+**病根**：`scripts/uia_helper.ps1` 的 `Test-Candidate` 只给**白名单里的浏览器**开一个口子
+（`chrome/msedge/firefox/brave/opera/vivaldi/chromium.exe`，且顶层类名必须 ∈
+`Chrome_WidgetWin_0/1/2` / `MozillaWindowClass`）：允许「候选元素由**另一个进程**提供」。
+而有些软件本来就是这么渲染的 —— WPS 的文档正文宿主是**另一个 wps.exe（pid 54676）**的
+`_WwG` 窗（`DocView`，hwnd 7864866），前台那扇「WPS 主窗」3478794 属于 **pid 80168**
+（`Qt5QWindowIcon`，158x26 停在屏幕外 —— 那是 Windows 的「停靠位」，WPS / 微信 / Edge 各有一个），
+顶层类名 `Qt5QWindowIcon` ∉ 白名单 ⇒ **第一条就被拒**。用 `_check\uia_tree_probe.ps1 -Handle
+3478794` 走完 305 个元素，只有 2 个带 TextPattern 且都是输入框 —— **正文压根不在那个进程的树里**。
+
+**改法（白名单 → 同一个应用）**：删掉 `$script:BrowserWindowClasses` / `$script:BrowserExeNames`；
+`Test-Candidate` 的判定顺序一点没动，只把最后一跳换成 `Test-SameAppChildCandidate` ——
+新增 `Get-ProcessImagePath()`（拿不到返回 `''`、绝不抛），要求两边映像名非空且相等，
+**两个完整路径都读得到时还必须路径相等**；**失败串 `candidate_element_pid_mismatch` 保持不变**
+（日志与静态用例照旧能 grep）。安全前提是 `Test-Candidate` 已经先验证过「候选元素的顶层窗口
+== 期望窗口」，放宽的只是「同一棵树里的元素由同一应用的另一个进程提供」。
+★ 坑：打包版读的是 **`_runtime\scripts\uia_helper.ps1`**，不是仓库里的 `scripts\` 那份
+（`app/paths.py:87-93`：冻结后 `scripts_dir() = sys._MEIPASS/"scripts"`）⇒ 改完必须 `Copy-Item`
+同步（本批已同步，两份 SHA256 相同，`app\` 一个字节没改）。
+
+**A/B 实测**（同一扇 WPS 窗、同一时刻；两个 helper 都用 .NET `ProcessStartInfo` 预热再发请求，
+免得新进程的启动延迟输给前台变化；发的是 `cmd:"check"`，只查焦点元素、不需要选区）：
+旧 helper → `{"ok":false,"reason":"candidate_element_pid_mismatch"}`；
+新 helper → `{"ok":true,"focused":{"element_class":"KxWpsView","process_id":54676,
+"top_title":"测试.docx - WPS Office"}}`。
+
+**真机效果**：修复后（21:06 起带新 helper 重启）日志里 **6 次真实划词全部取到选区**
+（`Doubao.exe` ×5 + `msedge.exe` ×1，例 `取到选区：「https://education.github.com/pack」
+（Doubao.exe，33 字，drag）`），另有 4 次 `empty_text`（拖了没选到字）与 5 次 `no_textpattern`
+（在微信的「图片和视频」窗上拖，那扇窗本来就没文字），都是如实记录、不是故障。
+★ **豆包也在旧白名单之外**（`Doubao.exe` ∉ `BrowserExeNames`）⇒ 旧版在豆包里同样读不到。
+**WPS 真机确认还没拿到**：当晚只切到过 WPS 窗口而没造选区；我自己合成的那一次因为 WPS 是停靠态，
+Ctrl+A 后前台被系统还给 Edge ⇒ 如实报 `foreground_changed`，但同一次响应 `reads=4`
+（那扇窗里确实有 4 个带 TextPattern 的元素）⇒ 路是通的。
+
+**测试**：`tests/test_runtime_recovery.py` 的静态用例改名
+`test_child_process_pid_is_separate_and_verified` 并换新断言；目标三模块
+（`test_runtime_recovery + test_uia_bridge + test_desktop_packaging`）→ `run=73 fail=0 err=0 skip=2` OK。
+全量当晚是 `Ran 1312 / failures=9~11 / errors=1~5 / skipped=6~15`，**把本批改动 `git stash` 掉重跑，
+红的还是同一批**（`test_explain_scoping` ×4、`test_gate_runtime`、`test_launch`、`test_ui_smoke`
+＋原有 7 条）⇒ 当晚环境漂移（真实 UI 会话在跑），**与本批无关**。
+
+**还没做**：WPS 真机划词确认；若报 `no_textpattern` ⇒ 上**剪贴板回退**（Ctrl+C 读剪贴板再还原，
+要防终端里 Ctrl+C 变 SIGINT），MSAA / IAccessible2 列为备选。详见 `改进清单.md` 批次 M27、
+`README.md` §55。
+
 
 
 - 线上仓库：<https://github.com/bsk865/ExplorerDict>（**Public**；发布时 `main` 是 32 条提交，本文件与 `docs\对话截图\` 都在库里）。**注意**：批次 H–M 的改动都在本机（H–L 已存本机还原点，M 做完后一并存；都还没推送 —— 见 `改进清单.md` 的批次 H–M）；线上仓库看到的是发布那一刻的版本。
