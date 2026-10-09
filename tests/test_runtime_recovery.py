@@ -663,12 +663,16 @@ class TestUiaHelperCandidateStructure(unittest.TestCase):
                         "读取候选前必须先核对候选所属顶层窗口")
         self.assertIn("expected_window_required", self.text, "缺身份时 fail-closed")
 
-    def test_browser_child_pid_is_separate_and_verified(self):
-        self.assertIn("Test-BrowserChildCandidate", self.text)
-        self.assertIn("BrowserWindowClasses", self.text)
-        self.assertIn("BrowserExeNames", self.text)
+    def test_child_process_pid_is_separate_and_verified(self):
+        # 子进程（浏览器 renderer / WPS 的正文宿主）与顶层窗口 pid 不同是正常的，
+        # 但必须锚定在验证过的顶层窗口上，并且两边**是同一个应用**才放行。
+        self.assertIn("Test-SameAppChildCandidate", self.text)
+        self.assertIn("Get-ProcessImagePath", self.text)
+        self.assertIn("Get-ProcessImageName", self.text)
+        self.assertIn("$topName -ne $elName", self.text, "必须比对映像名")
+        self.assertIn("$topPath -ne $elPath", self.text, "路径可读时还必须比对完整路径")
         self.assertIn("candidate_element_pid_mismatch", self.text,
-                      "普通非浏览器不同 pid 必须继续拒绝")
+                      "不是同一个应用的不同 pid 必须继续拒绝")
         success = self.text.split("function Handle-Selection", 1)[1].split("$result = @{", 1)[1].split("break", 1)[0]
         self.assertIn("process_id   = $exp.pid", success,
                       "响应里的 process_id 必须是验证过的顶层 pid")

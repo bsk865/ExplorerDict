@@ -57,19 +57,21 @@ $script:MaxAncestors = 4
 $script:MaxTopDocuments = 3
 $script:MaxTopTextControls = 6
 
-# Chromium / Gecko expose page content from a CHILD renderer process, so the
-# element pid legitimately differs from the top-level window pid. A different
-# element pid is accepted only when the candidate is anchored to the verified
-# top-level window AND both processes are the same known browser executable.
-# Any other pid difference stays fail-closed.
-$script:BrowserWindowClasses = @(
-    'Chrome_WidgetWin_0', 'Chrome_WidgetWin_1', 'Chrome_WidgetWin_2',
-    'MozillaWindowClass'
-)
-$script:BrowserExeNames = @(
-    'chrome.exe', 'msedge.exe', 'firefox.exe', 'brave.exe', 'opera.exe',
-    'vivaldi.exe', 'chromium.exe'
-)
+# Chromium / Gecko -- and CEF-based suites such as WPS ("Prome" shell) -- expose
+# page content from a CHILD helper process, so the element pid legitimately
+# differs from the top-level window pid. A different element pid is accepted
+# only when the candidate is anchored to the verified top-level window (its own
+# top-level element IS that window: checked above) AND both processes run the
+# SAME application (same image name, and the same full image path whenever both
+# paths are readable). Any other pid difference stays fail-closed.
+#
+# 2026-10-09 (batch M27): the previous version accepted this only for a fixed
+# list of browser classes/executables, so WPS -- foreground window owned by
+# wps.exe, document elements provided by a second wps.exe process -- failed every
+# read with candidate_element_pid_mismatch and the floating panel never opened.
+# Reported by the user as "selecting text in WPS does nothing at all";
+# reproduced without the app (Ctrl+A + the recall hotkey, 2026-10-09 21:02) and
+# confirmed in data/logs/app.log as candidate_element_pid_mismatch.
 
 function Write-Resp($obj) {
     $json = $obj | ConvertTo-Json -Compress -Depth 8
@@ -199,8 +201,9 @@ function Test-Candidate($el, $exp) {
     if ($topPid -le 0) { return 'candidate_no_pid' }
     if ($topPid -ne $exp.pid) { return 'candidate_pid_mismatch' }
     if ($elPid -gt 0 -and $elPid -ne $exp.pid) {
-        # Browser renderer child: allowed only for the same known browser exe.
-        if (-not (Test-BrowserChildCandidate $el $top $exp)) {
+        # Same-application child process (browser renderer, WPS document host):
+        # allowed only when both processes run the same executable.
+        if (-not (Test-SameAppChildCandidate $el $exp)) {
             return 'candidate_element_pid_mismatch'
         }
     }
@@ -219,21 +222,40 @@ function Get-ProcessImageName($processId) {
     }
 }
 
-# Is this a browser child renderer under the verified top-level window?
-function Test-BrowserChildCandidate($el, $top, $exp) {
-    if ($null -eq $el -or $null -eq $top -or $null -eq $exp) { return $false }
+# Full image path (lower case) of a process; '' when unavailable (access denied,
+# 32/64-bit mismatch, process gone). Never throws.
+function Get-ProcessImagePath($processId) {
+    if ($processId -le 0) { return '' }
+    try {
+        $p = Get-Process -Id $processId -ErrorAction Stop
+        if ($null -eq $p) { return '' }
+        $path = [string]$p.Path
+        if ([string]::IsNullOrEmpty($path)) { return '' }
+        return $path.ToLowerInvariant()
+    } catch {
+        return ''
+    }
+}
+
+# Is this element hosted by a CHILD process of the SAME application as the
+# verified top-level window? (browser renderer, WPS document host, Electron
+# helper, Office add-in host...). The anchoring to the expected top-level window
+# was already verified by Test-Candidate, so only "same application" is checked:
+# same image name, plus the same full image path when both paths are readable.
+function Test-SameAppChildCandidate($el, $exp) {
+    if ($null -eq $el -or $null -eq $exp) { return $false }
     $elPid = 0
     try { $elPid = [int]$el.Current.ProcessId } catch { return $false }
     if ($elPid -le 0) { return $false }
-    $cls = ''
-    try { $cls = [string]$top.Current.ClassName } catch { return $false }
-    if ([string]::IsNullOrEmpty($cls)) { return $false }
-    if ($script:BrowserWindowClasses -notcontains $cls) { return $false }
     $topName = Get-ProcessImageName $exp.pid
     $elName = Get-ProcessImageName $elPid
     if ([string]::IsNullOrEmpty($topName) -or [string]::IsNullOrEmpty($elName)) { return $false }
     if ($topName -ne $elName) { return $false }
-    if ($script:BrowserExeNames -notcontains $elName) { return $false }
+    $topPath = Get-ProcessImagePath $exp.pid
+    $elPath = Get-ProcessImagePath $elPid
+    if ((-not [string]::IsNullOrEmpty($topPath)) -and (-not [string]::IsNullOrEmpty($elPath))) {
+        if ($topPath -ne $elPath) { return $false }
+    }
     return $true
 }
 

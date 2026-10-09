@@ -1185,10 +1185,10 @@ class CaptureService:
         过期结果不得显示浮条。
         """
         if not self.config.capture_enabled:
-            log.debug("取词已暂停，忽略本次手势")
+            log.info("本次手势未取词：取词已暂停")
             return
         if not self.gate.is_allowed():
-            log.debug("门控未放行（%s），忽略本次手势", self.gate.evaluate().reason)
+            log.info("本次手势未取词：门控未放行（%s）", self.gate.evaluate().reason)
             return  # 受限环境下连延迟都不必等
         # 捕获「开始时刻」的世代：发出的指纹必须是这次手势排队时的那一个，
         # 否则中途切窗口后仍会带上最新世代，UI 的世代回比形同虚设。
@@ -1201,10 +1201,12 @@ class CaptureService:
         if generation != self.current_generation():
             # 门控已翻转 / 用户已经按下别处 / 前台换窗口，丢弃这次手势
             # （在途结果一并作废，否则迟到的 UIA 返回值会把旧浮条又弹出来）
-            log.debug("丢弃过期手势 gen=%s（当前 %s）", generation, self.current_generation())
+            log.info("本次手势未取词：手势已过期 gen=%s（当前 %s）",
+                     generation, self.current_generation())
             return
         if page_epoch != self.current_page_epoch():
-            log.debug("丢弃过期手势 page=%s（当前 %s）", page_epoch, self.current_page_epoch())
+            log.info("本次手势未取词：页面已换 page=%s（当前 %s）",
+                     page_epoch, self.current_page_epoch())
             return
         try:
             sel, reason = self.attempt_capture(x, y, kind, generation=generation,
@@ -1220,9 +1222,10 @@ class CaptureService:
             if reason in ("paused", "generation_changed", "page_changed",
                           "foreground_title_changed") \
                     or reason.startswith("gate_closed"):
+                log.info("本次手势未取词：%s（让位给新前台，不打扰用户）", reason)
                 return
             self._fail_count += 1
-            log.debug("取词未成功: %s (累计 %d)", reason, self._fail_count)
+            log.info("取词未成功：%s（累计 %d 次）", reason, self._fail_count)
             # 通知 UI 收起上一次的浮条（「新选区为空则隐藏操作条」）。
             self._emit("selection_cleared", {
                 "reason": reason, "x": x, "y": y, "kind": kind,
@@ -1232,6 +1235,9 @@ class CaptureService:
 
         with self._lock:
             self._last_selection = sel
+        log.info("取到选区：「%s」（%s，%d 字，%s）", sel.term,
+                 sel.source.app or sel.source.exe or "未知来源",
+                 len(sel.term), kind)
         self._emit(
             "selection_ready",
             {
