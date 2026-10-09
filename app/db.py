@@ -18,7 +18,7 @@ from . import crypto_dpapi
 from .article_source import Article
 from .models import now_iso
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 def _as_topic(topic_id: object) -> int:
@@ -67,6 +67,11 @@ CONTEXT_JOINER = " ／ "
 #: 240 字上下文，模型给得出「词与词的关系」，给不出「这篇文章在讲什么」。正文在
 #: 划词那一刻抓（页面内容随时会变，事后补抓到的往往已经是另一版），抓不到就如实写
 #: ``status='failed'`` + 原因，**绝不**拿导航文字或上一次的缓存冒充原文。
+#: v10 → v11 给 ``map_graphs`` 增列 ``logic_chain``：**第零轮读出来的逻辑链骨架**
+#: （批次 M24）。它记的是「这一次是按文章的哪条逻辑链画的」（类型 / 概念词 / 层级 /
+#: 先后 / 因果 / 依赖 / 回头闭环 / 收口），重开窗口点开旧图时界面要说得出这一次是
+#: 按什么逻辑画的、还是压根没走到逻辑链（空串 = 没走到）。它**不是**权威：端点、
+#: 类型、证据仍然全部由本地校验 + 第二次核对决定，骨架只用来定调方向。
 _MIGRATIONS = """
 CREATE TABLE IF NOT EXISTS chat_turns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,6 +107,7 @@ CREATE TABLE IF NOT EXISTS map_graphs (
     validation_version INTEGER NOT NULL DEFAULT 0,
     dropped TEXT NOT NULL DEFAULT '',
     verdicts TEXT NOT NULL DEFAULT '',
+    logic_chain TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     UNIQUE(topic_id, fingerprint)
 );
@@ -156,6 +162,7 @@ _COLUMN_MIGRATIONS = (
     ("map_graphs", "validation_version", "INTEGER NOT NULL DEFAULT 0"),
     ("map_graphs", "dropped", "TEXT NOT NULL DEFAULT ''"),
     ("map_graphs", "verdicts", "TEXT NOT NULL DEFAULT ''"),
+    ("map_graphs", "logic_chain", "TEXT NOT NULL DEFAULT ''"),
     ("relations", "topic_id", "INTEGER NOT NULL DEFAULT 0"),
     ("relations", "note", "TEXT NOT NULL DEFAULT ''"),
 )
@@ -1353,7 +1360,8 @@ class Database:
                       model: str = "", relations: list | None = None,
                       raw: str = "", validation_version: int = 0,
                       dropped: dict | None = None,
-                      verdicts: list | None = None) -> None:
+                      verdicts: list | None = None,
+                      logic_chain: dict | None = None) -> None:
         """写一份 AI 参考关系图缓存（键 = 主题 + 内容指纹）。
 
         ``relations`` 是**已经过证据校验 + 独立核对**的关系列表（``src`` / ``dst``
@@ -1364,17 +1372,21 @@ class Database:
         （保留 / 不确定 / 不成立 + 模型给的理由）：它们是「这个词为什么成了孤立词」
         的唯一依据，重开窗口必须能原样读回来。计数里为 0 的项不写（没被筛掉就不算
         筛除理由）；两者不传时写空 JSON（``{}`` / ``[]``），读回来口径一致。
-        同一 ``(topic_id, fingerprint)`` 重写时整体替换（不做增量合并）。
+        ``logic_chain`` 是**第零轮读出来的逻辑链骨架**（批次 M24）：重开窗口点开
+        旧图时，界面要说得出这一次是按文章的哪条逻辑链画的；没走到逻辑链时写空
+        对象，读回来就是空字典（不编造骨架）。同一 ``(topic_id, fingerprint)``
+        重写时整体替换（不做增量合并）。
         """
         counts = {str(key): int(value) for key, value in dict(dropped or {}).items()
                   if int(value or 0)}
         self.execute(
             "INSERT INTO map_graphs(topic_id, fingerprint, base_url, model, payload, raw, "
-            "validation_version, dropped, verdicts, created_at) VALUES(?,?,?,?,?,?,?,?,?,?) "
+            "validation_version, dropped, verdicts, logic_chain, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(topic_id, fingerprint) DO UPDATE SET base_url=excluded.base_url, "
             "model=excluded.model, payload=excluded.payload, raw=excluded.raw, "
             "validation_version=excluded.validation_version, dropped=excluded.dropped, "
-            "verdicts=excluded.verdicts, "
+            "verdicts=excluded.verdicts, logic_chain=excluded.logic_chain, "
             "created_at=excluded.created_at",
             (
                 int(topic_id),
@@ -1386,6 +1398,7 @@ class Database:
                 int(validation_version or 0),
                 json.dumps(counts, ensure_ascii=False),
                 json.dumps(list(verdicts or []), ensure_ascii=False),
+                json.dumps(dict(logic_chain or {}), ensure_ascii=False),
                 now_iso(),
             ),
         )

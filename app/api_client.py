@@ -177,7 +177,22 @@ MAP_SYSTEM_PROMPT = """你在为《探索词典》的一张「AI 参考关系图
    禁止**：同一对词不要两个方向都说「包含」（或都说「属于」）—— 上下位互相颠倒 =
    不可能成立的层级。依赖 / 因果的双向（互相依赖、互为因果）**不是**矛盾：只有两个
    方向**各自都有材料明确支持**时才允许同时输出，只有一个方向有材料就只写那一个方向；
-6. 只使用本次给出的词条与材料，不要引用其它主题、整篇文档、窗口标题或网址。"""
+6. 只使用本次给出的词条与材料，不要引用其它主题、整篇文档、窗口标题或网址。
+★★ **同一条流程上的两个步骤之间，绝不许写「包含 / 属于」（批次 M24 立的第二道红线）。**
+材料说的是「先 A、再 B」「A 之后做 B」「A 是第一步、B 是第二步」时，A 与 B 是**同一条
+流程上的先后两步**，谁也不包含谁 —— 这种情况只允许「时序 A→B」（或按材料写依赖 / 因果）。
+「A 是流程的一环」「A 是流程的第一步」**同样不是**包含关系的依据：它是**时序 / 依赖**的依据。
+只有材料**明说** A 由 B（以及别的部件）**构成 / 组成 / 包括**，或者 B 是 A 的**组成部分 /
+下位概念**时，才写「包含 A→B」。
+反例（实测模型反复这样写，必须自检）：
+- 「开展项目开发需要一套持续迭代的工作流程，首先要确定项目需求」→ **不许**写
+  「项目开发 包含 确定项目需求」（那是流程的第一步，不是它的组成部分），
+  应写「确定项目需求 → 项目开发 **依赖**」或按材料写时序；
+- 「任务拆解是项目开发流程中的一环」→ **不许**写「项目开发 包含 任务拆解」，同上；
+- 「确定项目需求、拆解任务、项目复盘共同构成完整的项目开发体系」→ 这句才是**真正的
+  整体—部分**：只有**收口句这样明说**时才可以写「包含」。
+自检问自己一句：**把 B 从 A 里拿掉，A 还是 A 吗？** 拿掉之后 A 就不成立的（部件、组成、
+下位）才可以写包含；拿掉之后 A 只是少做了一步（流程）必须改写时序 / 依赖 / 因果。"""
 
 MAP_USER_TEMPLATE = """主题：{topic}
 
@@ -245,7 +260,15 @@ MAP_VERIFY_SYSTEM_PROMPT = """你在**独立核对**另一轮给出的候选关�
      （「B 是 A 的一个环节 / 组成部分 / 一类」）。只说 B 在流程里位于 A 之后、或者
      只是同属一个话题，**不足以**支持包含 / 属于，这种情况判 contradicted 并说明
      应该用哪种类型；
-4. 只依据本次给出的材料判断，不要引用其它主题、整篇文档、窗口标题或网址。"""
+4. ★★ **候选写「包含 / 属于」时，按最严的口径判**（批次 M24 立的红线，实测模型
+   反复把流程步骤写成包含）：材料说的是「先 A、再 B」「A 之后做 B」「A 是第一步、
+   B 是第二步」「A 是流程中的一环」时，A 与 B 是**同一条流程上的先后两步**，
+   谁也不包含谁 ⇒ 判 ``contradicted``，并在 note 里写清「应写时序 / 依赖」。
+   只有材料**明说** A 由 B（以及别的部件）**构成 / 组成 / 包括**，或者 B 是 A 的
+   **组成部分 / 下位概念**时，才判 ``supported``。
+   自检问一句：**把 B 从 A 里拿掉，A 还是 A 吗？** 拿掉之后 A 只是少做了一步
+   （流程）⇒ contradicted；拿掉之后 A 就不成立了（部件、组成、下位）⇒ supported。
+5. 只依据本次给出的材料判断，不要引用其它主题、整篇文档、窗口标题或网址。"""
 MAP_VERIFY_USER_TEMPLATE = """主题：{topic}
 
 候选关系（序号 / 类型 / 方向 / 端点材料 / 候选依据 / 候选证据）：
@@ -519,7 +542,8 @@ def build_article_material(text: str, *, limit: int = ARTICLE_TEXT_CHARS) -> str
 def build_article_logic_payload(model: str, logic, *, title: str = "",
                                 temperature: float = 0.0,
                                 reasoning_effort: str = "",
-                                thinking: str = "", vary: int = 0) -> dict:
+                                thinking: str = "", vary: int = 0,
+                                logic_chain: dict | str | None = None) -> dict:
     """构造「按原文归纳」的请求体。
 
     ``logic`` 由 :mod:`app.map_service` 构造：
@@ -530,6 +554,11 @@ def build_article_logic_payload(model: str, logic, *, title: str = "",
     ``vary`` 是「重新生成」的思维阶梯档位（批次 M21-B）：第 0 档 = 批次 M20 的
     老口径（提示词一字不加），往后每档往用户消息末尾追加一段**换思路指令**。
     界面上那句「第 N 档」用的就是它。
+
+    ``logic_chain`` 是**第零轮读全文得出的骨架**（批次 M24）：这条「按原文归纳」
+    的流水线自己就通读了全文，但仍然要走第零轮 —— 由它先把方向、层级、回头闭环
+    定下来，归纳那一轮只负责把骨架落到具体的分支与连线上。留空时用户消息**逐字
+    等于**批次 M22 的老文本（老用例与老缓存行为不变）。
     """
     data = logic or {}
     text = str(data.get("text") or "")
@@ -542,6 +571,11 @@ def build_article_logic_payload(model: str, logic, *, title: str = "",
         article=build_article_material(text),
         vary=build_article_vary_note(vary),
     )
+    chain_text = (logic_chain if isinstance(logic_chain, str)
+                  else build_logic_chain_material(logic_chain or {}))
+    if chain_text:
+        user += ("\n\n【这篇文章的逻辑链（第零轮已经通读全文得出的骨架，方向以它为准；"
+                 "你仍然要在正文里找到支持每条关系的依据）】\n" + chain_text)
     if feedback:
         user += ("\n\n上一轮你的输出有这样一些问题，请**改掉它们**后重新输出完整 JSON：\n"
                  + feedback)
@@ -552,6 +586,242 @@ def build_article_logic_payload(model: str, logic, *, title: str = "",
             {"role": "user", "content": user},
         ],
         "temperature": float(temperature if not vary else vary_temperature),
+        "stream": False,
+        "response_format": {"type": "json_object"},
+    }, reasoning_effort), thinking)
+
+
+#: 逻辑链的「主逻辑」类型（第零轮用）。与 :data:`app.map_service.LOGIC_TYPES` 同值 ——
+#: 定义在这里是因为 ``map_service`` 反过来 import 本模块，不能反向依赖（会成环）。
+LOGIC_TYPES: tuple[str, ...] = ("时序", "因果", "对策", "层级", "依赖", "对比")
+
+#: ★★ 逻辑链分析（第零轮，批次 M24）：**先读懂整篇文章**，再谈画哪条线。
+#: 用户口径（2026-10-09）：「我的想法就是在导图生成流程中加入逻辑链检查，大模型必须
+#: 对文章的逻辑链条，层级划分，因果关系等等有清晰的认知和划分，为了确保导图的精准性
+#: 这一步必须不能省略，只有 LLM 彻底的理解文章链条，逻辑才能实现导图的精准生成。」
+#:
+#: 为什么单开一轮而不是把要求塞进第 1 轮：第 1 轮的材料是**词条**（一个词 + 它周围
+#: 240 字的上下文），模型看到的是若干个互不相邻的碎片，**从来没有见过整篇文章**——
+#: 于是它只能按「这两个词的上下文里都出现了什么」硬凑边，凑出来的方向经常是倒的
+#: （实测主题「项目开发」：材料原话「项目任务拆解必须依赖已经确认好的项目需求」，
+#: 候选写成 `任务拆解 -依赖-> 确定项目需求`，核对判 contradicted、主线当场断一节）。
+#: 这一轮把**文章正文**整段交给模型，只让它回答「这篇文章的骨架是什么」，一条关系都
+#: 不许提；它给出的骨架紧接着作为第 1 轮的**前置认知**发下去，模型再按骨架提候选。
+#:
+#: 这一轮的产物是「认知」而不是边界的权威：端点、类型、证据仍然全部由本地校验 +
+#: 第二次核对决定（见 :mod:`app.map_service`）。
+MAP_LOGIC_CHAIN_SYSTEM_PROMPT = """你在为《探索词典》做导图生成前的**第一步：读懂文章的逻辑链**。
+
+用户会给你一篇短文章的正文，以及这篇文章里已经划出来的词。**这一步一条关系都不许提**，
+你的唯一任务是**把文章的逻辑彻底想清楚并写下来** —— 后面的导图完全按照你写下的这份骨架
+来画，所以这里写错、写漏，图就一定是错的。
+
+严格只输出一个 JSON 对象，不要输出任何其它文字，不要使用 Markdown 代码围栏。结构：
+{"logic_type": "时序", "core": "一句话说出这篇文章到底在讲什么",
+ "concepts": [{"name": "文章里的概念词", "role": "这个词在文章里扮演什么角色"}],
+ "hierarchy": [{"whole": "上位 / 整体", "parts": ["下位 / 组成部分"]}],
+ "temporal": [{"first": "先", "then": "后", "basis": "文章里哪句话说明它在前"}],
+ "causal": [{"cause": "因", "effect": "果", "basis": "文章里哪句话说明 A 造成 B"}],
+ "dependency": [{"dependent": "要依赖别人的那个", "prerequisite": "被依赖的前提",
+                 "basis": "文章里哪句话说明它依赖它"}],
+ "contrast": [{"a": "一方", "b": "另一方", "basis": "文章里哪句话把它们对照"}],
+ "turning_points": ["文章里改变方向 / 回头 / 形成闭环的那一句或那一处"],
+ "synthesis": {"whole": "文章最后归结出来的那个整体", "parts": ["共同构成它的那些环节"]}}
+
+填写规则（每一条都是硬要求）：
+1. **concepts 必须是文章里出现过的概念词的**清单**（按文章顺序），一个都不许漏**：
+   流程的每一步、每一层级的整体与部分、因果链上的因与果、专门被作者强调（加粗 / 单独
+   成句 / 「必须」「需要」）的词，全部都要写进来。**只写名词性概念**，不要写「首先」
+   「之后」这种连接词，也不要写整句话。用户划出来的词要在 concepts 里出现；
+2. **方向必须按逻辑写，不许照抄句子里的主谓顺序**：这是最容易错的一处。汉语里
+   「B 必须依赖已经确认好的 A」是 **A 在前、B 依赖 A**；「A 之后做 B」是 **A 在前、
+   B 在后**；「A 导致 / 使得 / 因此有了 B」是 **A 是因、B 是果**。写 dependency 时
+   `dependent` = 那个需要借助别人的词，`prerequisite` = 被借助的那个词；
+   写 causal 时 `cause` = 起因，`effect` = 结果。写完**回头看一遍**：把这两个词按你写的
+   顺序念出来，是否与文章的意思一致；
+3. **temporal / causal / dependency / contrast 四种一张都不能空着交差**：文章里没有
+   就用空数组 `[]`（空数组合法，绝不硬凑），但只要文章里有，就一定要写全 ——
+   漏掉一条，图上就少一条线；
+4. **层级（hierarchy）单独写**：整体—部分 / 上位—下位才写这里（例如「卷积神经网络」
+   包含「卷积层」）。文章说「先做 A 再做 B」时，A / B 是**流程的两步**，不是整体与部分，
+   那种情况写 temporal，**不许**写进 hierarchy；
+5. **收口句（synthesis）一定要填**：文章最后常常用一句总结把前面几个环节收在一起
+   （「…共同构成…」「…一起形成了…」「…都是…的一部分」）。`whole` 写那个被归结出来的
+   整体，`parts` 写共同构成它的那些环节；文章确实没有这种句子时，`whole` 写空串、`parts` 写 []；
+6. **turning_points 写「回头 / 反向 / 闭环」**：文章里凡是出现「反向调整」「重新」
+   「再回到」「由此又」这类把流程拉回去、让链条闭合成环的地方，写进 turning_points
+   （写那一句或那一处的意思），闭环是文章逻辑里最容易被漏掉的东西；
+7. logic_type 只能是这六个之一：时序 / 因果 / 对策 / 层级 / 依赖 / 对比；
+8. 只依据这篇文章的正文。**不许**用主题以外的知识补全，**不许**推测作者没写的因果关系；
+   正文里确实没有的东西就留空数组。"""
+
+#: 逻辑链分析的用户消息：**整篇文章正文** + 这篇文章划出来的词。
+#: 与后面几轮（只发词条碎片）刻意不同 —— 这一轮存在的意义就是让模型看见全文。
+MAP_LOGIC_CHAIN_USER_TEMPLATE = """主题：{topic}
+
+文章正文：
+{article}
+
+这篇文章里用户划出来的词（你要保证它们都在 concepts 里）：
+{terms}
+
+请按上面的要求，写出这篇文章的逻辑链骨架。"""
+
+
+def parse_map_logic_chain(content: str) -> dict:
+    """解析逻辑链骨架（纯函数，宽容但绝不放行垃圾）。
+
+    与其它解析器同一套路：认不出就返回**空骨架**（各字段空值），绝不抛 —— 逻辑链这一轮
+    失败时**不能**把整次生成打断（调用方会退回到「没有骨架直接提候选」的老路径，并在
+    结果里如实标注这一次没有走到逻辑链）。
+    """
+    empty: dict = {"logic_type": "", "core": "", "concepts": [], "hierarchy": [],
+                   "temporal": [], "causal": [], "dependency": [], "contrast": [],
+                   "turning_points": [], "synthesis": {"whole": "", "parts": []}}
+    try:
+        data = json.loads(str(content or ""))
+    except (TypeError, ValueError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+
+    def _text(value, limit: int = 40) -> str:
+        return str(value or "").strip()[:limit]
+
+    def _items(value) -> list:
+        return list(value) if isinstance(value, list) else []
+
+    def _pairs(value, first_key: str, second_key: str) -> list:
+        out: list = []
+        for row in _items(value):
+            if not isinstance(row, dict):
+                continue
+            first = _text(row.get(first_key))
+            second = _text(row.get(second_key))
+            if not first or not second:
+                continue
+            out.append({first_key: first, second_key: second,
+                        "basis": _text(row.get("basis"), 60)})
+        return out
+
+    concepts: list = []
+    for row in _items(data.get("concepts")):
+        if isinstance(row, dict):
+            name = _text(row.get("name"), 20)
+            if name:
+                concepts.append({"name": name, "role": _text(row.get("role"), 40)})
+        elif isinstance(row, str) and row.strip():
+            concepts.append({"name": _text(row, 20), "role": ""})
+    hierarchy: list = []
+    for row in _items(data.get("hierarchy")):
+        if not isinstance(row, dict):
+            continue
+        whole = _text(row.get("whole"), 20)
+        parts = [part for part in (_text(item, 20) for item in _items(row.get("parts")))
+                 if part]
+        if whole and parts:
+            hierarchy.append({"whole": whole, "parts": parts})
+    synthesis = data.get("synthesis")
+    whole, parts = "", []
+    if isinstance(synthesis, dict):
+        whole = _text(synthesis.get("whole"), 20)
+        parts = [part for part in (_text(item, 20) for item in _items(synthesis.get("parts")))
+                 if part]
+    turning = [item for item in (_text(item, 60) for item in _items(data.get("turning_points")))
+               if item]
+    logic_type = _text(data.get("logic_type"), 8)
+    return {
+        "logic_type": logic_type if logic_type in LOGIC_TYPES else "",
+        "core": _text(data.get("core"), 80),
+        "concepts": concepts,
+        "hierarchy": hierarchy,
+        "temporal": _pairs(data.get("temporal"), "first", "then"),
+        "causal": _pairs(data.get("causal"), "cause", "effect"),
+        "dependency": _pairs(data.get("dependency"), "dependent", "prerequisite"),
+        "contrast": _pairs(data.get("contrast"), "a", "b"),
+        "turning_points": turning,
+        "synthesis": {"whole": whole, "parts": parts},
+    }
+
+
+def logic_chain_is_empty(chain) -> bool:
+    """骨架是不是「什么都没写」（纯函数）。空骨架 = 这一轮实际没起作用。"""
+    if not isinstance(chain, dict):
+        return True
+    for key in ("concepts", "hierarchy", "temporal", "causal", "dependency", "contrast",
+                "turning_points"):
+        if list(chain.get(key) or ()):
+            return False
+    whole = str((chain.get("synthesis") or {}).get("whole") or "").strip()
+    return not whole
+
+
+def build_logic_chain_material(chain, *, limit: int = 120) -> str:
+    """把逻辑链骨架压成给**第一轮**看的前置认知（纯函数；空骨架返回空串）。
+
+    只写「文章是怎么串起来的」，不写任何一条现成的边 —— 模型仍然要自己按材料提出
+    候选并给出逐字证据；这里给的是**方向上的定调**（谁在前、谁依赖谁、谁构成谁）。
+    """
+    if not isinstance(chain, dict) or logic_chain_is_empty(chain):
+        return ""
+    cut = max(1, int(limit))
+    lines: list[str] = []
+    logic_type = str(chain.get("logic_type") or "").strip()
+    core = str(chain.get("core") or "").strip()
+    if logic_type or core:
+        lines.append(f"这篇文章的主逻辑：{logic_type or '（未定）'}。{core}"[: cut * 2])
+    names = "、".join(str(item.get("name") or "").strip()
+                     for item in list(chain.get("concepts") or ())
+                     if str(item.get("name") or "").strip())[: cut * 4]
+    if names:
+        lines.append(f"文章里的全部概念词（一个都没漏）：{names}")
+    for row in list(chain.get("hierarchy") or ()):
+        parts = "、".join(str(part) for part in list(row.get("parts") or ())[:8])
+        lines.append(f"层级：{row.get('whole')} 是整体，包含 {parts}")
+    for row in list(chain.get("temporal") or ()):
+        lines.append(f"先后：{row.get('first')} 在 {row.get('then')} 之前"
+                     + (f"（依据：{row.get('basis')}）" if row.get("basis") else ""))
+    for row in list(chain.get("causal") or ()):
+        lines.append(f"因果：{row.get('cause')} 导致 {row.get('effect')}"
+                     + (f"（依据：{row.get('basis')}）" if row.get("basis") else ""))
+    for row in list(chain.get("dependency") or ()):
+        lines.append(f"依赖：{row.get('dependent')} 依赖 {row.get('prerequisite')}"
+                     f" ⇒ 方向是 {row.get('prerequisite')} → {row.get('dependent')}"
+                     + (f"（依据：{row.get('basis')}）" if row.get("basis") else ""))
+    for row in list(chain.get("contrast") or ()):
+        lines.append(f"对照：{row.get('a')} 与 {row.get('b')}")
+    for point in list(chain.get("turning_points") or ())[:6]:
+        lines.append(f"回头 / 闭环：{point}")
+    whole = str((chain.get("synthesis") or {}).get("whole") or "").strip()
+    parts = "、".join(str(part) for part in
+                     list((chain.get("synthesis") or {}).get("parts") or ())[:8])
+    if whole and parts:
+        lines.append(f"收口：{parts} 共同构成 {whole}（这几条属于关系要画出来）")
+    return "\n".join(lines)[: cut * 12]
+
+
+def build_map_logic_chain_payload(model: str, article: str, *, topic: str = "",
+                                  terms=(), temperature: float = 0.0,
+                                  text_limit: int = ARTICLE_TEXT_CHARS,
+                                  reasoning_effort: str = "",
+                                  thinking: str = "") -> dict:
+    """构造**逻辑链分析**请求体（第零轮）：只发这篇文章的正文 + 划出来的词。
+
+    与第 1/2/3 轮的材料边界不同（那几轮只发词条碎片）—— 这一轮**必须**看见整篇文章，
+    否则「读懂逻辑链」这件事根本无从谈起。发出去的东西仍然只有：主题名、文章正文、
+    用户自己划出来的词。窗口标题 / 网址 / 文件路径 / 其它主题的词条一律不出现。
+    """
+    terms_text = "、".join(str(term).strip() for term in list(terms or ()) if str(term).strip())
+    return _with_thinking(_with_reasoning({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": MAP_LOGIC_CHAIN_SYSTEM_PROMPT},
+            {"role": "user", "content": MAP_LOGIC_CHAIN_USER_TEMPLATE.format(
+                topic=(topic or "").strip() or "（未命名主题）",
+                article=build_article_material(article, limit=int(text_limit)),
+                terms=terms_text or "（没有划出来的词）")},
+        ],
+        "temperature": float(temperature),
         "stream": False,
         "response_format": {"type": "json_object"},
     }, reasoning_effort), thinking)
@@ -720,13 +990,15 @@ def build_map_rescue_payload(model: str, entries, *, topic: str = "",
                              linked=(), isolated=(), material_chars: int = MAP_MATERIAL_CHARS,
                              max_entries: int = MAP_MAX_ENTRIES,
                              temperature: float = 0.0,
+                             logic_chain=None,
                              reasoning_effort: str = "",
                              thinking: str = "") -> dict:
     """构造**补问**请求体（批次 M23）：词被核对删成孤立词时，只针对它再问一次。
 
     与 :func:`build_map_payload` 同源（同一份材料、同一条类型红线），只多两行点名：
     已经连上的词、以及**还没连上**的那个词（含它的编号）。材料边界完全一致 ——
-    仍然只有当前主题的词条，不带窗口标题 / 网址 / 整篇文档。
+    仍然只有当前主题的词条，不带窗口标题 / 网址 / 整篇文档；``logic_chain`` 与第一轮
+    用**同一份**骨架，免得补问又问出一个方向相反的边。
     """
     material = build_map_material(entries, material_chars=material_chars,
                                   max_entries=max_entries)
@@ -734,6 +1006,12 @@ def build_map_rescue_payload(model: str, entries, *, topic: str = "",
                             for index, term in list(linked or ())) or "（没有）"
     words = "、".join(str(term).strip() for _index, term in list(isolated or ()))
     indexes = "、".join(str(int(index)) for index, _term in list(isolated or ()))
+    chain_text = (logic_chain if isinstance(logic_chain, str)
+                  else build_logic_chain_material(logic_chain)).strip()
+    chain_block = ""
+    if chain_text:
+        chain_block = ("\n\n【这篇文章的逻辑链（第零轮通读全文得出的骨架，方向以它为准）】\n"
+                       f"{chain_text}")
     return _with_thinking(_with_reasoning({
         "model": model,
         "messages": [
@@ -741,7 +1019,7 @@ def build_map_rescue_payload(model: str, entries, *, topic: str = "",
             {"role": "user", "content": MAP_RESCUE_USER_TEMPLATE.format(
                 topic=(topic or "").strip() or "（未命名主题）", material=material,
                 linked=linked_text, isolated=words or "（无）",
-                isolated_index=indexes or "（无）")},
+                isolated_index=indexes or "（无）") + chain_block},
         ],
         "temperature": float(temperature),
         "stream": False,
@@ -753,6 +1031,7 @@ def build_map_payload(model: str, entries, *, topic: str = "",
                       material_chars: int = MAP_MATERIAL_CHARS,
                       max_entries: int = MAP_MAX_ENTRIES,
                       temperature: float = 0.0,
+                      logic_chain=None,
                       reasoning_effort: str = "",
                       thinking: str = "") -> dict:
     """构造导图请求体：只含当前主题的词条材料 + 固定提示词。
@@ -760,15 +1039,31 @@ def build_map_payload(model: str, entries, *, topic: str = "",
     ``temperature`` 默认 **0.0**（曾经是 0.2）：导图是「同一份材料只该给同一张图」
     的确定性输出，界面上的「重新生成」不该把图洗一遍。采样随机性另有来源（思考
     模式），见 :func:`_with_thinking`。
+
+    ``logic_chain``（批次 M24）是**第零轮**给出的逻辑链骨架（dict）或已经压好的
+    前置认知文字（str）；给了就在用户消息最前面加一段「这篇文章是怎么串起来的」。
+    它只定调方向（谁在前、谁依赖谁、谁构成谁），**不是**现成的边 —— 模型仍然要自己
+    按材料提候选并给逐字证据。留空时用户消息与批次 M23 逐字一致（老缓存 / 老用例
+    不受影响）。
     """
     material = build_map_material(entries, material_chars=material_chars,
                                   max_entries=max_entries)
+    chain_text = (logic_chain if isinstance(logic_chain, str)
+                  else build_logic_chain_material(logic_chain)).strip()
+    if chain_text:
+        user = (f"主题：{(topic or '').strip() or '（未命名主题）'}\n\n"
+                "【这篇文章的逻辑链（第零轮已经通读全文得出的骨架，方向以它为准；"
+                "你仍然要在下面的词条材料里找到支持每条关系的原文依据）】\n"
+                f"{chain_text}\n\n"
+                f"已保存词条（编号 / 词语 / 上下文 / 已有释义）：\n{material}")
+    else:
+        user = MAP_USER_TEMPLATE.format(
+            topic=(topic or "").strip() or "（未命名主题）", material=material)
     return _with_thinking(_with_reasoning({
         "model": model,
         "messages": [
             {"role": "system", "content": MAP_SYSTEM_PROMPT},
-            {"role": "user", "content": MAP_USER_TEMPLATE.format(
-                topic=(topic or "").strip() or "（未命名主题）", material=material)},
+            {"role": "user", "content": user},
         ],
         "temperature": float(temperature),
         "stream": False,
@@ -1028,7 +1323,8 @@ class DeepSeekClient:
     def map_relations(self, entries, *, topic: str = "",
                       material_chars: int = MAP_MATERIAL_CHARS,
                       max_entries: int = MAP_MAX_ENTRIES,
-                      temperature: float = 0.0) -> list:
+                      temperature: float = 0.0,
+                      logic_chain=None) -> list:
         """让模型对**当前主题的已保存词条**提出候选关系（返回原始候选列表）。
 
         ``entries`` 由 ``MapService`` 构造：``[{"index", "term", "context",
@@ -1037,11 +1333,15 @@ class DeepSeekClient:
 
         ``temperature`` 默认 0.0，并带上 ``thinking``（DeepSeek 系默认关掉思考
         模式）：导图必须**确定**，同一份材料重新生成要给同一张图。
+
+        ``logic_chain``（批次 M24）是第零轮通读全文得出的逻辑链骨架，作为**前置
+        认知**发下去（方向以它为准）；不传时行为与批次 M23 逐字一致。
         """
         payload = build_map_payload(self.model, entries, topic=topic,
                                     material_chars=material_chars,
                                     max_entries=max_entries,
                                     temperature=temperature,
+                                    logic_chain=logic_chain,
                                     reasoning_effort=self.reasoning_effort,
                                     thinking=self.thinking)
         return parse_map_relations(self._extract_content(self._post(payload)))
@@ -1050,7 +1350,8 @@ class DeepSeekClient:
                             linked=(), isolated=(),
                             material_chars: int = MAP_MATERIAL_CHARS,
                             max_entries: int = MAP_MAX_ENTRIES,
-                            temperature: float = 0.0) -> list:
+                            temperature: float = 0.0,
+                            logic_chain=None) -> list:
         """**补问**（批次 M23）：某个词被核对删成孤立词之后，只针对它再问一次。
 
         ``entries`` 与 :meth:`map_relations` 完全同一份（当前主题的词条材料）；
@@ -1063,6 +1364,7 @@ class DeepSeekClient:
                                            material_chars=material_chars,
                                            max_entries=max_entries,
                                            temperature=temperature,
+                                           logic_chain=logic_chain,
                                            reasoning_effort=self.reasoning_effort,
                                            thinking=self.thinking)
         return parse_map_relations(self._extract_content(self._post(payload)))
@@ -1099,9 +1401,28 @@ class DeepSeekClient:
                                              thinking=self.thinking)
         return parse_map_template(self._extract_content(self._post(payload)), choices)
 
+    # ------------------------------------------------- 逻辑链（第零轮，M24）
+    def map_logic_chain(self, article: str, *, topic: str = "", terms=(),
+                        temperature: float = 0.0) -> dict:
+        """**第零轮**：先把整篇文章的逻辑链读出来（返回骨架 dict，认不出就是空骨架）。
+
+        这一轮不可省略（用户口径：导图要准，就必须先让模型彻底理解文章链条）。
+        它**只回答「文章是怎么串起来的」**，一条关系都不提；返回的骨架由
+        ``MapService`` 压成第一轮的前置认知（``build_logic_chain_material``）。
+
+        与其它几轮的材料边界不同：这一轮发的是**整篇正文**（受限输入里唯一一次），
+        因为只发词条碎片时模型看不到文章 —— 方向写反就是这么来的。
+        """
+        payload = build_map_logic_chain_payload(self.model, article, topic=topic,
+                                                terms=terms, temperature=temperature,
+                                                reasoning_effort=self.reasoning_effort,
+                                                thinking=self.thinking)
+        return parse_map_logic_chain(self._extract_content(self._post(payload)))
+
     # ------------------------------------------------- 按原文归纳（文章逻辑）
     def article_logic(self, logic, *, title: str = "", temperature: float = 0.0,
-                      vary: int = 0, reasoning_effort: str | None = None) -> dict:
+                      vary: int = 0, reasoning_effort: str | None = None,
+                      logic_chain: dict | str | None = None) -> dict:
         """读**整篇文章**，归纳出分支与关系（返回 ``parse_article_logic`` 的结果）。
 
         ``logic`` 由 ``MapService`` 构造：``{"text": 原文, "terms": 划过的词,
@@ -1110,11 +1431,14 @@ class DeepSeekClient:
 
         ``vary`` = 思维阶梯档位（0 = 标准做法）；``reasoning_effort`` 不传就用
         客户端自己的（``None`` 与空串是两回事：空串 = 真的不发送这个字段）。
+        ``logic_chain`` = 第零轮读全文得出的骨架（批次 M24），留空时用户消息逐字
+        等于老文本。
         """
         effort = self.reasoning_effort if reasoning_effort is None else reasoning_effort
         payload = build_article_logic_payload(
             self.model, logic, title=title, temperature=temperature,
-            reasoning_effort=effort, thinking=self.thinking, vary=vary)
+            reasoning_effort=effort, thinking=self.thinking, vary=vary,
+            logic_chain=logic_chain)
         return parse_article_logic(self._extract_content(self._post(payload)))
 
     # ------------------------------------------------------------- 内部

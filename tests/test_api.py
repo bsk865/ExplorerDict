@@ -8,9 +8,12 @@ import unittest
 from tests.support import temp_db
 from tools.fake_api_server import FakeApiServer
 
-from app.api_client import (ApiError, DeepSeekClient, MAP_VERIFY_SYSTEM_PROMPT,
-                            build_map_payload, build_map_verify_payload,
-                            build_payload, parse_explanation)
+from app.api_client import (ApiError, DeepSeekClient, MAP_LOGIC_CHAIN_SYSTEM_PROMPT,
+                            MAP_VERIFY_SYSTEM_PROMPT, build_logic_chain_material,
+                            build_map_logic_chain_payload, build_map_payload,
+                            build_map_rescue_payload, build_map_verify_payload,
+                            build_payload, logic_chain_is_empty,
+                            parse_explanation, parse_map_logic_chain)
 from app.config import Config
 from app.explain_service import ExplainService
 
@@ -253,6 +256,171 @@ class TestPureHelpers(unittest.TestCase):
         self.assertIn("supported", body["messages"][0]["content"])
         self.assertIn("依赖", body["messages"][1]["content"], "核对材料必须带具体方向")
         self.assertEqual(body["stream"], False)
+
+
+class TestMapLogicChain(unittest.TestCase):
+    """批次 M24 第零轮：读懂文章的逻辑链（纯函数 + 请求体，零网络）。"""
+
+    ARTICLE = ("开展项目开发需要一套持续迭代的工作流程。首先要确定项目需求；"
+               "项目任务拆解必须依赖已经确认好的项目需求。完成任务开发之后，开展项目复盘。"
+               "复盘得出的结论可以反向调整项目需求，重新拆解任务，形成循环迭代。")
+
+    def test_the_prompt_answers_the_logic_chain_not_a_relation_list(self):
+        body = build_map_logic_chain_payload("m", self.ARTICLE, topic="项目开发",
+                                             terms=("项目开发", "任务拆解"))
+        system = body["messages"][0]["content"]
+        user = body["messages"][1]["content"]
+        self.assertIn("逻辑链", system)
+        # 方向必须按逻辑写：M24 之前模型照抄主谓顺序，把「拆解依赖需求」写成
+        # 拆解 -> 需求，核对判 contradicted，主线当场断一节。
+        self.assertIn("不许照抄句子里的主谓顺序", system)
+        self.assertIn("一个都不许漏", system, "概念词必须全量列出，不许挑几个")
+        self.assertIn("synthesis", system, "文末收口句必须有专门的字段")
+        self.assertIn("项目开发", user)
+        self.assertIn("任务拆解", user, "划出来的词要单独告诉它")
+        self.assertIn("首先要确定项目需求", user, "第零轮必须看见整篇文章正文")
+        self.assertEqual(body["stream"], False)
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+
+    def test_the_article_is_sent_whole_and_cut_honestly(self):
+        """正文过长时走既有的截断口径，并且**如实标注**省略了。"""
+        body = build_map_logic_chain_payload("m", self.ARTICLE * 60, topic="项目开发",
+                                             text_limit=200)
+        user = body["messages"][1]["content"]
+        self.assertIn("正文过长", user, "截断必须如实写出来")
+        self.assertLess(len(user), 1200)
+
+    def test_parse_keeps_the_shape_and_drops_junk(self):
+        chain = parse_map_logic_chain(json.dumps({
+            "logic_type": "时序",
+            "core": "项目开发的循环流程",
+            "concepts": ["项目开发", {"name": "确定项目需求", "role": "起点"},
+                         {"role": "没有名字"}, ""],
+            "hierarchy": [{"whole": "项目开发体系",
+                           "parts": ["确定项目需求", "任务拆解", ""]}],
+            "temporal": [{"first": "确定项目需求", "then": "任务拆解",
+                          "basis": "首先要确定项目需求"}],
+            "causal": [{"cause": "项目复盘", "effect": "循环迭代"}],
+            "dependency": [{"dependent": "任务拆解", "prerequisite": "确定项目需求",
+                            "basis": "必须依赖"}],
+            "contrast": [{"a": "只写", "b": ""}],
+            "turning_points": ["复盘结论反向调整需求"],
+            "synthesis": {"whole": "项目开发体系",
+                          "parts": ["确定项目需求", "任务拆解", "项目复盘"]},
+        }))
+        self.assertEqual(chain["logic_type"], "时序")
+        self.assertEqual([item["name"] for item in chain["concepts"]],
+                         ["项目开发", "确定项目需求"], "没名字的概念词要丢掉")
+        self.assertEqual(chain["hierarchy"][0]["parts"], ["确定项目需求", "任务拆解"])
+        self.assertEqual(chain["dependency"],
+                         [{"dependent": "任务拆解", "prerequisite": "确定项目需求",
+                           "basis": "必须依赖"}])
+        self.assertEqual(chain["contrast"], [], "缺一半的对照不算一对")
+        self.assertEqual(chain["synthesis"]["whole"], "项目开发体系")
+        self.assertFalse(logic_chain_is_empty(chain))
+
+    def test_parse_never_raises_on_garbage(self):
+        for bad in ("", "   ", "not json", "[]", "null", '"x"', "{}"):
+            chain = parse_map_logic_chain(bad)
+            self.assertTrue(logic_chain_is_empty(chain),
+                            f"「{bad}」必须解析成空骨架而不是抛异常")
+        self.assertEqual(parse_map_logic_chain('{"logic_type": "随便编的"}')["logic_type"],
+                         "", "不在六种里的主逻辑一律置空")
+
+    def test_the_material_spells_the_dependency_direction_out(self):
+        """★★ 这一条是本批的核心：骨架喂给第一轮时，依赖必须写成「A → B」。"""
+        chain = parse_map_logic_chain(json.dumps({
+            "logic_type": "时序",
+            "concepts": [{"name": "确定项目需求"}, {"name": "任务拆解"}],
+            "dependency": [{"dependent": "任务拆解", "prerequisite": "确定项目需求",
+                            "basis": "必须依赖"}],
+            "synthesis": {"whole": "项目开发体系",
+                          "parts": ["确定项目需求", "任务拆解"]},
+        }))
+        text = build_logic_chain_material(chain)
+        self.assertIn("方向是 确定项目需求 → 任务拆解", text,
+                      "依赖必须当场转成箭头方向，模型才不会再写反")
+        self.assertIn("一个都没漏", text)
+        self.assertIn("共同构成 项目开发体系", text, "收口句要提醒它画属于关系")
+        self.assertNotIn("任务拆解 → 确定项目需求", text)
+        self.assertEqual(build_logic_chain_material({}), "", "空骨架不许编出内容")
+        self.assertEqual(build_logic_chain_material(None), "")
+
+    def test_the_chain_rides_along_with_the_first_round(self):
+        entries = [{"term": "卷积", "context": "卷积核在输入上滑动"}]
+        plain = build_map_payload("m", entries, topic="卷积网络")
+        chain = parse_map_logic_chain(json.dumps({
+            "logic_type": "层级",
+            "hierarchy": [{"whole": "卷积网络", "parts": ["卷积"]}]}))
+        with_chain = build_map_payload("m", entries, topic="卷积网络", logic_chain=chain)
+        self.assertEqual(plain["messages"][0]["content"],
+                         with_chain["messages"][0]["content"],
+                         "系统提示词一个字都不许变")
+        self.assertNotIn("逻辑链", plain["messages"][1]["content"])
+        self.assertIn("逻辑链", with_chain["messages"][1]["content"],
+                      "骨架必须进第一轮的用户消息")
+        self.assertIn("卷积网络 是整体", with_chain["messages"][1]["content"])
+        self.assertIn("卷积核在输入上滑动", with_chain["messages"][1]["content"],
+                      "词条材料仍然要在，模型还得自己找逐字证据")
+
+    def test_an_empty_chain_leaves_the_first_round_byte_identical(self):
+        """★ 兼容性守卫：拿不到骨架时，请求体必须与批次 M23 逐字一致。"""
+        entries = [{"term": "卷积", "context": "卷积核在输入上滑动",
+                    "explanation": "加权求和"}]
+        plain = build_map_payload("m", entries, topic="卷积网络")
+        for empty in ({}, parse_map_logic_chain(""), None):
+            same = build_map_payload("m", entries, topic="卷积网络", logic_chain=empty)
+            self.assertEqual(same["messages"][1]["content"],
+                             plain["messages"][1]["content"],
+                             f"空骨架（{empty!r}）不许改动第一轮的任何字节")
+
+    def test_the_rescue_round_sees_the_same_skeleton(self):
+        """补问与第一轮共用同一份骨架 —— 否则补问又会问出方向相反的边。"""
+        entries = [{"term": "任务拆解", "context": "必须依赖已经确认好的项目需求"}]
+        chain = parse_map_logic_chain(json.dumps({
+            "dependency": [{"dependent": "任务拆解", "prerequisite": "确定项目需求"}]}))
+        plain = build_map_rescue_payload("m", entries, topic="项目开发")
+        with_chain = build_map_rescue_payload("m", entries, topic="项目开发",
+                                              logic_chain=chain)
+        self.assertNotIn("逻辑链", plain["messages"][1]["content"])
+        self.assertIn("方向是 确定项目需求 → 任务拆解",
+                      with_chain["messages"][1]["content"])
+
+    def test_the_client_posts_the_chain_round_and_parses_it(self):
+        """第零轮走的是**同一个** POST 路径（``_post`` → ``_extract_content``）。
+
+        注意口径：``map_logic_chain`` 自己**只**解析形状，认不出就是空骨架；
+        连返回体都不是合法 JSON 时仍按别的轮次一样抛 ``ApiError`` —— 由
+        ``MapService.map_logic_chain`` 兜住（那一层才保证「第零轮失败不打断生成」）。
+        """
+        client = DeepSeekClient("https://api.example.com/v1", "m", FAKE_KEY)
+        posted: list = []
+
+        def fake_post(payload):
+            posted.append(payload)
+            inner = json.dumps({"logic_type": "时序",
+                                "temporal": [{"first": "确定项目需求",
+                                              "then": "任务拆解"}]})
+            return json.dumps(completion(inner))
+
+        with unittest.mock.patch.object(client, "_post", side_effect=fake_post):
+            chain = client.map_logic_chain(self.ARTICLE, topic="项目开发",
+                                           terms=("任务拆解",))
+        self.assertEqual(chain["temporal"],
+                         [{"first": "确定项目需求", "then": "任务拆解", "basis": ""}])
+        self.assertEqual(posted[0]["response_format"], {"type": "json_object"})
+        self.assertEqual(posted[0]["messages"][0]["content"],
+                         MAP_LOGIC_CHAIN_SYSTEM_PROMPT)
+        self.assertIn("文章正文", posted[0]["messages"][1]["content"],
+                      "发出去的是正文本身，不是词条碎片")
+
+        # 模型把话说成散文（不是 JSON 对象）：同一层也不许抛，退成空骨架
+        with unittest.mock.patch.object(
+                client, "_post",
+                side_effect=lambda payload: json.dumps(
+                    completion("我认为这篇文章讲的是项目开发"))):
+            self.assertTrue(logic_chain_is_empty(
+                client.map_logic_chain(self.ARTICLE, topic="项目开发")))
 
 
 class TestReasoningEffortIsOptIn(unittest.TestCase):

@@ -35,12 +35,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 from dataclasses import dataclass, field, replace
 
 from .api_client import (
-    ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES,
-    ApiError, article_vary,
+    ARTICLE_ENTITY_CHARS, ARTICLE_LOGIC_TYPES, LOGIC_TYPES as _API_LOGIC_TYPES,
+    MAP_MATERIAL_CHARS, MAP_MAX_ENTRIES, ApiError, article_vary,
+    logic_chain_is_empty,
 )
 from .article_source import MIN_ARTICLE_CHARS
 from .config import effort_choices, model_signature
@@ -64,6 +66,10 @@ CROSS_TYPES = frozenset({"用途", "对照"})
 SYMMETRIC_TYPES = frozenset({"对照"})
 #: 层级 / 方向约束（参与成环检测）
 CONSTRAINT_TYPES = HIERARCHY_TYPES | DIRECTIONAL_TYPES
+#: 「流程边」：材料把两个词说成「先做 A 再做 B」时用的类型。同一个词对之间已经有
+#: 这类边了，层级边（包含 / 属于）就一定是把流程步骤误当成整体—部分（批次 M24 的
+#: 本地硬判据，见 :func:`is_flow_step_pair`）。
+FLOW_TYPES = DIRECTIONAL_TYPES
 
 #: 依据 / 证据片段的长度上限（超出只截断，不改写、不编造）
 REASON_CHARS = 60
@@ -79,12 +85,21 @@ MIN_EVIDENCE_CHARS = 6
 #: v4：关系类型红线（流程步骤之间不许写「包含 / 属于」）+ 核对放宽时序/因果的证据
 #:     口径 + 删边兜底（孤立词补问）。同一份材料在这版下画出来的图与 v3 不同，
 #:     因此 v3 的缓存**一律不命中**，要重新生成才对得上。
-MAP_VALIDATION_VERSION = 4
+#: v5：生成流程最前面加**第零轮「逻辑链分析」**（先通读全文写出骨架，骨架作为
+#:     第一轮的前置认知；用户要求这一步不可省略）。方向定调变了 ⇒ 同一份材料在
+#:     v4 与 v5 下画出来的图会不同，v4 缓存**一律不命中**。
+MAP_VALIDATION_VERSION = 5
 
 #: 删边兜底最多为几个孤立词补问（批次 M23）。实测一轮补问只救 0～1 个词，
 #: 但每个词 = 一次候选调用 + 一次核对调用，因此设硬上限，绝不让兜底把一次
 #: 生成的开销翻几倍。
 RESCUE_MAX_ORPHANS = 3
+
+#: 第零轮「逻辑链分析」发出去的正文上限（字符，批次 M24）。
+#: 这一轮存在的意义就是让模型看见全文，但也不能把论文级长文整篇发出去 ——
+#: 4000 字足够覆盖用户实际在用的短文，超长时按 :func:`app.api_client.build_article_material`
+#: 在段落边界截断，并在材料里如实标注「（正文过长，以下省略）」。
+LOGIC_CHAIN_TEXT_CHARS = 4000
 
 #: 核对判定（唯一权威定义在 :mod:`app.api_client`，这里只做白名单）
 VERDICT_SUPPORTED = "supported"
@@ -529,7 +544,8 @@ def logic_feedback(result) -> str:
 
 def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
                     terms=(), max_attempts: int = LOGIC_MAX_ATTEMPTS,
-                    model_config: str = "", plan=None) -> LogicGraph:
+                    model_config: str = "", plan=None,
+                    logic_sink: dict | None = None) -> LogicGraph:
     """跑「按原文归纳」：问模型 → **代码校验** → 不合格就带着差异清单重试。
 
     这是用户要的那条流水线的第 3、4、5 步，也是**唯一**会花 token 的地方。
@@ -543,12 +559,31 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
     ``plan`` 是 :func:`vary_plan` 给的换思路方案（批次 M21-B）：``vary`` 决定
     追加哪段「换一种想这件事的方式」的指令，``temperature`` 与 ``effort`` 决定
     这一档有多发散 / 想多深。不传 = 第 0 档（老口径，提示词一字不加）。
+
+    ``logic_sink`` 是**第零轮逻辑链**的出口（批次 M24）：传了就在归纳之前先跑一次
+    逻辑链分析，把骨架写进 ``logic_sink["chain"]`` 并随之作为归纳那一轮的前置认知
+    发下去；**不传就一次都不跑**（老口径，调用序列一字不变）。为什么留这个开关：
+    这条流水线自己就通读了全文，但「读懂逻辑链」必须是一个看得见、留得下的步骤
+    （用户口径：不可省略），所以由调用方决定要不要留痕，而不是偷偷多花一次钱。
     """
     attempts = max(1, int(max_attempts))
     body = str(text or "")
     #: 划过的词（允许直接传词条行；只取名字 —— 提示词、校验、主线都用这一份）。
     names = [str(getattr(item, "term", item) or "").strip() for item in (terms or ())]
     names = [name for name in names if name]
+    chain: dict = {}
+    if logic_sink is not None and callable(getattr(client, "map_logic_chain", None)):
+        # ★ 第零轮（批次 M24）：先把逻辑链读懂、写下来，再谈画哪条线。这一步失败
+        # 不算归纳失败 —— 拿不到骨架就按批次 M23 的老路径继续（``logic_sink`` 里
+        # 留空 = 界面说「这一次没走到逻辑链」，不编造骨架）。
+        try:
+            candidate = client.map_logic_chain(body, topic=str(title or ""),
+                                               terms=tuple(names))
+            if isinstance(candidate, dict) and not logic_chain_is_empty(candidate):
+                chain = dict(candidate)
+        except Exception:  # noqa: BLE001 - 第零轮绝不把一次归纳变成错误
+            log.exception("逻辑链分析失败（按原文归纳）：按老路径继续 doc_key=%s", doc_key)
+        logic_sink["chain"] = dict(chain)
     plan = dict(plan or {})
     step = int(plan.get("vary") or 0)
     label, _approach, _temperature = article_vary(step)
@@ -559,10 +594,17 @@ def run_logic_graph(client, *, doc_key: str = "", title: str = "", text: str,
     feedback = ""
     for attempt in range(attempts):
         logic = {"text": body, "terms": list(names), "feedback": feedback}
+        if not callable(getattr(client, "article_logic", None)):
+            # 网关没有这个方法（老替身 / 老客户端）：如实报一条契约错误，
+            # 而不是让 AttributeError 冒到兜底那一层去变成「未知错误」。
+            last = dict(last, problems=["模型客户端不支持按原文归纳"])
+            log.info("归纳第 %d 轮：客户端没有 article_logic", attempt + 1)
+            break
         try:
             raw = client.article_logic(logic, title=title, vary=step,
                                        temperature=temperature,
-                                       reasoning_effort=effort)
+                                       reasoning_effort=effort,
+                                       logic_chain=(chain or None))
         except ApiError as exc:
             if exc.kind != "bad_response":
                 # 网络 / 鉴权 / 限流这类失败重试也是白花用户的钱：如实报错，不重试。
@@ -1073,6 +1115,12 @@ class MapGraph:
     #: 「这一次换了什么」—— 说不出来就等于没换。
     vary: int = 0
     vary_label: str = ""
+    #: 第零轮「逻辑链分析」的骨架（批次 M24）：``{"logic_type", "core", "concepts",
+    #: "hierarchy", "temporal", "causal", "dependency", "contrast", "turning_points",
+    #: "synthesis"}``。空 dict = 这一次没走到逻辑链（老客户端 / 没正文 / 调用失败），
+    #: 由 :attr:`logic_chain_empty` 如实标注 —— 界面可以据此说清「这次是按老路径画的」。
+    logic_chain: dict = field(default_factory=dict)
+    logic_chain_empty: bool = True
 
     def relation_for(self, src_id: int, dst_id: int, rel_type: str) -> MapRelation | None:
         for rel in self.relations:
@@ -1119,6 +1167,15 @@ def dropped_summary(dropped: dict) -> str:
         "rescue_asked": "为孤立词补问",
         "rescue_supported": "补问答对并画上",
         "rescue_still_alone": "补问后仍没有关系",
+        "logic_chain_empty": "这一次没走到逻辑链",
+        # 第零轮骨架直接给的边 + 靠词语折回编号的候选（批次 M24）：同样是「救回来
+        # 多少」，不是「筛掉多少」。
+        "skeleton_edges": "第零轮骨架直接给的边",
+        "endpoint_by_name": "按词语折回编号的候选",
+        "candidate_names": "模型写成词语的候选",
+        # 本地硬判据拦下的：同一对词之间已经有流程边，层级边就是把流程步骤误当成
+        # 整体—部分（批次 M24，见 :func:`is_flow_step_pair`）。
+        "flow_step": "流程步骤被误写成包含 / 属于",
     }
     parts = [f"{labels.get(key, key)} {int(value)}"
              for key, value in (dropped or {}).items() if int(value or 0) > 0]
@@ -1182,6 +1239,16 @@ def _load_verdicts(row) -> tuple[dict, ...]:
             "kept": bool(item.get("kept")),
         })
     return tuple(out)
+
+
+def _load_logic_chain(row) -> dict:
+    """缓存里的逻辑链骨架（批次 M24；没记录 → 空 dict = 没走到逻辑链）。
+
+    只认自己写进去的那一种形状（一个 JSON 对象）：老库那一列是空串、或者干脆
+    不是 JSON，一律当「这一次没走到逻辑链」——**不编造**骨架。
+    """
+    data = _row_json(row, "logic_chain")
+    return dict(data) if isinstance(data, dict) else {}
 
 
 def _with_provenance(graph: MapGraph, row) -> MapGraph:
@@ -1252,21 +1319,128 @@ def article_is_usable(article) -> bool:
     return status == "ok" and len(text.strip()) >= MIN_ARTICLE_CHARS
 
 
-def relation_locally_valid(rel_type, reason, evidence, src_node, dst_node) -> bool:
+def relation_locally_valid(rel_type, reason, evidence, src_node, dst_node,
+                           topic_materials=()) -> bool:
     """单条关系的**本地校验**（schema / 端点 / 依据 / 证据）—— 纯函数。
 
     本地校验与「核对之后再过一遍」共用同一份判据：类型在白名单、有非空依据、
-    不是自环、证据**逐字**出现在两端材料里，且不是「把端点词语抄一遍」的弱证据。
+    不是自环、证据**逐字**出现在材料里，且不是「把端点词语抄一遍」的弱证据。
+
+    ``topic_materials``（批次 M24）是**本次主题所有词条**的上下文；给了它，证据
+    允许来自本文任何一个词的上下文 —— 收口句（「A、B、C 共同构成 D」）常常写在
+    **另一个词**的上下文里，只比两端那两段会把它整条丢掉。★ 这一层**必须**与
+    :func:`validate_relations` / :func:`apply_verdicts` 用**同一个口径**：两处宽严
+    不一致时会出现「本地放行、核对也判 supported，最后却按 `verify_bad` 丢掉」这种
+    谁也说不清的结果（M24 真 Key 实测一次踩掉三条收口边）。
     """
     if rel_type not in REL_TYPES:
         return False
     if not str(reason or "").strip():
         return False
+    if not str(evidence or "").strip():
+        return False
     if int(src_node.entry_id) == int(dst_node.entry_id):
         return False
     materials = tuple(src_node.materials()) + tuple(dst_node.materials())
     terms = (str(getattr(src_node, "term", "") or ""), str(getattr(dst_node, "term", "") or ""))
-    return evidence_supported(evidence, materials, terms=terms)
+    if evidence_supported(evidence, materials, terms=terms):
+        return True
+    if topic_materials:
+        # 两端那两段里找不到，但**本文另一条词条**的上下文里有 → 照样算数；
+        # 依据本身一点没放宽（仍然要求逐字出现在这篇材料里）。
+        return evidence_supported(evidence, tuple(topic_materials), terms=terms)
+    return False
+
+
+def flow_step_pairs(candidates, nodes) -> tuple[set[tuple[int, int]], set[int]]:
+    """候选里已经出现的**流程边**（纯函数）。
+
+    返回 ``(pairs, members)``：``pairs`` 是流程边两端 ``entry_id`` 排序后的词对，
+    ``members`` 是**上过流程链**的全部词 id。只按形状看：端点能对上、类型在
+    :data:`FLOW_TYPES` 里、不是自环。用来做 :func:`is_flow_step_pair` 的判据 ——
+    **先扫全批再判**，免得「层级边排在流程边前面」时判不出来（候选顺序是模型给的，
+    不能当保证）。
+
+    两种输入形状都吃（★ 实测踩过）：第一轮的**候选字典**用 ``"type"`` 键，
+    **已成立的** :class:`MapRelation` 用 ``rel_type`` 字段 —— 沿用那道关传进来的是
+    后者，只认 ``"type"`` 会静默返回空集合、沿用完全绕过关。
+
+    ★ ``members`` 还要**向外扩一跳**（只走非层级边）：真 Key 实测「项目开发」自己
+    没上过流程链（流程边全在它包含的那几个步骤之间），于是「项目开发 包含 X」一条
+    都拦不住。凡是跟链上成员**有直接关系**的词，就已经是这条链的参与者了。
+    扩的时候**不走层级边** —— 否则「项目开发体系 属于 项目开发」会把整体也拖进
+    members，真正的整体—部分关系就再也画不出来了（这是刻意的取舍）。
+    """
+    nodes = list(nodes or [])
+    pairs: set[tuple[int, int]] = set()
+    members: set[int] = set()
+    neighbours: dict[int, set[int]] = {}
+    for item in list(candidates or []):
+        if isinstance(item, dict):
+            rel_type = item.get("type")
+            src_index, dst_index = _as_index(item.get("src")), _as_index(item.get("dst"))
+            if src_index is None or dst_index is None or not (
+                    0 <= src_index < len(nodes) and 0 <= dst_index < len(nodes)):
+                continue
+            src_id = int(nodes[src_index].entry_id)
+            dst_id = int(nodes[dst_index].entry_id)
+        else:
+            rel_type = getattr(item, "rel_type", "")
+            src_id = int(getattr(item, "src_entry_id", -1))
+            dst_id = int(getattr(item, "dst_entry_id", -1))
+        rel_type = rel_type.strip() if isinstance(rel_type, str) else ""
+        if src_id < 0 or dst_id < 0 or src_id == dst_id:
+            continue
+        if rel_type not in FLOW_TYPES:
+            if rel_type in HIERARCHY_TYPES:      # 层级边不参与扩张（见 docstring）
+                continue
+            neighbours.setdefault(src_id, set()).add(dst_id)
+            neighbours.setdefault(dst_id, set()).add(src_id)
+            continue
+        pairs.add(tuple(sorted((src_id, dst_id))))
+        members.update((src_id, dst_id))
+    frontier = set(members)
+    while frontier:
+        grown: set[int] = set()
+        for entry_id in frontier:
+            for other in neighbours.get(entry_id, ()):
+                if other not in members:
+                    members.add(other)
+                    grown.add(other)
+        frontier = grown
+    return pairs, members
+
+
+def is_flow_step_pair(rel_type, src_id, dst_id, flow_pairs) -> bool:
+    """这条**层级**边是不是把流程步骤误当成了整体—部分（纯函数）。
+
+    用户口径（批次 M24）：「**错误套用「包含」连接不同流程步骤（流程步骤不是包含
+    从属）**」。只对 ``HIERARCHY_TYPES``（包含 / 属于）生效，两条判据：
+
+    * ``flow_pairs`` 里有这一对（同一个词对之间已经有流程边）；
+    * **「被包含」的那一端上过流程链**（``members``）—— 材料里已经在讲「先做 A 再
+      做 B」了，它就是这条流程上的步骤，不能被说成是别的东西的一部分。真 Key 实测：
+      模型每轮都提「项目开发 包含 确定项目需求 / 任务拆解 / 项目复盘」，而这一轮的
+      流程边全在**这几个步骤之间** —— 只看「两边都在链上」会一条都拦不住。
+
+    ★ 判据只看**被包含的那一端**，刻意不看包含端（实测踩过）：反过来判会把
+    「过拟合 ← 卷积 包含」和「过拟合 ← 池化 依赖」这对组合一起误杀 —— 那两条都是好
+    边（一条层级、一条流程），而「整体 包含 链上成员」恰恰是收口句要的形状。
+
+    真正的整体—部分**不会**被误杀：收口句那个整体（「项目开发体系」）根本不在流程
+    链上，它包含的三个步骤才是链上成员。没有流程边的层级边一律照旧放行。
+
+    为什么非得写在本地：提示词（第一轮）与核对（第二轮）都立了这道红线，但真 Key
+    实测**同一份材料三轮，模型每轮都提「项目开发 包含 X」、核对也每轮判 supported**
+    —— 只有本地判据是不看运气的。
+    """
+    if rel_type not in HIERARCHY_TYPES:
+        return False
+    pair = tuple(sorted((int(src_id), int(dst_id))))
+    pairs, members = flow_pairs if isinstance(flow_pairs, tuple) else (flow_pairs, set())
+    if pair in (pairs or set()):
+        return True
+    return int(dst_id) in members
 
 
 def validate_relations(candidates, nodes, *,
@@ -1278,12 +1452,24 @@ def validate_relations(candidates, nodes, *,
     返回 ``(kept, dropped)``：``kept`` 保持候选原顺序，``dropped`` 是按原因分类的计数。
     规则见模块开头；核心是「端点必须是本次给出的词 + 必须带材料里逐字出现的证据」。
     这里产出的仍然只是**候选**：还要过第二次独立核对才能画 / 缓存。
+
+    ★ 证据的取材范围（批次 M24）：**任何一条主题词条的上下文都算**，不只是两端
+    那两个词的上下文。理由是这张图的材料本来就只有这一篇短文 —— 第零轮通读全文
+    读出来的收口句（「A、B、C 共同构成 D」）常常写在**另一个词**的上下文里，只比
+    两端那两段会把它整条丢掉；而「多认几个词」并不会放宽依据本身（仍然要求逐字
+    出现在**这篇材料**里，也仍然要过第二次独立核对）。任务以外的材料一概不认。
     """
     nodes = list(nodes or [])
     dropped = {key: 0 for key in ("shape", "endpoint", "type", "self", "reason",
-                                  "evidence", "duplicate", "contradiction", "cycle")}
+                                  "evidence", "duplicate", "contradiction", "cycle",
+                                  "flow_step")}
     kept: list[MapRelation] = []
     seen: set = set()
+    topic_materials: list[str] = []
+    for node in nodes:
+        topic_materials.extend(str(item) for item in node.materials())
+    # ★ 流程边先扫全批（不能边判边攒：候选顺序是模型给的，层级边可能排在流程边前面）。
+    flow_pairs = flow_step_pairs(candidates, nodes)
 
     for item in list(candidates or []):
         if not isinstance(item, dict):
@@ -1311,8 +1497,21 @@ def validate_relations(candidates, nodes, *,
             continue
         evidence = item.get("evidence")
         evidence = " ".join(evidence.split()) if isinstance(evidence, str) else ""
-        if not relation_locally_valid(rel_type, reason, evidence, src_node, dst_node):
+        if not relation_locally_valid(rel_type, reason, evidence, src_node, dst_node,
+                                      topic_materials=topic_materials):
+            # 判据全在 :func:`relation_locally_valid` 里（含「证据可以来自本文任何
+            # 一条词条的上下文」这条 M24 口径）—— 这里不再自己写第二套，免得两处
+            # 宽严不一致。
             dropped["evidence"] += 1
+            continue
+        if is_flow_step_pair(rel_type, int(src_node.entry_id), int(dst_node.entry_id),
+                             flow_pairs):
+            # ★ 本地硬判据（批次 M24）：同一个词对之间已经有先后 / 因果 / 依赖这类
+            # **流程边**了，层级边就一定是把流程步骤误当成整体—部分 —— 用户原话
+            # 「错误套用『包含』连接不同流程步骤（流程步骤不是包含从属）」。判据写
+            # 在本地是因为提示词管不住：真 Key 实测同一份材料两轮，第二轮核对仍然
+            # 把三条「项目开发 包含 X」判成 supported。
+            dropped["flow_step"] += 1
             continue
         key = _relation_key(rel_type, int(src_node.entry_id), int(dst_node.entry_id))
         if key in seen:
@@ -1350,6 +1549,247 @@ def touched_entry_ids(relations) -> set[int]:
     return touched
 
 
+def _name_index(name: str, nodes) -> int | None:
+    """把模型写的**词语**折回词条编号（纯函数，查不到返回 ``None``）。
+
+    提示词要编号，实测模型仍会时不时把 ``src`` / ``dst`` 写成词语本身
+    （批次 M24 真 Key 实测：五条候选全部写成名字）。以前这种候选一律按
+    「端点越界」丢掉 —— 图上一条线都不剩，用户看到的就是「漏掉关联」。
+
+    两级匹配，都要求**唯一命中**，宁可查不到也不猜：
+
+    * 先**逐字**相等（去空白后）。这一级刻意不走 :func:`canonical_term` ——
+      它会把「项目开发体系」折成「项目开发」，而这两个在文章里是**两个不同的
+      说法**（M22-C 实测），同一条词条的两种写法不该被当成同一个词；
+    * 再走 :func:`canonical_term` 的口径（模型写全称、词条是简称），且
+      **只有一个**词条命中才算（「项目需求」能唯一折到「确定项目需求」；
+      同时能折到两个词的就不折）。
+    """
+    key = " ".join(str(name or "").split())
+    if not key:
+        return None
+    items = list(nodes or [])
+    for index, node in enumerate(items):
+        if str(getattr(node, "term", "") or "").strip() == key:
+            return index
+    names = [str(getattr(node, "term", "") or "") for node in items]
+    folded = canonical_term(key, names)
+    if not folded or folded == key:
+        return None
+    hits = [index for index, word in enumerate(names)
+            if str(word or "").strip() == folded]
+    return hits[0] if len(hits) == 1 else None
+
+
+def resolve_candidate_endpoints(candidates, nodes) -> tuple[list, int]:
+    """把候选里的端点**折回编号**（纯函数，无 Tk、无 IO）。
+
+    返回 ``(fixed, resolved)``：``fixed`` 是端点已经能用编号表达的那部分候选
+    （**逐条复制**，不动调用方拿到的原始对象），``resolved`` 是靠词语折回来的
+    条数（写进 ``dropped`` 里如实告诉用户「这次有几条是这么救回来的」）。
+
+    只动 ``src`` / ``dst``，其余字段一个字不改；本来编号就合法、以及彻底折
+    不回来的候选**原样留着** —— 折这里不是为了放宽校验，只是把模型写词语这件
+    事从「整条丢掉」降级成「照它说的那个词接上」，后面的端点 / 类型 / 证据 /
+    核对一道都不少。
+    """
+    items = list(candidates or [])
+    count = len(list(nodes or []))
+    fixed: list = []
+    resolved = 0
+    for item in items:
+        if not isinstance(item, dict):
+            fixed.append(item)
+            continue
+        src, dst = item.get("src"), item.get("dst")
+        src_ok = _as_index(src) is not None
+        dst_ok = _as_index(dst) is not None
+        if src_ok and dst_ok:
+            fixed.append(item)
+            continue
+        row = dict(item)
+        touched = False
+        if not src_ok:
+            found = _name_index(src, nodes)
+            if found is not None:
+                row["src"] = found
+                touched = True
+        if not dst_ok:
+            found = _name_index(dst, nodes)
+            if found is not None:
+                row["dst"] = found
+                touched = True
+        if touched:
+            resolved += 1
+        fixed.append(row)
+    return fixed, resolved
+
+
+def _verbatim_evidence(basis, materials) -> str:
+    """从模型写的 ``basis`` 里抠出**材料里真有**的那一段（纯函数）。
+
+    模型写 basis 时经常把两句话用「；」「，」甚至「……」「...」连成一句（真 Key
+    实测：`"首先要确定项目需求；然后是任务拆解。"`）。整段拿去比对必然通不过，于是
+    这条骨架边就被「证据与材料不符」丢掉 —— 明明是它读对了、只是引用写得长。
+
+    做法：先按标点把 basis 切成小段，每一段都在材料里**逐字**找一遍，返回**最长**
+    的那一段的原文。★ 刻意不「在规范化后的 basis 里找最长子串」—— 真 Key 实测那样
+    会返回 `'首先要确定项目需求；……；然后是任务拆解'`（两个「有效字符」段在
+    basis 里相邻、在材料里却隔着标点），整段再拿去做逐字校验照样不通过。按段切就
+    不会跨过标点。找不到（或太短）就返回空串，交给后面如实丢掉。
+    """
+    raw = str(basis or "")
+    corpus = [normalize_material(item) for item in (materials or ())]
+    corpus = [item for item in corpus if item]
+    if not corpus:
+        return raw.strip()
+    pieces = [piece for piece in re.split(r"[^\w\u4e00-\u9fff]+", raw) if piece]
+    best = ""
+    for piece in pieces:
+        probe = normalize_material(piece)
+        if len(probe) < MIN_EVIDENCE_CHARS or len(probe) <= len(best):
+            continue
+        if any(probe in item for item in corpus):
+            best = piece
+    return best
+
+
+def logical_canonical_candidates(chain, nodes, *,
+                                 materials=()) -> tuple[list, dict]:
+    """第零轮骨架 + 词条表 ⇒ 一批**端点确定**的候选关系（纯函数）。
+
+    用户口径（批次 M24）：「大模型必须对文章的逻辑链条、层级划分、因果关系
+    有清晰的认知和划分」，而且这份认知要**兜住**图 —— 所以第零轮读出来的
+    关系（先后 / 因果 / 依赖 / 收口）不能只当提示词里的一段话，它本身就要
+    变成候选：**先把骨架画出来，再让模型补材料依据**。
+
+    只有端点能在词条表里**唯一**对上的骨架行才产出候选（对不上就由模型那条
+    路去提，这里不猜）；同一条（类型 + 端点）只出一次。``materials`` 是本次
+    主题所有词条的上下文，用来把 basis 抠成材料里真有的那一截（见
+    :func:`_verbatim_evidence`）—— 不传就退化成老的「按句号切」口径。返回
+    ``(candidates, counts)``，``counts`` 按类型计数（写进 ``dropped`` 如实
+    告诉用户「其中几条是第零轮骨架直接给的」）。
+    """
+    items = list(nodes or [])
+    if not items or not isinstance(chain, dict) or not chain:
+        return [], {}
+    corpus = [str(item) for item in (materials or ())]
+    out: list = []
+    counts: dict[str, int] = {}
+    seen: set = set()
+
+    def _pair(first, second) -> tuple[int, int] | None:
+        a = _name_index(first, items)
+        b = _name_index(second, items)
+        if a is None or b is None or a == b:
+            return None
+        # ★ 给的是**本次材料里的位置**（0 起），不是 entry_id —— ``validate_relations``
+        # 的 ``src`` / ``dst`` 是位置口径（实测把 entry_id 写进去会被整批判成
+        # 「端点越界」，图上一条线都不剩）。
+        return a, b
+
+    def _add(kind: str, src_id: int, dst_id: int, reason: str, basis: str = "") -> None:
+        key = (kind, src_id, dst_id)
+        if key in seen:
+            return
+        evidence = _verbatim_evidence(basis, corpus) if corpus else ""
+        if not evidence:
+            # 没有材料可比对（或 basis 里抠不出材料里真有的那一截）时，退回老的
+            # 「按句号 / 省略号切一段」口径 —— 总比把整句带「……」的拿去比对强。
+            for piece in re.split(r"[.…]+|\.\.\.", str(basis or "")):
+                piece = " ".join(piece.split())
+                if len(normalize_material(piece)) > len(normalize_material(evidence)):
+                    evidence = piece
+        seen.add(key)
+        out.append({"src": src_id, "dst": dst_id, "type": kind,
+                    "reason": reason, "evidence": evidence})
+        counts[kind] = counts.get(kind, 0) + 1
+
+    for row in list(chain.get("temporal") or ()):
+        if not isinstance(row, dict):
+            continue
+        pair = _pair(row.get("first"), row.get("then"))
+        if pair:
+            _add("时序", pair[0], pair[1], "第零轮通读全文读出来的先后顺序",
+                 row.get("basis"))
+    for row in list(chain.get("causal") or ()):
+        if not isinstance(row, dict):
+            continue
+        pair = _pair(row.get("cause"), row.get("effect"))
+        if pair:
+            _add("因果", pair[0], pair[1], "第零轮通读全文读出来的因果关系",
+                 row.get("basis"))
+    for row in list(chain.get("dependency") or ()):
+        if not isinstance(row, dict):
+            continue
+        # dependent 依赖 prerequisite ⇒ 方向是 prerequisite → dependent
+        pair = _pair(row.get("prerequisite"), row.get("dependent"))
+        if pair:
+            _add("依赖", pair[0], pair[1], "第零轮通读全文读出来的依赖关系",
+                 row.get("basis"))
+    synthesis = chain.get("synthesis") or {}
+    if isinstance(synthesis, dict):
+        whole = str(synthesis.get("whole") or "").strip()
+        whole_index = _name_index(whole, items)
+        if whole_index is not None:
+            for part in list(synthesis.get("parts") or ()):
+                part_index = _name_index(part, items)
+                if part_index is None or part_index == whole_index:
+                    continue
+                _add("属于", part_index, whole_index,
+                     "收口句：这几部分共同构成这个整体",
+                     f"{part}、{whole}共同构成")
+    return out, counts
+
+
+def logic_chain_article(nodes, *, limit: int = LOGIC_CHAIN_TEXT_CHARS) -> str:
+    """把主题下各词条的**阅读上下文**拼回一篇文章（纯函数，给第零轮用）。
+
+    为什么要拼：逻辑链这一轮（批次 M24）必须看见全文，否则「读懂文章链条」无从谈起。
+    本机手头**只有**每个词的 240 字上下文 —— 那就是当初用户划词时看到的正文片段，
+    把它们按词条顺序接起来，就是这篇文章能被还原出来的样子。
+
+    做法：剥掉划词时加的「文章正文：」这类前缀，压掉空白，再去掉**被后一段包含**
+    的重复片段（相邻片段经常大段重叠）。这不是原文副本，只要够读懂逻辑就够用 ——
+    因此函数名与注释都不假装它是原文。
+    """
+    cap = max(0, int(limit))
+    if cap <= 0:
+        return ""
+    pieces: list[str] = []
+    for node in list(nodes or ()):
+        text = str(getattr(node, "context", "") or "")
+        text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r"^(文章正文|正文|原文)\s*[:：]\s*", "", text)
+        if len(text) < 8:
+            continue
+        if any(text in piece for piece in pieces):
+            continue
+        pieces = [piece for piece in pieces if piece not in text]
+        pieces.append(text)
+    return " ".join(pieces)[:cap]
+
+
+def build_labeled_map_material(entries, *, material_chars: int = MAP_MATERIAL_CHARS,
+                               max_entries: int = MAP_MAX_ENTRIES) -> str:
+    """给逻辑链那一轮用的词条材料：每行一个 ``[编号] 词语``（纯函数）。
+
+    与 :func:`app.api_client.build_map_material` 的区别是**不带**上下文与释义 ——
+    这一轮要的是「文章里划出来了哪些词」，把 240 字上下文再塞一遍只会让模型分心，
+    而且逻辑链的输入本来就该是正文本身。
+    """
+    limit = max(0, int(max_entries))
+    cut = max(1, int(material_chars))
+    lines: list[str] = []
+    for index, item in enumerate(list(entries or [])[:limit]):
+        item = item or {}
+        term = str(item.get("term") or "").strip()[:cut]
+        if not term:
+            continue
+        lines.append(f"[{index}] {term}")
+    return "\n".join(lines)
+
+
 def apply_verdicts(relations, nodes, verdicts) -> tuple[list[MapRelation], dict]:
     """按**独立核对**（第二次调用）的判定筛边 —— 纯函数，只删不增。
 
@@ -1367,6 +1807,12 @@ def apply_verdicts(relations, nodes, verdicts) -> tuple[list[MapRelation], dict]
     nodes_by_id = {int(node.entry_id): node for node in (nodes or ())}
     counts = {key: 0 for key in ("verify_supported", "verify_uncertain",
                                  "verify_contradicted", "verify_bad")}
+    # 证据的取材范围必须与 :func:`validate_relations` **一模一样**（M24）：收口句
+    # 常写在别的词的上下文里，这里只比两端会把「本地放行、核对也判 supported」的
+    # 边按 verify_bad 丢掉（真 Key 实测一次踩掉三条）。
+    topic_materials: list[str] = []
+    for node in (nodes or ()):
+        topic_materials.extend(str(item) for item in node.materials())
     decisions: dict[int, str] = {}
     for item in list(verdicts or []):
         if not isinstance(item, dict):
@@ -1394,7 +1840,8 @@ def apply_verdicts(relations, nodes, verdicts) -> tuple[list[MapRelation], dict]
         src_node = nodes_by_id.get(int(rel.src_entry_id))
         dst_node = nodes_by_id.get(int(rel.dst_entry_id))
         if src_node is None or dst_node is None or not relation_locally_valid(
-                rel.rel_type, rel.reason, rel.evidence, src_node, dst_node):
+                rel.rel_type, rel.reason, rel.evidence, src_node, dst_node,
+                topic_materials=topic_materials):
             counts["verify_bad"] += 1
             continue
         counts["verify_supported"] += 1
@@ -1477,6 +1924,7 @@ def carried_is_compatible(rel: MapRelation, kept) -> bool:
 
 
 def carry_over_relations(previous, current, nodes, *, verdicts=None,
+                         flow_pairs=None,
                          note: str = CARRY_NOTE,
                          override_note: str = CARRY_OVERRIDE_NOTE):
     """把**上一张图里已核对通过的关系**补回本轮（纯函数，只增不删）。
@@ -1492,6 +1940,12 @@ def carry_over_relations(previous, current, nodes, *, verdicts=None,
     * **这次又提了、但这一轮核对改判成不成立** ⇒ **以上次为准**，把这条边的判定
       换成 ``supported``（``override_note``）—— 核对是整批一起判的，换一批候选
       结论就会抖，不能让已经画出来的边因为「这次问出来不一样」就消失。
+
+    ★ ``flow_pairs``（批次 M24）：本轮**已经成立的那些关系**算出来的流程边
+    （:func:`flow_step_pairs` 的结果）。沿用的边同样要过「流程步骤不许写成包含 /
+    属于」这道本地判据，否则它会**绕过把关从旧图里爬回来** —— 真 Key 实测就是这个
+    形状：候选里 5 条被拦掉，图上却还剩 2 条「项目开发 包含 项目复盘 / 属于」，
+    全是从上一次的缓存里沿用的。
 
     返回 ``(relations, verdicts, carried_keys)``：``verdicts`` 可直接与核对结果拼在
     一起交给 :func:`verdict_records` / :func:`apply_verdicts`（判定记录照样完整，点词
@@ -1524,6 +1978,9 @@ def carry_over_relations(previous, current, nodes, *, verdicts=None,
         if not relation_locally_valid(rel.rel_type, rel.reason, rel.evidence,
                                       src_node, dst_node):
             continue                                 # 材料改了、证据不再成立，就不画
+        if flow_pairs is not None and is_flow_step_pair(
+                rel.rel_type, int(rel.src_entry_id), int(rel.dst_entry_id), flow_pairs):
+            continue                                 # 流程步骤被写成层级：连沿用都不许
         if not carried_is_compatible(rel, kept_now + extra):
             continue                                 # 与现有边矛盾 / 成环：宁可少画
         index = by_key.get(key)
@@ -1927,8 +2384,45 @@ class MapService:
             })
         return items
 
+    def map_logic_chain(self, client, topic_name: str, nodes) -> tuple[dict, bool]:
+        """**第零轮**：先读懂整篇文章的逻辑链（批次 M24），返回 ``(骨架, 是否为空)``。
+
+        用户口径（2026-10-09）：「在导图生成流程中加入逻辑链检查……为了确保导图的
+        精准性这一步必须不能省略」。为什么必须单独一轮：第一轮的材料是**词条碎片**
+        （一个词 + 240 字上下文），模型根本没看见过整篇文章，只能按「两个词的上下文
+        里都出现了什么」硬凑边，方向经常是倒的（实测：「项目任务拆解必须依赖已经
+        确认好的项目需求」被写成 `任务拆解 -依赖-> 确定项目需求`，核对判 contradicted，
+        图上主线当场断一节）。这一轮把正文整段发出去，只让它回答「文章是怎么串起来
+        的」，骨架紧接着作为第一轮的前置认知。
+
+        这一轮**不是**权威：端点、类型、证据仍然全部由本地校验 + 第二次核对决定；
+        骨架只用来定调**方向**（谁在前、谁依赖谁、谁构成谁）。
+
+        失败（网络 / 格式 / 模型没配 / 老客户端没有这个方法）一律**不打断**生成：
+        返回空骨架 + ``True``，调用方按批次 M23 的老路径继续，并在结果里如实记一个
+        ``logic_chain_empty`` 计数（界面能说清「这一次没走到逻辑链」）。
+        """
+        if not callable(getattr(client, "map_logic_chain", None)):
+            return {}, True
+        article = logic_chain_article(nodes, limit=int(self.config.get_int(
+            "map.logic_chain_chars", LOGIC_CHAIN_TEXT_CHARS)))
+        if not article.strip():
+            return {}, True
+        terms = [str(getattr(node, "term", "") or "").strip()
+                 for node in list(nodes or ())]
+        terms = [term for term in terms if term]
+        try:
+            chain = client.map_logic_chain(article, topic=topic_name, terms=terms)
+        except Exception as exc:               # 第零轮失败不能把一次生成变成错误
+            log.info("逻辑链分析失败 topic=%s: %s", topic_name, redact(str(exc)))
+            return {}, True
+        if not isinstance(chain, dict) or logic_chain_is_empty(chain):
+            return {}, True
+        return chain, False
+
     def rescue_orphan_relations(self, client, topic_name: str, nodes, relations,
-                                verdicts, *, limit: int = RESCUE_MAX_ORPHANS
+                                verdicts, *, limit: int = RESCUE_MAX_ORPHANS,
+                                logic_chain=None
                                 ) -> tuple[list, list, dict]:
         """删边兜底（批次 M23）：被核对删成**孤立词**的那些词，单独补问一次。
 
@@ -1981,7 +2475,8 @@ class MapService:
                 raw = client.map_isolated_rescue(
                     entries, topic=topic_name,
                     linked=linked,
-                    isolated=[(pos, str(getattr(node, "term", "") or ""))])
+                    isolated=[(pos, str(getattr(node, "term", "") or ""))],
+                    logic_chain=logic_chain)
             except Exception as exc:           # 补救失败：如实记，不打断生成
                 log.info("孤立词补问失败 topic=%s term=%s: %s",
                          topic_name, getattr(node, "term", ""), redact(str(exc)))
@@ -2136,6 +2631,7 @@ class MapService:
             relations.append(MapRelation(src_id, dst_id, rel_type,
                                          str(item.get("reason") or ""),
                                          str(item.get("evidence") or "")))
+        chain = _load_logic_chain(row)
         graph = MapGraph(
             topic_id=int(topic_id),
             fingerprint=fp,
@@ -2145,6 +2641,8 @@ class MapService:
             source="cache",
             model_config=f"{row['base_url']}|{row['model']}",
             verdicts=_load_verdicts(row),
+            logic_chain=chain,
+            logic_chain_empty=not chain,
         )
         return _with_provenance(graph, row)
 
@@ -2331,7 +2829,11 @@ class MapService:
         if previous is None or not previous.relations:
             return list(relations), list(verdicts), set()
         merged, merged_verdicts, carried_keys = carry_over_relations(
-            previous, relations, nodes, verdicts=verdicts)
+            previous, relations, nodes, verdicts=verdicts,
+            # ★ 沿用的边也要过「流程步骤不许写成包含 / 属于」这道本地判据（批次
+            # M24）—— 否则它会从旧图里绕过关爬回来。流程边按**本轮真正成立**的
+            # 关系算（这里传进来的就已经是本地校验通过的候选）。
+            flow_pairs=flow_step_pairs(relations, nodes))
         if carried_keys:
             log.info("导图沿用上次已核对通过的关系 %s 条 topic=%s", len(carried_keys), topic_id)
         return merged, merged_verdicts, carried_keys
@@ -2352,6 +2854,9 @@ class MapService:
         """
         row, text = article
         plan = dict(plan or {})
+        #: ★ 第零轮逻辑链的出口（批次 M24）：``run_logic_graph`` 会把骨架写进来，
+        #: 这里既用它落缓存、也用它决定界面上说不说「这一次没走到逻辑链」。
+        sink: dict = {"chain": {}}
         doc_key = title = ""
         try:
             doc_key = str(row["doc_key"] or "").strip()
@@ -2369,7 +2874,7 @@ class MapService:
             graph = run_logic_graph(
                 client, doc_key=doc_key, title=title, text=text,
                 terms=tuple(node.term for node in nodes),
-                model_config=self.model_config(), plan=plan)
+                model_config=self.model_config(), plan=plan, logic_sink=sink)
             relations, skipped = logic_to_map_relations(graph, nodes)
             dropped: dict[str, int] = {}
             if skipped:
@@ -2387,6 +2892,11 @@ class MapService:
             with self._lock:
                 self._inflight.discard((topic_id, fp))
 
+        chain = dict(sink.get("chain") or {})
+        if not chain:
+            # 第零轮没跑成（方法不存在 / 报错 / 回了空骨架）：如实记一个，界面就能
+            # 说清「这一次没走到逻辑链」，而不是假装走过了。
+            dropped["logic_chain_empty"] = 1
         result = MapGraph(
             topic_id=topic_id,
             fingerprint=fp,
@@ -2399,6 +2909,8 @@ class MapService:
             branches=tuple(dict(branch) for branch in graph.branches),
             vary=int(graph.vary or 0),
             vary_label=str(graph.vary_label or ""),
+            logic_chain=chain,
+            logic_chain_empty=not chain,
         )
         try:
             self.db.put_map_graph(
@@ -2409,6 +2921,7 @@ class MapService:
                 raw=json.dumps(graph.as_dict(), ensure_ascii=False)[:4000],
                 validation_version=MAP_VALIDATION_VERSION,
                 dropped=dict(dropped), verdicts=[],
+                logic_chain=chain,
             )
         except Exception:  # 写缓存失败不影响本次显示
             log.exception("写导图缓存失败（按原文归纳）topic=%s", topic_id)
@@ -2447,9 +2960,39 @@ class MapService:
             try:
                 client = self.make_client(base_url=base_url, model=model,
                                           timeout=timeout, api_key=api_key)
-                candidates = client.map_relations(self.material_payload(nodes),
-                                                  topic=topic_name)
+                # ★ 第零轮（批次 M24）：先通读全文写出逻辑链骨架，作为第一轮的
+                # **前置认知**发下去。这一步不可省略（用户口径），但它的失败不算
+                # 生成失败 —— 拿不到骨架就按批次 M23 的老路径继续，并如实记一个
+                # `logic_chain_empty`，界面上能说清「这一次没走到逻辑链」。
+                chain, chain_empty = self.map_logic_chain(client, topic_name, nodes)
+                # 本次主题所有词条的上下文：第零轮的 basis 要在这里面抠出**逐字存在**
+                # 的那一截当证据（见 :func:`_verbatim_evidence`）。
+                topic_materials: list[str] = []
+                for node in nodes:
+                    topic_materials.extend(str(item) for item in node.materials())
+                # ★ 把关第一道：第零轮读出来的先后 / 因果 / 依赖 / 收口本身就要变成
+                # 候选（用户口径是「先把逻辑链读清楚，导图才准」—— 那这份认知就不能
+                # 只当提示词里的一段话）。它排在最前面，模型那条路只负责补材料依据。
+                skeleton, skeleton_counts = logical_canonical_candidates(
+                    chain, nodes, materials=topic_materials)
+                asked = client.map_relations(self.material_payload(nodes),
+                                             topic=topic_name,
+                                             logic_chain=chain)
+                # ★ 把关第二道：模型偶尔把 src / dst 写成词语而不是编号（真 Key
+                # 实测五条全写成名字）。以前这种候选按「端点越界」整条丢掉、图上一条
+                # 线都不剩 —— 现在按词折回编号，折不回来的才丢。
+                asked, by_name = resolve_candidate_endpoints(asked, nodes)
+                candidates = skeleton + asked
                 relations, dropped = validate_relations(candidates, nodes)
+                if skeleton_counts:
+                    dropped["skeleton_edges"] = sum(skeleton_counts.values())
+                if by_name:
+                    dropped["endpoint_by_name"] = by_name
+                if chain_empty:
+                    # ★ 必须写在 ``validate_relations`` **之后**：``dropped`` 就是它
+                    # 返回的那本账，写在前面会 UnboundLocalError（实测踩过：
+                    # `app/map_service.py:2563`，整个生成线程当场报错）。
+                    dropped["logic_chain_empty"] = 1
                 # 只有本地校验通过的候选才值得再问一次（核对不许新增边）
                 verdicts: list = []
                 if relations:
@@ -2474,7 +3017,8 @@ class MapService:
                 # 删边兜底（批次 M23）：核对把某个词删到一个边都不剩时，为它**单独
                 # 补问一次**，别让它在图上静默降级成「孤立词」。补救失败只少救一个词。
                 relations, verdicts, rescued = self.rescue_orphan_relations(
-                    client, topic_name, nodes, relations, verdicts)
+                    client, topic_name, nodes, relations, verdicts,
+                    logic_chain=chain)
                 # ★ 判定记录必须与**删边前**的关系表同一口径：拿「删过边的关系表 +
                 # 没删过的整份判定」回填会让后面的序号越界、判定全变空（实测踩过）。
                 records = list(verdict_records(base_relations, nodes, base_verdicts))
@@ -2518,6 +3062,8 @@ class MapService:
                 model_config=f"{base_url}|{model}",
                 verdicts=tuple(records),
                 carried=carried,
+                logic_chain=dict(chain or {}),
+                logic_chain_empty=bool(chain_empty),
             )
             try:
                 self.db.put_map_graph(
@@ -2526,6 +3072,7 @@ class MapService:
                     raw=json.dumps(list(candidates), ensure_ascii=False)[:4000],
                     validation_version=MAP_VALIDATION_VERSION,
                     dropped=dict(dropped), verdicts=list(records),
+                    logic_chain=dict(chain or {}),
                 )
             except Exception:  # 写缓存失败不影响本次显示
                 log.exception("写导图缓存失败 topic=%s", topic_id)

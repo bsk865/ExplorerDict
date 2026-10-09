@@ -36,10 +36,10 @@ from dataclasses import dataclass, replace
 
 from .. import api_client
 from ..logging_setup import get_logger
-from ..map_service import (DIRECTIONAL_TYPES, HIERARCHY_TYPES, REL_TYPES,
-                           SYMMETRIC_TYPES, article_is_usable, article_levels,
-                           constraint_pair, is_manual, logic_vary_label,
-                           manual_relations, normalize_material)
+from ..map_service import (DIRECTIONAL_TYPES, HIERARCHY_TYPES, REL_DIRECTION_TEXT,
+                           REL_TYPES, SYMMETRIC_TYPES, article_is_usable,
+                           article_levels, constraint_pair, is_manual,
+                           logic_vary_label, manual_relations, normalize_material)
 from . import map_templates, theme, widgets
 
 log = get_logger("conceptmap")
@@ -153,6 +153,39 @@ HINT_FADE_STEP_MS = 90
 #: 折叠后那一行的文案（可点，点开重新展开）——「操作说明」与工具条上那个按钮同名，
 #: 用户一眼知道点它会看到什么。
 HINT_COLLAPSED_TEXT = "操作说明"
+#: 关系词的白话（批次 M24）。用户口径原话：「我发现如果我作为一个用户，我压根看不懂
+#: 你这些关系词代表什么。」画布上的短标签（:data:`LABEL_FONT_SIZE`）只能放两三个字，
+#: 所以这里的白话分两处用：
+#: ① **提示块**里排一张小对照表（所以提示块从三行操作说明变成「操作说明 + 关系词表」）；
+#: ② **点一条线之后**的依据区，把这条关系的**具体意思**写成一句人话（见
+#:    :meth:`ConceptMapWindow._rel_talk`）。
+#: 键与 :data:`app.map_service.REL_TYPES` **逐字一致**，八种一个不少 —— 缺一种就会在
+#: 图上出现一个没人解释的词，那正是用户报的那条。
+REL_PLAIN = {
+    "包含": "整体→部分",
+    "属于": "部分→整体",
+    "依赖": "要 B 先要有 A：A→B",
+    "用途": "A 用来做 B",
+    "因果": "A 导致 B",
+    "对照": "A 和 B 对比",
+    "时序": "先 A 后 B",
+    "对策": "A 是问题，B 是办法",
+}
+#: 关系词对照表一行放几种（八种排成 4 行 × 2 列：一直排下去会把提示块拉成一条竖线）
+REL_PLAIN_COLUMNS = 2
+#: 对照表里「类型—白话」之间用什么连起来（「：」在 8pt 下比「＝」清楚）
+REL_PLAIN_JOIN = "："
+#: 对照表的**行**：每行几个「类型：白话」拼在一起。
+#: 顺序按 :data:`app.map_service.REL_TYPES`（包含 / 属于 / 依赖 / 用途 / 因果 / 对照 /
+#: 时序 / 对策）—— 与提示词、校验、缓存共用同一份白名单顺序，用户看到的次序和模型
+#: 被告知的次序一致。白名单里出现 :data:`REL_PLAIN` 没写的类型时**跳过**（宁可少一行，
+#: 也不要在图上留一个没解释的词——真出现就说明两处该一起改）。
+REL_PLAIN_ROWS: tuple[str, ...] = tuple(
+    "　".join(f"{name}{REL_PLAIN_JOIN}{REL_PLAIN[name]}"
+              for name in REL_TYPES[begin:begin + REL_PLAIN_COLUMNS]
+              if name in REL_PLAIN)
+    for begin in range(0, len(REL_TYPES), REL_PLAIN_COLUMNS)
+)
 #: 点选连线的命中半径（逻辑像素）
 HIT_TOL = 10
 #: 点选词卡的**外扩**半径（逻辑像素）：贴着卡片边缘点一下也算点中这个词
@@ -4056,9 +4089,13 @@ class ConceptMapWindow:
         self._schedule_hint_fade(expanded=True)
 
     def _build_hint_rows(self, *, expanded: bool) -> None:
-        """画提示的行：展开 = 三行说明（右对齐），折叠 = 一行 :data:`HINT_COLLAPSED_TEXT`。
+        """画提示的行：展开 = 几行说明（右对齐），折叠 = 一行 :data:`HINT_COLLAPSED_TEXT`。
 
-        两种状态用同一套 Label（先 ``pack_forget`` 再重建），折叠那一行绑左键点开。
+        两种状态用同一套 Label（先 ``pack_forget`` 再重建）。**两个方向都能点**：
+        折叠那一行点开（:meth:`_on_hint_rows_click`），展开的每一行点一下就收起来
+        （:meth:`_on_hint_collapse_click`）—— 用户口径（M24）：「提示被折叠展开之后
+        无法折叠」：以前展开态只能等 :data:`HINT_EXPAND_MS` 自动淡出，而只要用户点开
+        过一次，:attr:`_hint_user_collapsed` 就把自动淡出永久关掉了，于是再也收不起来。
         """
         for child in list(self.hint_inner.winfo_children()):
             try:
@@ -4073,16 +4110,24 @@ class ConceptMapWindow:
         #: 每一行的「原色」：淡出中会被改掉，重新展开时要按它还原。
         self.hint_row_fg: list = []
         if expanded:
-            fonts_fg = (theme.TEXT_MUTED,) + (theme.TEXT_FAINT,) * (len(HINT_LINES) - 1)
+            n_lines = len(HINT_LINES)
+            fonts_fg = ((theme.TEXT_MUTED,)
+                        + (theme.TEXT_FAINT,) * (n_lines - 1)
+                        + (theme.TEXT_FAINT,) * len(REL_PLAIN_ROWS))
             for index, line in enumerate(HINT_LINES):
-                last = index == len(HINT_LINES) - 1
+                last = index == n_lines - 1
                 label = tk.Label(self.hint_inner, text=line, bg=tint,
                                  fg=fonts_fg[index], font=theme.font(8),
-                                 anchor="e", justify="right")
+                                 anchor="e", justify="right", cursor="hand2")
                 label.pack(side="top", anchor="e",
                            pady=(0, 0 if last else theme.px(HINT_ROW_GAP)))
+                try:
+                    label.bind("<Button-1>", self._on_hint_collapse_click)
+                except (tk.TclError, TypeError):  # pragma: no cover - 替身没有 bind
+                    pass
                 self.hint_rows.append(label)
                 self.hint_row_fg.append(fonts_fg[index])
+            self._build_hint_legend(tint, fonts_fg[n_lines:])
             return
         label = tk.Label(self.hint_inner, text=HINT_COLLAPSED_TEXT, bg=tint,
                          fg=theme.TEXT_FAINT, font=theme.font(8),
@@ -4095,10 +4140,83 @@ class ConceptMapWindow:
         self.hint_rows.append(label)
         self.hint_row_fg.append(theme.TEXT_FAINT)
 
+    def _build_hint_legend(self, tint: str, colors: tuple) -> None:
+        """提示块下半张：**关系词白话对照表**（批次 M24）。
+
+        用户口径原话：「我发现如果我作为一个用户，我压根看不懂你这些关系词代表什么。」
+        画布上的短标签只有两三个字（时序 / 因果 / 依赖…），所以在这里给一张一一对应的
+        人话表。每一行同样是「点一下就收起来」（与上面三行操作说明同款）。
+
+        说明：这是**提示块**不是画布图元 —— 早先画布左上角那两行固定图例是用户明确
+        要求删掉的，这里不把它搬回去，只在右下角这个本来就可折叠的浮层里多排几行。
+        """
+        for index, line in enumerate(REL_PLAIN_ROWS):
+            if not line:  # pragma: no cover - REL_PLAIN 与 REL_TYPES 不同步时
+                continue
+            label = tk.Label(self.hint_inner, text=line, bg=tint,
+                             fg=colors[min(index, len(colors) - 1)] if colors
+                             else theme.TEXT_FAINT,
+                             font=theme.font(8), anchor="e", justify="right",
+                             cursor="hand2")
+            label.pack(side="top", anchor="e",
+                       pady=(theme.px(HINT_ROW_GAP) if index == 0 else 0,
+                             0 if index == len(REL_PLAIN_ROWS) - 1
+                             else theme.px(HINT_ROW_GAP)))
+            try:
+                label.bind("<Button-1>", self._on_hint_collapse_click)
+            except (tk.TclError, TypeError):  # pragma: no cover - 替身没有 bind
+                pass
+            self.hint_rows.append(label)
+            self.hint_row_fg.append(label.cget("fg") if hasattr(label, "cget")
+                                    else theme.TEXT_FAINT)
+
+    def _rel_talk(self, rel_type: str, src: str, dst: str) -> str:
+        """把一条关系翻成**一句人话**（批次 M24；用户说看不懂那些关系词）。
+
+        两种写法缺一不可：
+        ① **具体**：「确定项目需求 → 任务拆解」到底表达了什么 —— 按类型把两个端点词
+           填进句式（依赖还得说清哪边是前提，否则正是用户看到的那条反向边）；
+        ② **通用定义**：直接引 :data:`app.map_service.REL_DIRECTION_TEXT` 里发给核对
+           模型的那句方向语义 —— 图上写的和模型被告知的必须是同一句，用户才可能
+           拿它去判断「这条线画得对不对」。
+
+        类型不在白名单里（老缓存 / 人工乱写）时只给方向，不编定义。
+        """
+        kind = str(rel_type or "").strip()
+        if not kind:
+            return ""
+        talk = {
+            "包含": f"「{src}」是更大的整体/上位概念，「{dst}」是它里面的一部分",
+            "属于": f"「{src}」是「{dst}」的一部分/下位概念",
+            "依赖": f"要「{dst}」先得要有「{src}」（箭头指向被依赖的那一端）",
+            "用途": f"「{src}」是用来做「{dst}」的",
+            "因果": f"因为「{src}」，所以有「{dst}」",
+            "对照": f"「{src}」和「{dst}」是拿来互相对比的",
+            "时序": f"「{src}」在前，「{dst}」在后（同一条主线上的先后两步）",
+            "对策": f"「{src}」是问题/需求，「{dst}」是针对它提出的办法",
+        }.get(kind, "")
+        definition = str(REL_DIRECTION_TEXT.get(kind, "") or "")
+        parts = [text for text in (talk, definition) if text]
+        if not parts:
+            return ""
+        return "这条线什么意思：" + "　".join(parts)
+
     def _on_hint_rows_click(self, _event=None) -> None:
         """点折叠后那一行 = 再展开一次；这是用户自己要看的，**不再自动收**。"""
         self._hint_user_collapsed = True
         self._restart_hint_fade()
+
+    def _on_hint_collapse_click(self, _event=None) -> None:
+        """点展开中的任意一行 = 立刻收成一行（批次 M24）。
+
+        不再等定时器：``_cancel_hint_fade`` 先把待执行的淡出撤掉（否则它会在 20 秒后
+        对着已经重建过的控件继续改颜色），再置 ``_hint_user_collapsed`` —— 收起来是
+        用户自己的动作，不许被定时器弹回去。
+        """
+        self._cancel_hint_fade()
+        self._hint_user_collapsed = True
+        self._hint_expanded = False
+        self._build_hint_rows(expanded=False)
 
     def _sync_button(self) -> None:
         """单一按钮的文案与可用性（生成 / 重新生成 / 重试 / 正在生成）。"""
@@ -4146,8 +4264,10 @@ class ConceptMapWindow:
         if is_manual(rel):
             #: 人工关系没有「证据片段」也不该假装有：说明它是你自己的判断（C6）
             note = str(getattr(rel, "note", "") or getattr(rel, "reason", "") or "").strip()
+            talk = self._rel_talk(rel.rel_type, src, dst)
             return (f"{MANUAL_LABEL_PREFIX}{rel.rel_type}：{src} → {dst}\n"
-                    f"{MANUAL_KIND_NOTE}"
+                    + (f"{talk}\n" if talk else "")
+                    + f"{MANUAL_KIND_NOTE}"
                     + (f"\n你写的依据：{note}" if note else ""))
         reason = str(getattr(rel, "reason", "") or "").strip() or "（未给依据）"
         evidence = str(getattr(rel, "evidence", "") or "").strip() or "（未给片段）"
@@ -4160,8 +4280,10 @@ class ConceptMapWindow:
         note = "" if verbatim else "（未能逐字对上材料）"
         if truncated:
             note += f"（显示截断，库里存的是完整 {len(evidence)} 字）"
+        talk = self._rel_talk(rel.rel_type, src, dst)
         return (f"{rel.rel_type}：{src} → {dst}\n"
-                f"依据：{reason}　证据（{label}）：「{shown}」{note}")
+                + (f"{talk}\n" if talk else "")
+                + f"依据：{reason}　证据（{label}）：「{shown}」{note}")
 
     def _node_text(self, entry_id: int) -> str:
         """点词卡后的依据行：这个词的关系 / 为什么它是孤立词。
@@ -5447,6 +5569,7 @@ class ConceptMapWindow:
                 f"{len(isolated)} 个孤立词"
                 + (f"（其中人工添加 {manual_count} 条）" if manual_count else ""))
         lines = [head]
+        lines.extend(self._diag_logic_lines(graph))
         if not isolated:
             lines.append("没有孤立词：每个词都至少有一条画出来的关系。")
             return "\n".join(lines)
@@ -5481,8 +5604,59 @@ class ConceptMapWindow:
                 why = "；".join(parts)
             self._diag_lines[len(lines)] = entry_id
             lines.append(f"· {name} —— {why}")
+        lines.append("八个关系词的意思：" + "　".join(REL_PLAIN_ROWS))
         lines.append("（双击某一行可以在图上定位这个词；人工关系不算 AI 判断）")
         return "\n".join(lines)
+
+    def _diag_logic_lines(self, graph) -> list[str]:
+        """「这一次是按哪条逻辑链画的」（批次 M24，第零轮）。
+
+        用户口径：读懂逻辑链是**不可省略**的一步，那它就不能只留在日志里 —— 打开
+        诊断面板必须看得见这一次按的是哪条链（主逻辑 / 核心 / 收口 / 有没有回头），
+        以及**这一次压根没走到逻辑链**时如实说一句，而不是让用户以为走过。
+
+        ``graph`` 可能是 ``None``（还没生成）、老缓存（那一列是空串 ⇒ 骨架为空）、
+        或者真的带骨架。三种情况都给一句实话。
+        """
+        if graph is None:
+            return []
+        chain = dict(getattr(graph, "logic_chain", None) or {})
+        if not chain:
+            if bool(getattr(graph, "logic_chain_empty", True)):
+                return ["逻辑链：这一次没走到逻辑链（方向仍由本地校验与第二次核对把关）"]
+            return []
+        parts: list[str] = []
+        kind = str(chain.get("logic_type") or "").strip()
+        core = str(chain.get("core") or "").strip()
+        if kind:
+            parts.append(f"主逻辑「{kind}」")
+        if core:
+            parts.append(core)
+        line = "逻辑链：" + "，".join(parts) if parts else "逻辑链：拿到了骨架"
+        extra: list[str] = []
+        concepts = list(chain.get("concepts") or ())
+        if concepts:
+            names = []
+            for item in concepts:
+                if isinstance(item, dict):
+                    name = str(item.get("name") or "").strip()
+                else:
+                    name = str(item or "").strip()
+                if name:
+                    names.append(name)
+            if names:
+                extra.append("读出来的概念词：" + "、".join(names))
+        synthesis = chain.get("synthesis") or {}
+        if isinstance(synthesis, dict):
+            whole = str(synthesis.get("whole") or "").strip()
+            parts_text = "、".join(str(part).strip() for part
+                                   in list(synthesis.get("parts") or ()) if str(part).strip())
+            if whole and parts_text:
+                extra.append(f"收口：{parts_text} 共同构成「{whole}」（这几条属于关系要画出来）")
+        if list(chain.get("turning_points") or ()):
+            extra.append("回头 / 闭环：" + "；".join(
+                str(item) for item in list(chain["turning_points"]) if str(item).strip()))
+        return [line] + extra
 
     def _fill_diagnostics(self) -> None:
         widget = getattr(self, "diag_text", None)

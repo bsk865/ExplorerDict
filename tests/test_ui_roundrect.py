@@ -1031,13 +1031,14 @@ def _wait_for(predicate, timeout: float = 5.0) -> bool:
 
 
 def _put_map_cache(db, service, topic_id, relations, *, dropped=None,
-                   verdicts=None) -> str:
+                   verdicts=None, logic_chain=None) -> str:
     """按**当前库内容**写一份有效导图缓存（打开窗口即命中，零网络请求）。
 
     缓存里的关系带 ``src`` / ``dst`` / ``type`` / ``reason`` / ``evidence``，
     与真实生成路径写进去的结构完全一致（见 ``TestConceptMapFreshness._put_cache``）。
     ``dropped`` / ``verdicts`` 同样照真实路径写：判定是「这个词为什么成了孤立词」
-    的唯一依据，界面上要说清原因就得靠它。
+    的唯一依据，界面上要说清原因就得靠它。``logic_chain`` 是第零轮读出来的骨架
+    （批次 M24），不传就写空对象 = 这一次没走到逻辑链。
     """
     from app.map_service import MAP_VALIDATION_VERSION
 
@@ -1048,7 +1049,8 @@ def _put_map_cache(db, service, topic_id, relations, *, dropped=None,
                      relations=[dict(item) for item in relations],
                      validation_version=MAP_VALIDATION_VERSION,
                      dropped=dict(dropped or {}),
-                     verdicts=[dict(item) for item in (verdicts or [])])
+                     verdicts=[dict(item) for item in (verdicts or [])],
+                     logic_chain=dict(logic_chain or {}))
     return fingerprint
 
 
@@ -1074,7 +1076,8 @@ class _MapClient:
 
     def __init__(self, relations=None, error=None, gate=None, *,
                  verdicts=None, verify_error=None, verify_gate=None,
-                 rescue_relations=None, rescue_error=None, rescue_verdicts=None):
+                 rescue_relations=None, rescue_error=None, rescue_verdicts=None,
+                 logic_chain=None, logic_chain_error=None, article_logic=None):
         self.relations = [dict(item) for item in (relations or [])]
         self.error = error
         self.gate = gate
@@ -1103,10 +1106,50 @@ class _MapClient:
         self.rescue_calls: list[dict] = []
         self.calls: list[dict] = []
         self.verify_calls: list[dict] = []
+        #: ★ 第零轮「逻辑链」（批次 M24）的假响应，口径与 ``rescue_relations`` 一致：
+        #: * ``None``（默认，历史行为）= **这个方法根本不存在** —— 于是
+        #:   :meth:`app.map_service.MapService.map_logic_chain` 会走「拿不到骨架」那条
+        #:   降级路（记一个 ``logic_chain_empty``，按批次 M23 老路径继续）；
+        #: * ``{}`` = 方法在，但模型回空骨架（同样降级）；
+        #: * 别的字典 = 正常回一份骨架，用来验证骨架真的作为**前置认知**发下去了。
+        if logic_chain is None and logic_chain_error is None:
+            self.map_logic_chain = None            # type: ignore[assignment]
+        self.logic_chain = None if logic_chain is None else dict(logic_chain)
+        self.logic_chain_error = logic_chain_error
+        self.logic_chain_calls: list[dict] = []
+        #: 「按原文归纳」那条路的假响应（M24）：不配 = 这个方法根本不存在
+        #: （老替身），配了 = 归纳那一轮回这份结果，并把收到的骨架留档。
+        self.article_logic_reply = None if article_logic is None else dict(article_logic)
+        self.article_logic_calls: list[dict] = []
+        if article_logic is None:
+            self.article_logic = None               # type: ignore[assignment]
+
+    def article_logic(self, logic, *, title="", temperature=0.0, vary=0,
+                      reasoning_effort=None, logic_chain=None):
+        """假「按原文归纳」：记下正文 / 划过的词 / 这次拿到的骨架。"""
+        if self.article_logic_reply is None:        # pragma: no cover - 上面已摘掉
+            raise AssertionError("假的 _MapClient 没配 article_logic，不该被调用")
+        self.article_logic_calls.append({
+            "text": str((logic or {}).get("text") or ""),
+            "terms": [str(item) for item in ((logic or {}).get("terms") or [])],
+            "title": str(title), "vary": int(vary or 0),
+            "logic_chain": logic_chain})
+        return dict(self.article_logic_reply)
+
+    def map_logic_chain(self, article, *, topic="", terms=(), **_kw):
+        """假第零轮：把收到的正文 / 词表记下来，回一份预置骨架（或按需报错）。"""
+        self.logic_chain_calls.append({"article": str(article), "topic": str(topic),
+                                       "terms": [str(item) for item in terms]})
+        if self.logic_chain_error is not None:
+            raise self.logic_chain_error
+        return dict(self.logic_chain or {})
 
     def map_relations(self, entries, *, topic="", **_kw):
         self.calls.append({"entries": [dict(item) for item in entries],
-                           "topic": str(topic)})
+                           "topic": str(topic),
+                           #: 第零轮的骨架是**怎么发下来的**（M24）：留档才能断言
+                           #: 「骨架真的进了第一轮的用户消息」而不是只在内存里传了一圈。
+                           "logic_chain": _kw.get("logic_chain")})
         if self.gate is not None:
             self.gate.wait(5.0)
         if self.error is not None:
@@ -1500,6 +1543,587 @@ class TestMapRelationValidation(unittest.TestCase):
         self.assertEqual(dropped["evidence"], 2)
 
 
+class TestMapLogicChainRound(unittest.TestCase):
+    """批次 M24：第零轮（读懂逻辑链）必须是**真的发下去了**、而且失败不打断生成。"""
+
+    def test_the_skeleton_rides_into_the_first_round(self):
+        """★ 本批最要紧的一条：骨架要作为前置认知进第一轮，并如实落进结果。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(
+                [{"src": 0, "dst": 1, "type": "包含", "reason": "卷积核是卷积的单元",
+                  "evidence": "卷积核在输入上滑动"}],
+                logic_chain={"logic_type": "层级",
+                             "core": "卷积网络靠卷积核提取特征",
+                             "concepts": [{"name": "卷积"}, {"name": "池化"}],
+                             "hierarchy": [{"whole": "卷积网络",
+                                            "parts": ["卷积", "池化"]}]})
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+
+            self.assertEqual(len(client.logic_chain_calls), 1,
+                             "第零轮必须恰好问一次（不可省略）")
+            call = client.logic_chain_calls[0]
+            self.assertEqual(call["topic"], "卷积网络")
+            self.assertEqual(call["terms"], ["卷积", "池化", "过拟合"],
+                             "划出来的词要一并告诉它")
+            self.assertIn("卷积核在输入上滑动", call["article"],
+                          "第零轮看见的必须是拼回来的整篇正文")
+
+            wire = client.calls[0]["logic_chain"]
+            self.assertIsInstance(wire, dict, "骨架要原样传进第一轮")
+            self.assertEqual(wire["core"], "卷积网络靠卷积核提取特征")
+
+            graph = delivered[0][4]
+            self.assertFalse(graph.logic_chain_empty,
+                             "这一次走到了逻辑链，不许标成「没走到」")
+            self.assertEqual(graph.logic_chain["core"], "卷积网络靠卷积核提取特征",
+                             "骨架要随图带回来（界面能说清这次按什么画的）")
+
+    def test_the_counts_say_when_the_chain_round_did_not_happen(self):
+        """拿不到骨架 ⇒ 按老路径继续，但账上必须写明「这一次没走到逻辑链」。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient([])          # 没有 map_logic_chain 这个方法
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            graph = delivered[0][4]
+            self.assertTrue(graph.logic_chain_empty)
+            self.assertEqual(graph.logic_chain, {})
+            self.assertEqual(int(graph.dropped["logic_chain_empty"]), 1)
+            self.assertIn("这一次没走到逻辑链", graph.summary(),
+                          "用户看得见的那句话里必须写明")
+            self.assertEqual(client.calls[0]["logic_chain"], {},
+                             "没有骨架时第一轮只收到空字典（= 与老路径逐字一致）")
+
+    def test_the_chain_round_never_breaks_a_generation(self):
+        """第零轮报错 / 回垃圾 / 没有正文 —— 三种都必须退成「没有骨架」而不是失败。"""
+        class _Boom:
+            def map_logic_chain(self, article, **_kw):
+                raise RuntimeError("网络断了")
+
+        class _Garbage:
+            def map_logic_chain(self, article, **_kw):
+                return "根本不是字典"
+
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            service, _cfg = _map_service(db, client=_MapClient([]))
+            nodes = service.nodes_for_topic(bid)
+            self.assertEqual(service.map_logic_chain(_Boom(), "卷积网络", nodes),
+                             ({}, True), "第零轮抛异常必须退成空骨架")
+            self.assertEqual(service.map_logic_chain(_Garbage(), "卷积网络", nodes),
+                             ({}, True), "回了个非字典同样退成空骨架")
+            self.assertEqual(service.map_logic_chain(_MapClient([]), "卷积网络", []),
+                             ({}, True), "没有正文就不问（省一次调用）")
+
+    def test_the_article_is_stitched_back_and_prefixes_are_stripped(self):
+        from app.map_service import logic_chain_article
+
+        nodes = [SimpleNamespace(context="文章正文：开展项目开发需要一套持续迭代的工作流程。"),
+                 SimpleNamespace(context="首先要确定项目需求，梳理清楚项目的目标边界。"),
+                 SimpleNamespace(context="  项目任务拆解必须依赖已经确认好的项目需求。  "),
+                 SimpleNamespace(context="短"),
+                 SimpleNamespace(context="")]
+        text = logic_chain_article(nodes)
+        self.assertNotIn("文章正文：", text, "划词时加的前缀要剥掉")
+        self.assertNotIn("短", text, "太短的片段不是正文")
+        self.assertIn("开展项目开发需要一套持续迭代的工作流程。", text)
+        self.assertIn("项目任务拆解必须依赖已经确认好的项目需求。", text)
+        self.assertEqual(text.count("首先要确定项目需求"), 1, "重复片段只留一份")
+        self.assertEqual(logic_chain_article([], limit=10), "")
+        self.assertLessEqual(len(logic_chain_article(nodes, limit=20)), 20)
+
+    def test_the_cache_written_is_marked_as_a_new_version(self):
+        """升到 v5 的意义就在这一条：v4 的缓存一律不再命中。"""
+        from app.map_service import MAP_VALIDATION_VERSION
+
+        self.assertGreaterEqual(MAP_VALIDATION_VERSION, 5,
+                                "第零轮改变了方向定调 ⇒ 必须作废旧缓存")
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            client = _MapClient(
+                [{"src": 0, "dst": 1, "type": "包含", "reason": "卷积核是卷积的单元",
+                  "evidence": "卷积核在输入上滑动"}],
+                logic_chain={"logic_type": "层级", "concepts": [{"name": "卷积"}]})
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            fingerprint = delivered[0][2]
+            row = db.get_map_graph(bid, fingerprint)
+            self.assertEqual(int(row["validation_version"]), MAP_VALIDATION_VERSION)
+
+    def test_the_skeleton_survives_a_cache_hit(self):
+        """重开窗口命中缓存时骨架必须原样回来。
+
+        没有这一条的话，缓存里不存骨架 ⇒ 读回来 ``logic_chain_empty`` 默认 True
+        ⇒ 界面会对着一次**真的走到过逻辑链**的生成误报「这一次没走到逻辑链」。
+        """
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            chain = {"logic_type": "层级",
+                     "core": "卷积网络由卷积和池化堆叠而成",
+                     "concepts": [{"name": "卷积", "role": "整体的一部分"}],
+                     "hierarchy": [{"whole": "卷积网络", "parts": ["卷积", "池化"]}]}
+            client = _MapClient(
+                [{"src": 0, "dst": 1, "type": "包含", "reason": "卷积核是卷积的单元",
+                  "evidence": "卷积核在输入上滑动"}],
+                logic_chain=chain)
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络")
+            self.assertTrue(_wait_for(lambda: delivered))
+            fingerprint = delivered[0][2]
+
+            nodes = service.nodes_for_topic(bid)
+            cached = service.cached_graph(bid, nodes, fingerprint=fingerprint)
+            self.assertIsNotNone(cached, "这一次的缓存必须命中")
+            self.assertEqual(dict(cached.logic_chain), chain, "骨架必须原样读回来")
+            self.assertFalse(cached.logic_chain_empty,
+                             "走到过逻辑链的生成不许被说成没走到")
+
+    def test_an_old_cache_without_a_skeleton_says_so_plainly(self):
+        """老库（那一列是空串）读回来必须如实说「没走到逻辑链」，不许编造骨架。"""
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            service, _cfg = _map_service(db, client=_MapClient([]))
+            fingerprint = _put_map_cache(
+                db, service, bid,
+                [{"src": _ids["卷积"], "dst": _ids["池化"], "type": "包含",
+                  "reason": "卷积核是卷积的单元", "evidence": "卷积核在输入上滑动"}])
+            row = db.get_map_graph(bid, fingerprint)
+            self.assertIn(str(row["logic_chain"]), ("", "{}"),
+                          "没传骨架时那一列就是空的（空串或空对象）")
+
+            nodes = service.nodes_for_topic(bid)
+            cached = service.cached_graph(bid, nodes, fingerprint=fingerprint)
+            self.assertIsNotNone(cached)
+            self.assertEqual(dict(cached.logic_chain), {}, "读不出骨架就空着")
+            self.assertTrue(cached.logic_chain_empty)
+
+    def test_a_cache_that_round_trips_keeps_the_skeleton_the_same(self):
+        """反过来也要成立：写进去什么骨架，``cached_graph`` 就读回什么骨架。"""
+        from app.map_service import MAP_VALIDATION_VERSION
+
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            service, _cfg = _map_service(db, client=_MapClient([]))
+            nodes = service.nodes_for_topic(bid)
+            fingerprint = service.fingerprint(bid, nodes)
+            chain = {"logic_type": "因果", "core": "先卷积再池化",
+                     "causal": [{"cause": "卷积", "effect": "池化", "basis": "先后"}]}
+            db.put_map_graph(topic_id=bid, fingerprint=fingerprint,
+                             base_url=service.config.base_url, model=service.config.model,
+                             relations=[], validation_version=MAP_VALIDATION_VERSION,
+                             logic_chain=chain)
+            cached = service.cached_graph(bid, nodes, fingerprint=fingerprint)
+            self.assertIsNotNone(cached)
+            self.assertEqual(dict(cached.logic_chain), chain)
+            self.assertFalse(cached.logic_chain_empty)
+            # 再写一次（同一 (topic, fingerprint) 覆盖）仍要带上骨架
+            db.put_map_graph(topic_id=bid, fingerprint=fingerprint,
+                             base_url=service.config.base_url, model=service.config.model,
+                             relations=[], validation_version=MAP_VALIDATION_VERSION,
+                             logic_chain={"logic_type": "时序"})
+            again = service.cached_graph(bid, nodes, fingerprint=fingerprint)
+            self.assertEqual(dict(again.logic_chain), {"logic_type": "时序"},
+                             "覆盖写必须整体替换，不许留着上一次的骨架")
+
+    def test_the_article_path_also_runs_the_chain_round_first(self):
+        """★ 按原文归纳那条路（有留档原文时）同样要走第零轮，而且骨架要落进缓存。
+
+        这条流水线自己就读了全文，但用户口径是「读懂逻辑链」必须是一个**看得见、
+        留得下**的步骤 —— 于是它也要跑第零轮，并把骨架发给归纳那一轮。
+        """
+        from app.article_source import Article
+
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            body = ("卷积神经网络由卷积层和池化层堆叠而成，池化降低分辨率、抑制过拟合。"
+                    * 15)
+            doc_key = "url:https://a.example.com/conv"
+            db.put_article(doc_key, Article(ok=True, url=doc_key, title="卷积网络入门",
+                                            text=body, status="ok", method="test"))
+            row = db.get_article(doc_key)
+            chain = {"logic_type": "层级",
+                     "hierarchy": [{"whole": "卷积网络", "parts": ["卷积", "池化"]}]}
+            reply = {"main_logic": "层级",
+                     "branches": [{"name": "组成部分", "entities": ["卷积", "池化"]},
+                                  {"name": "整体", "entities": ["过拟合"]}],
+                     # 每个划过的词都要接上（否则「连不上的词」会让它白重试一轮）
+                     "relations": [
+                         {"src": "卷积", "dst": "池化", "type": "时序",
+                          "reason": "卷积层与池化层同属网络组成"},
+                         {"src": "池化", "dst": "过拟合", "type": "因果",
+                          "reason": "池化降低分辨率后不容易记住噪声"}]}
+            client = _MapClient(logic_chain=chain, article_logic=reply)
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络", article=row)
+            self.assertTrue(_wait_for(lambda: delivered), "按原文归纳必须跑完")
+            graph = delivered[0][4]
+            self.assertEqual(str(graph.source), "article", "前提：走的是原文那条路")
+            self.assertEqual(len(client.logic_chain_calls), 1,
+                             "★ 原文那条路也必须先跑第零轮")
+            self.assertIn("卷积神经网络由卷积层", client.logic_chain_calls[0]["article"],
+                          "第零轮拿到的是留档里的整篇正文")
+            self.assertEqual(client.logic_chain_calls[0]["topic"], "卷积网络入门",
+                             "主题名给的是这篇文章的标题")
+            self.assertEqual(len(client.article_logic_calls), 1,
+                             "归纳一次就过（重试轮另有守卫）")
+            self.assertEqual(client.article_logic_calls[0]["logic_chain"], chain,
+                             "归纳那一轮必须拿着同一份骨架")
+            self.assertEqual(dict(graph.logic_chain), chain)
+            self.assertFalse(graph.logic_chain_empty)
+
+            fingerprint = delivered[0][2]
+            nodes = service.nodes_for_topic(bid)
+            cached = service.cached_graph(bid, nodes, fingerprint=fingerprint)
+            self.assertIsNotNone(cached, "这一次的缓存必须命中")
+            self.assertEqual(dict(cached.logic_chain), chain,
+                             "原文那条路的骨架同样要落库、读得回来")
+            self.assertFalse(cached.logic_chain_empty)
+
+    def test_the_diagnostics_panel_says_which_chain_this_map_was_drawn_from(self):
+        """诊断面板必须说清「这一次是按哪条逻辑链画的」（批次 M24）。
+
+        用户口径：读懂逻辑链是**不可省略**的一步 —— 那它就得看得见。四种情形都要
+        有实话：还没生成（不编）、老缓存没有那一列（说没走到）、真有骨架（写主逻辑 /
+        收口 / 回头），以及**任何**情况下面板里都能查到八个关系词的白话。
+        """
+        from app.map_service import MapGraph
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            win = cm.ConceptMapWindow.__new__(cm.ConceptMapWindow)
+            self.assertEqual(win._diag_logic_lines(None), [],
+                             "还没生成时不许编一句逻辑链")
+            old = MapGraph(topic_id=1, fingerprint="fp", relations=(), nodes=())
+            self.assertEqual(len(win._diag_logic_lines(old)), 1)
+            self.assertIn("没走到逻辑链", win._diag_logic_lines(old)[0])
+            chain = {"logic_type": "时序", "core": "项目开发的循环流程",
+                     "concepts": [{"name": "项目开发", "role": "总纲"},
+                                  "确定项目需求"],
+                     "synthesis": {"whole": "项目开发体系",
+                                   "parts": ["确定项目需求", "任务拆解", "项目复盘"]},
+                     "turning_points": ["复盘结论反向调整需求"]}
+            fresh = MapGraph(topic_id=1, fingerprint="fp", relations=(), nodes=(),
+                             logic_chain=chain, logic_chain_empty=False)
+            text = "\n".join(win._diag_logic_lines(fresh))
+            self.assertIn("时序", text)
+            self.assertIn("项目开发的循环流程", text)
+            self.assertIn("读出来的概念词：项目开发、确定项目需求", text)
+            self.assertIn("共同构成「项目开发体系」", text, "收口句必须写出来")
+            self.assertIn("回头 / 闭环：复盘结论反向调整需求", text)
+            # 没有骨架、但这一版自己说是「走到了」（老缓存 / 走的是原文路）
+            quiet = MapGraph(topic_id=1, fingerprint="fp", relations=(), nodes=(),
+                             logic_chain={}, logic_chain_empty=False)
+            self.assertEqual(win._diag_logic_lines(quiet), [])
+            # 八个关系词的白话要出现在**孤立词面板**里（用户看不懂类型名）
+            win._nodes = []
+            self.assertEqual(win._diag_summary(), "该主题还没有词条。")
+
+    def test_the_plain_words_for_every_relation_type_show_up_in_the_panel(self):
+        """孤立词面板末尾必须列出八个关系词的白话（用户看不懂类型名）。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv() as env:
+                env.canvases.clear()
+                win, _ids, _bid = self._diag_window(db)
+                panel = str(win._diag_summary())
+                for row in cm.REL_PLAIN_ROWS:
+                    self.assertIn(row, panel,
+                                  "孤立词面板里要给得出八个关系词的白话")
+
+    @staticmethod
+    def _diag_window(db):
+        """一份真实主题 + 有效缓存（三词，过拟合是孤立词），用来读诊断面板。"""
+        from app.ui import concept_map as cm
+
+        bid, ids = _map_db(db)
+        service, _cfg = _map_service(db, client=_MapClient([]))
+        relations = [{"src": ids["卷积"], "dst": ids["池化"], "type": "包含",
+                      "reason": "池化层是卷积网络的组成部分",
+                      "evidence": "卷积神经网络由卷积层和池化层堆叠而成"}]
+        _put_map_cache(db, service, bid, relations)
+        stub = SimpleNamespace(db=db, map_service=service,
+                               open_settings=lambda: None)
+        win = cm.ConceptMapWindow(None, stub)
+        win._draw(force=True)
+        return win, ids, bid
+
+    def test_the_article_path_says_so_when_the_chain_round_did_not_happen(self):
+        """原文那条路拿不到骨架时同样要如实记一笔（不许假装走过了）。"""
+        from app.article_source import Article
+
+        with support.temp_db() as db:
+            bid, _ids = _map_db(db)
+            body = ("卷积神经网络由卷积层和池化层堆叠而成，池化降低分辨率、抑制过拟合。"
+                    * 15)
+            doc_key = "url:https://a.example.com/conv"
+            db.put_article(doc_key, Article(ok=True, url=doc_key, title="卷积网络入门",
+                                            text=body, status="ok", method="test"))
+            row = db.get_article(doc_key)
+            reply = {"main_logic": "层级",
+                     "branches": [{"name": "组成部分", "entities": ["卷积", "池化"]},
+                                  {"name": "整体", "entities": ["过拟合"]}],
+                     "relations": [
+                         {"src": "卷积", "dst": "池化", "type": "时序",
+                          "reason": "卷积层与池化层同属网络组成"},
+                         {"src": "池化", "dst": "过拟合", "type": "因果",
+                          "reason": "池化降低分辨率后不容易记住噪声"}]}
+            # logic_chain 不配 ⇒ 替身上 map_logic_chain 这个属性就是 None（网关没有）
+            client = _MapClient(article_logic=reply)
+            service, _cfg = _map_service(db, client=client)
+            delivered: list = []
+            service.set_result_sink(lambda *a: delivered.append(a))
+            service.generate(bid, force=True, topic_name="卷积网络", article=row)
+            self.assertTrue(_wait_for(lambda: delivered), "照样要画得出图")
+            graph = delivered[0][4]
+            self.assertEqual(str(graph.source), "article")
+            self.assertEqual(dict(graph.logic_chain), {}, "拿不到就空着，不许编")
+            self.assertTrue(graph.logic_chain_empty)
+            self.assertEqual(int(graph.dropped.get("logic_chain_empty", 0)), 1,
+                             "拿不到骨架要记一笔，界面才说得出「这一次没走到逻辑链」")
+            self.assertIn("这一次没走到逻辑链", graph.summary())
+            self.assertIsNone(client.article_logic_calls[0]["logic_chain"],
+                              "没有骨架时归纳那一轮的提示词逐字等于老文本")
+
+
+class TestMapCandidateEndpoints(unittest.TestCase):
+    """模型把端点写成**词语**时的折回，以及证据取材范围的统一口径（批次 M24）。
+
+    这三件事都是真 Key 实测暴露出来的：
+
+    * 第一轮时不时把 ``src`` / ``dst`` 写成词语 —— 老行为是按「端点越界」整条丢掉，
+      图上一条线都不剩（用户看到的就是「漏掉循环迭代和其他卡片的关联」）；
+    * 第零轮骨架读出来的收口句（「A、B、C 共同构成 D」）常常写在**另一个词**的
+      上下文里，只比两端那两段会把它整条丢掉；
+    * ``validate_relations`` 与 ``apply_verdicts`` 必须**同一个取材范围**，否则会
+      出现「本地放行、核对也判 supported，最后却按 verify_bad 丢掉」。
+    """
+
+    def _nodes(self):
+        from app.map_service import MapNode
+
+        return [MapNode(1, "项目开发", "文章正文：开展项目开发需要一套持续迭代的工作流程。",
+                        "持续迭代的流程"),
+                MapNode(2, "确定项目需求", "首先要确定项目需求，梳理清楚项目的目标边界。",
+                        "梳理目标边界"),
+                MapNode(3, "任务拆解", "确定项目需求、拆解任务、项目复盘共同构成完整的项目开发体系。",
+                        "拆成小任务")]
+
+    def test_a_word_endpoint_is_folded_back_but_only_when_it_is_unambiguous(self):
+        from app.map_service import _name_index
+
+        nodes = self._nodes()
+        self.assertEqual(_name_index("确定项目需求", nodes), 1, "逐字相等")
+        self.assertEqual(_name_index(" 任务拆解 ", nodes), 2, "空白不影响")
+        self.assertIsNone(_name_index("项目需求", nodes),
+                          "能折到「项目开发」「确定项目需求」两个词的，绝不猜")
+        self.assertEqual(_name_index("项目开发体系", nodes), 0,
+                         "★ 逐字那级刻意不走 canonical_term：它会把「项目开发体系」折成「项目开发」")
+        self.assertIsNone(_name_index("", nodes))
+        self.assertIsNone(_name_index("压根没有这个词", nodes))
+
+    def test_candidates_written_as_words_get_their_numbers_back(self):
+        from app.map_service import resolve_candidate_endpoints
+
+        nodes = self._nodes()
+        asked = [{"src": "确定项目需求", "dst": "任务拆解", "type": "时序", "reason": "r",
+                  "evidence": "e"},
+                 {"src": 0, "dst": 2, "type": "时序", "reason": "r", "evidence": "e"},
+                 {"src": "没有的词", "dst": "任务拆解", "type": "时序", "reason": "r",
+                  "evidence": "e"}]
+        fixed, resolved = resolve_candidate_endpoints(asked, nodes)
+        self.assertEqual(resolved, 2, "折回来过的候选都算（哪怕只折回来一端）")
+        self.assertEqual((fixed[0]["src"], fixed[0]["dst"]), (1, 2))
+        self.assertEqual((fixed[1]["src"], fixed[1]["dst"]), (0, 2), "本来合法的一个字不动")
+        self.assertEqual(fixed[2]["src"], "没有的词", "折不会来的那一端原样留着")
+        self.assertEqual(fixed[2]["dst"], 2, "另一端折回来照样接上")
+        self.assertEqual((asked[0]["src"], asked[0]["dst"]), ("确定项目需求", "任务拆解"),
+                         "不许改调用方拿到的原始对象")
+
+    def test_the_skeleton_turns_into_candidates_with_positions_not_ids(self):
+        from app.map_service import logical_canonical_candidates
+
+        nodes = self._nodes()
+        chain = {"temporal": [{"first": "确定项目需求", "then": "任务拆解",
+                               "basis": "首先要确定项目需求；然后是任务拆解。"}],
+                 "synthesis": {"whole": "项目开发",
+                               "parts": ["确定项目需求", "任务拆解"]}}
+        out, counts = logical_canonical_candidates(chain, nodes)
+        self.assertEqual(counts.get("时序"), 1)
+        self.assertEqual(counts.get("属于"), 2)
+        for item in out:
+            self.assertIsInstance(item["src"], int)
+            self.assertIsInstance(item["dst"], int)
+            self.assertTrue(0 <= item["src"] < len(nodes), "★ 给的是位置，不是 entry_id")
+            self.assertTrue(0 <= item["dst"] < len(nodes))
+        first = [c for c in out if c["type"] == "时序"][0]
+        self.assertEqual((first["src"], first["dst"]), (1, 2))
+        self.assertEqual(first["evidence"], "首先要确定项目需求；然后是任务拆解。",
+                         "basis 只按句号/省略号切（分号不算断句）")
+        whole = [c for c in out if c["type"] == "属于" and c["dst"] == 0]
+        self.assertEqual(len(whole), 2)
+
+    def test_a_skeleton_pointing_at_a_word_we_do_not_have_is_skipped(self):
+        from app.map_service import logical_canonical_candidates
+
+        chain = {"synthesis": {"whole": "压根没有的整体",
+                               "parts": ["确定项目需求", "任务拆解"]}}
+        out, counts = logical_canonical_candidates(chain, self._nodes())
+        self.assertEqual(counts, {}, "整体折不回来 ⇒ 一条都不编")
+        self.assertEqual(out, [])
+
+    def test_a_part_that_folds_onto_the_whole_is_not_a_self_edge(self):
+        from app.map_service import logical_canonical_candidates
+
+        # 「项目开发体系」在词条表里折到「项目开发」，而整体也折到它 ⇒ 自己包含
+        # 自己，不是一条边（真 Key 实测：模型给的 `synthesis.whole` 正是这个说法）。
+        chain = {"synthesis": {"whole": "项目开发体系",
+                               "parts": ["确定项目需求", "任务拆解"]}}
+        out, counts = logical_canonical_candidates(chain, self._nodes())
+        self.assertEqual(counts.get("属于"), 2)
+        for item in out:
+            self.assertNotEqual(item["src"], item["dst"], "绝不产出自环")
+
+    def test_evidence_may_come_from_another_words_context(self):
+        from app.map_service import MapRelation, apply_verdicts, validate_relations
+
+        nodes = self._nodes()
+        # 「共同构成」这句话写在「任务拆解」的上下文里，而这条边的两端是 1 和 0。
+        evidence = "确定项目需求、拆解任务、项目复盘共同构成完整的项目开发体系"
+        candidates = [{"src": 1, "dst": 0, "type": "属于", "reason": "收口句说的",
+                       "evidence": evidence}]
+        kept, dropped = validate_relations(candidates, nodes)
+        self.assertEqual(dropped["evidence"], 0, "★ 别的词的上下文里也有这句话，照样算数")
+        self.assertEqual(len(kept), 1)
+        verdicts = [{"index": 0, "verdict": "supported", "note": "材料确实是这么写的"}]
+        kept2, counts = apply_verdicts(kept, nodes, verdicts)
+        self.assertEqual(counts["verify_supported"], 1)
+        self.assertEqual(counts["verify_bad"], 0,
+                         "两处取材范围必须一致，否则会出现「核对说支持、最后却按 verify_bad 丢掉」")
+        self.assertEqual(len(kept2), 1)
+
+    def test_evidence_still_has_to_appear_in_this_material(self):
+        from app.map_service import validate_relations
+
+        candidates = [{"src": 1, "dst": 0, "type": "属于", "reason": "编的",
+                       "evidence": "这句话在这篇材料里压根没有出现过"}]
+        _kept, dropped = validate_relations(candidates, self._nodes())
+        self.assertEqual(dropped["evidence"], 1, "取材范围放宽了，依据本身一点没放宽")
+
+    def test_an_empty_evidence_is_refused_outright(self):
+        from app.map_service import MapNode, relation_locally_valid
+
+        node_a = MapNode(1, "甲", "甲上下文", "甲释义")
+        node_b = MapNode(2, "乙", "乙上下文", "乙释义")
+        self.assertFalse(relation_locally_valid("时序", "有依据", "", node_a, node_b))
+        self.assertFalse(relation_locally_valid("时序", "   ", "甲上下文", node_a, node_b))
+
+
+class TestMapFlowStepGuard(unittest.TestCase):
+    """本地硬判据：流程步骤不许写成「包含 / 属于」（批次 M24）。
+
+    用户口径原话：「**错误套用「包含」连接不同流程步骤（流程步骤不是包含从属）**」。
+    真 Key 实测（主题「项目开发」，同一份材料三轮）：模型**每轮**都提「项目开发
+    包含 确定项目需求 / 任务拆解 / 项目复盘」，第二轮独立核对也每轮判 supported
+    —— 提示词立了两道红线都拦不住，只有本地判据不看运气。
+    """
+
+    def _nodes(self):
+        from app.map_service import MapNode
+
+        return [
+            MapNode(48, "项目开发", "开展项目开发需要一套持续迭代的工作流程。", "项目开发是一套流程。"),
+            MapNode(49, "确定项目需求", "首先要确定项目需求，项目任务拆解必须依赖已经确认好的项目需求。",
+                    "先确定需求。"),
+            MapNode(50, "任务拆解", "任务拆解依赖项目需求，拆完之后完成任务开发。", "拆解任务。"),
+            MapNode(51, "项目复盘", "完成任务开发之后，开展项目复盘。", "复盘。"),
+            MapNode(52, "循环迭代", "复盘得出的结论可以反向调整项目需求，形成循环迭代。", "循环迭代。"),
+            MapNode(53, "项目开发体系", "确定项目需求、拆解任务、项目复盘共同构成完整的项目开发体系。",
+                    "整体叫项目开发体系。"),
+        ]
+
+    def test_the_only_flow_edges_make_the_two_words_steps_not_whole_and_part(self):
+        from app.map_service import flow_step_pairs, is_flow_step_pair
+
+        nodes = self._nodes()
+        candidates = [
+            {"src": 0, "dst": 1, "type": "时序", "reason": "先需求后拆解", "evidence": "首先要确定项目需求"},
+            {"src": 1, "dst": 2, "type": "时序", "reason": "拆解在前", "evidence": "任务拆解依赖项目需求"},
+        ]
+        pairs, members = flow_step_pairs(candidates, nodes)
+        self.assertEqual(pairs, {(48, 49), (49, 50)})
+        self.assertEqual(members, {48, 49, 50})
+        self.assertTrue(is_flow_step_pair("包含", 48, 49, (pairs, members)),
+                        "同一对词之间已经有流程边 ⇒ 层级边一定是误套")
+        self.assertTrue(is_flow_step_pair("属于", 50, 49, (pairs, members)),
+                        "「被包含」的那一端上过流程链 ⇒ 也拦")
+        self.assertTrue(is_flow_step_pair("包含", 48, 50, (pairs, members)),
+                        "★ 真 Key 实测那三条正是这个形状（链上两步之间没有直接流程边）")
+        self.assertFalse(is_flow_step_pair("时序", 48, 49, (pairs, members)),
+                         "流程边本身当然不拦（否则整条链都没了）")
+        self.assertFalse(is_flow_step_pair("包含", 48, 53, (pairs, members)),
+                         "★ 真正的整体—部分要放行：整体（项目开发体系）没上过流程链"
+                         "（另一条成立的路是「整体 包含 各步骤」，整体不在 members 里）")
+
+    def test_the_guard_reads_both_shapes_of_input(self):
+        """候选字典用 ``"type"``，已成立的 ``MapRelation`` 用 ``rel_type``。
+
+        ★ 实测踩过：只认前者会让**沿用**那道关静默拿到空集合、旧图里的错边照样爬回来。
+        """
+        from app.map_service import MapRelation, flow_step_pairs, is_flow_step_pair
+
+        nodes = self._nodes()
+        relations = [MapRelation(48, 49, "时序", "先需求后拆解", "首先要确定项目需求")]
+        pairs, members = flow_step_pairs(relations, nodes)
+        self.assertEqual(pairs, {(48, 49)})
+        self.assertEqual(members, {48, 49})
+        self.assertTrue(is_flow_step_pair("包含", 48, 49, (pairs, members)))
+
+    def test_the_longest_verbatim_piece_of_a_basis_becomes_the_evidence(self):
+        """第零轮的 basis 写得比材料长（带「；」「……」）时要抠出逐字存在的那一截。"""
+        from app.map_service import _verbatim_evidence
+
+        materials = ["首先要确定项目需求；然后是任务拆解。"]
+        # ★ 两个「有效字符」段在 basis 里相邻、在材料里却隔着标点（真 Key 实测形状）
+        basis = "首先要确定项目需求；……；然后是任务拆解；最后做项目复盘"
+        out = _verbatim_evidence(basis, materials)
+        self.assertTrue(out, "整段对不上，但最长的一截对得上")
+        self.assertIn(out, materials[0], "抠出来的必须是材料里逐字存在的一段")
+        self.assertNotIn("……", out, "不许把 basis 里跨标点的两截拼在一起返回")
+        self.assertEqual(_verbatim_evidence("这句话材料里没有", materials), "")
+
+    def test_a_carried_edge_has_to_pass_the_same_guard(self):
+        """沿用的边也要过这道关 —— 真 Key 实测就是这么从旧图里爬回来的。"""
+        from app.map_service import MapRelation, carry_over_relations, flow_step_pairs
+
+        nodes = self._nodes()
+        current = [MapRelation(48, 49, "时序", "先需求后拆解", "首先要确定项目需求")]
+        previous = SimpleNamespace(relations=(
+            MapRelation(49, 48, "属于", "项目复盘属于项目开发", "首先要确定项目需求"),
+        ))
+        pairs = flow_step_pairs(current, nodes)
+        merged, _verdicts, carried = carry_over_relations(
+            previous, current, nodes, verdicts=[], flow_pairs=pairs)
+        self.assertEqual(carried, set(), "被本地判据拦下的边不许算作「沿用」")
+        self.assertEqual([(r.src_entry_id, r.dst_entry_id, r.rel_type) for r in merged],
+                         [(48, 49, "时序")])
+
+
 class TestMapServiceWithFakeClient(unittest.TestCase):
     """真实服务 + 假客户端：结构化输出、证据筛除、缓存、切主题 / 改词隔离。"""
 
@@ -1588,20 +2212,25 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
         with support.temp_db() as db:
             bid, ids = _map_db(db)
             client = _MapClient([
-                {"src": 0, "dst": 1, "type": "包含", "reason": "卷积核是卷积的单元",
-                 "evidence": "卷积核在输入上滑动"},                    # 核对支持 → 画
-                {"src": 0, "dst": 2, "type": "因果", "reason": "卷积导致过拟合",
+                {"src": 2, "dst": 0, "type": "因果", "reason": "卷积导致过拟合",
                  "evidence": "正则化抑制过拟合"},                      # 核对认为不成立
                 {"src": 2, "dst": 1, "type": "依赖", "reason": "过拟合依赖池化",
                  "evidence": "池化用于降采样"},                        # 核对不确定
+                {"src": 1, "dst": 0, "type": "用途", "reason": "池化用于降采样",
+                 "evidence": "池化用于降采样"},                        # 核对支持 → 画
             ], verdicts=[
-                {"index": 0, "verdict": "supported", "note": "材料支持"},
-                {"index": 1, "verdict": "contradicted",
+                {"index": 0, "verdict": "contradicted",
                  "note": "材料只是场景描述，并未表达因果。"},
-                {"index": 2, "verdict": "uncertain", "note": "材料不足"},
+                {"index": 1, "verdict": "uncertain", "note": "材料不足"},
+                {"index": 2, "verdict": "supported", "note": "材料支持"},
             # 这一条用例只关心「判定与筛除计数落库、读回来一致」：把补问固定成
             # 「问得出、但模型回空」，免得补问批的额外判定混进这三条里。
-            ], rescue_relations=[])
+            ], rescue_relations=[],
+                # 第零轮（批次 M24）：给一份**真的骨架**，于是这一次是「走到逻辑链」
+                # 的正常路径 —— 落库的 dropped 里就不该冒出 ``logic_chain_empty``。
+                logic_chain={"logic_type": "层级",
+                             "hierarchy": [{"whole": "卷积网络",
+                                            "parts": ["卷积", "池化"]}]})
             service, _cfg = _map_service(db, client=client)
             delivered: list = []
             service.set_result_sink(lambda *a: delivered.append(a))
@@ -1614,17 +2243,17 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
             records = {int(item["index"]): item for item in graph.verdicts}
             self.assertEqual(len(records), 3,
                              "三条候选都要留判定（不只留被筛掉的那两条）")
-            self.assertEqual(records[0]["verdict"], "supported")
-            self.assertTrue(records[0]["kept"], "核对支持的必须标记为已画")
-            self.assertEqual(records[1]["verdict"], "contradicted")
-            self.assertFalse(records[1]["kept"], "核对认为不成立的一条都不画")
-            self.assertEqual((int(records[1]["src"]), int(records[1]["dst"])),
-                             (int(ids["卷积"]), int(ids["过拟合"])),
+            self.assertEqual(records[0]["verdict"], "contradicted")
+            self.assertFalse(records[0]["kept"], "核对认为不成立的一条都不画")
+            self.assertEqual(records[1]["verdict"], "uncertain")
+            self.assertFalse(records[1]["kept"])
+            self.assertEqual((int(records[0]["src"]), int(records[0]["dst"])),
+                             (int(ids["过拟合"]), int(ids["卷积"])),
                              "判定记录要用真实 entry id，点词才找得到")
-            self.assertIn("场景描述", str(records[1]["note"]), "模型给的理由必须留档")
+            self.assertIn("场景描述", str(records[0]["note"]), "模型给的理由必须留档")
             # 「过拟合」是这条图上的孤立词：它参与的两条候选都没通过核对
             isolated = graph.verdicts_for(int(ids["过拟合"]))
-            self.assertEqual([int(item["index"]) for item in isolated], [1, 2],
+            self.assertEqual([int(item["index"]) for item in isolated], [0, 1],
                              "点这个词要列出它参与过的每一条候选（按序号）")
             self.assertEqual({str(item["verdict"]) for item in isolated},
                              {"contradicted", "uncertain"})
@@ -1633,7 +2262,7 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
             self.assertEqual(int(graph.dropped["verify_contradicted"]), 1)
             self.assertEqual(int(graph.dropped["verify_uncertain"]), 1)
             self.assertEqual([int(rel.dst_entry_id) for rel in graph.relations],
-                             [int(ids["池化"])], "只有那条 supported 被画出来")
+                             [int(ids["卷积"])], "只有那条 supported 被画出来")
 
             row = db.get_map_graph(bid, fingerprint)
             self.assertEqual(len(json.loads(row["verdicts"])), 3,
@@ -1654,13 +2283,13 @@ class TestMapServiceWithFakeClient(unittest.TestCase):
             cached = again[0][4]
             self.assertEqual(str(cached.source), "cache")
             self.assertEqual([str(item["verdict"]) for item in cached.verdicts],
-                             ["supported", "contradicted", "uncertain"],
+                             ["contradicted", "uncertain", "supported"],
                              "缓存必须把判定带回来")
             self.assertEqual(int(cached.dropped.get("verify_contradicted", 0)), 1,
                              "缓存也要带回筛除计数（否则显示「已筛除 0 条」）")
             self.assertIn("核对认为不成立", cached.summary())
             cached_isolated = cached.verdicts_for(int(ids["过拟合"]))
-            self.assertEqual([int(item["index"]) for item in cached_isolated], [1, 2],
+            self.assertEqual([int(item["index"]) for item in cached_isolated], [0, 1],
                              "缓存里也要能说出这个词为什么是孤立词")
             self.assertIn("场景描述", str(cached_isolated[0]["note"]),
                           "缓存里的判定理由要与生成时逐字一致")
@@ -1962,19 +2591,20 @@ class TestMapOrphanRescue(unittest.TestCase):
     绝不把一次本来成功的生成变成错误。
     """
 
-    #: 「项目开发」那一轮的候选 / 判定（同一形状：一条被判不确定、而它是某个词
-    #: **唯一**的边；另一条通过核对）。证据必须是材料里逐字出现的片段，
-    #: 否则本地校验会先把它筛掉 —— 那就测不到核对之后的那一步了。
+    #: 「项目开发」那一轮的候选（同一形状：一条**没有关系可画**的词、另一条通过
+    #: 核对）。★ 批次 M24 起，第一条（``过拟合 —包含→ 卷积``）在**第一轮本地校验**
+    #: 就被拦下了 —— 「被包含」的那一端（卷积）已经上过流程链（另一条因果边的端点），
+    #: 于是它属于 :func:`app.map_service.is_flow_step_pair` 说的「流程步骤被误写成包含」
+    #: 那一类，压根走不到核对那一步。所以这里只留一条判定，序号 0 就是那条因果边。
+    #: 证据必须是材料里逐字出现的片段，否则本地校验会先把它筛掉。
     ORPHAN_CANDIDATES = [
         {"src": 2, "dst": 0, "type": "包含", "reason": "卷积核是卷积的单元",
-         "evidence": "卷积核在输入上滑动"},          # 核对：不确定 → 删（过拟合因此孤立）
+         "evidence": "卷积核在输入上滑动"},          # 本地判据直接拦（见上）
         {"src": 1, "dst": 0, "type": "因果", "reason": "池化导致过拟合",
          "evidence": "池化用于降采样"},              # 核对：支持 → 画
     ]
     ORPHAN_VERDICTS = [
-        {"index": 0, "verdict": "uncertain",
-         "note": "卷积核是卷积的组成部分，不是过拟合的下位概念。"},
-        {"index": 1, "verdict": "supported", "note": "材料支持因果"},
+        {"index": 0, "verdict": "supported", "note": "材料支持因果"},
     ]
 
     def test_a_client_without_the_rescue_hook_is_left_untouched(self):
@@ -2039,26 +2669,24 @@ class TestMapOrphanRescue(unittest.TestCase):
             self.assertEqual(int(graph.dropped["rescue_still_alone"]), 0)
             self.assertIn("为孤立词补问 1", graph.summary())
             self.assertIn("补问答对并画上 1", graph.summary())
-            # 判定记录与**删边前**的关系表同一口径：第一轮两条候选都留档
-            # （没通过的那条 `kept=False`，就是「这个词为什么成了孤立词」的依据，
-            # 界面点孤立词查原因靠它），补问救回来的那条追加在最后。
+            # 判定记录与**删边前**的关系表同一口径：第一轮那条候选先留档
+            # （它通过了核对，`kept=True`），补问救回来的那条追加在最后。至于
+            # 「过拟合为什么成了孤立词」—— 批次 M24 起由本地判据直接拦在核对之前，
+            # 界面上的依据是 ``dropped["flow_step"]`` 那条计数。
             records = {int(item["index"]): item for item in graph.verdicts}
-            self.assertEqual(len(records), 3, "第一轮两条 + 补问一条都要留档")
-            self.assertEqual(records[0]["verdict"], "uncertain")
-            self.assertFalse(records[0]["kept"], "这条被删了，正是它让过拟合成了孤立词")
+            self.assertEqual(len(records), 2, "第一轮一条 + 补问一条都要留档")
+            self.assertEqual(records[0]["verdict"], "supported")
+            self.assertTrue(records[0]["kept"])
             self.assertEqual((int(records[0]["src"]), int(records[0]["dst"])),
-                             (int(ids["过拟合"]), int(ids["卷积"])),
-                             "孤立词查原因时要能指到这条")
-            self.assertEqual(records[1]["verdict"], "supported")
-            self.assertTrue(records[1]["kept"])
-            self.assertEqual((int(records[1]["src"]), int(records[1]["dst"])),
                              (int(ids["池化"]), int(ids["卷积"])),
                              "第一轮留下的那条")
-            self.assertEqual(records[2]["verdict"], "supported")
-            self.assertTrue(records[2]["kept"], "补问救回来的边在图上")
-            self.assertEqual((int(records[2]["src"]), int(records[2]["dst"])),
+            self.assertEqual(records[1]["verdict"], "supported")
+            self.assertTrue(records[1]["kept"], "补问救回来的边在图上")
+            self.assertEqual((int(records[1]["src"]), int(records[1]["dst"])),
                              (int(ids["卷积"]), int(ids["过拟合"])),
                              "判定记录要用真实 entry id，点词才找得到")
+            self.assertGreaterEqual(int(graph.dropped.get("flow_step", 0)), 1,
+                                    "过拟合那条被本地判据拦下的层级边要如实记一笔")
             # 缓存里同样要有救回来的边（重开窗口不该又少一个词）
             row = list(db.query("SELECT payload FROM map_graphs"))[0]
             cached = {(int(item["src"]), int(item["dst"]), str(item["type"]))
@@ -8107,21 +8735,110 @@ class TestConceptMapHintFold(unittest.TestCase):
         return ticks
 
     def test_it_starts_expanded_with_all_three_lines(self):
-        """刚打开：三行全展开（不是一上来就折着）。"""
+        """刚打开：三行操作说明 + 关系词白话表全展开（不是一上来就折着）。"""
         from app.ui import concept_map as cm
 
         with support.temp_db() as db:
             with _FakeTkEnv():
                 win = self._window(db)
                 self.assertTrue(win._hint_expanded, "刚打开必须展开")
-                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
-                                 list(cm.HINT_LINES), "展开态就是那三行，逐字、按序")
+                texts = [str(label.cget("text")) for label in win.hint_rows]
+                self.assertEqual(texts[:len(cm.HINT_LINES)], list(cm.HINT_LINES),
+                                 "展开态的头三行就是操作说明，逐字、按序")
+                # 批次 M24：用户口径「我压根看不懂你这些关系词代表什么」——
+                # 画布上的短标签解释不了，所以提示块下半张排一张对照表。
+                self.assertEqual(texts[len(cm.HINT_LINES):], list(cm.REL_PLAIN_ROWS),
+                                 "下半张是关系词白话对照表，逐字、按序")
                 self.assertFalse(win._hint_user_collapsed)
                 # 计时从建窗那一刻就开始了：延时必须正好是产品常量里的 20 秒
                 self.assertTrue(self._fade_callbacks(win), "刚打开就要排上淡出定时器")
                 self.assertEqual(self._fade_callbacks(win)[-1][0], cm.HINT_EXPAND_MS,
                                  "自动折叠的延时要正好是 HINT_EXPAND_MS（20 秒）")
                 self.assertEqual(cm.HINT_EXPAND_MS, 20000, "用户口径就是 20 秒")
+
+    def test_the_relation_words_are_spelled_out_in_plain_language(self):
+        """八种关系**一个都不能少**地有人话解释（少一种就是图上又一个看不懂的词）。
+
+        用户口径（M24）：「我发现如果我作为一个用户，我压根看不懂你这些关系词代表什么。」
+        白名单在 :data:`app.map_service.REL_TYPES`，这里是「两处必须一一对应」的守卫：
+        往白名单里加一种新关系却忘了写白话，这条用例就红。
+        """
+        from app.ui import concept_map as cm
+        from app.map_service import REL_TYPES
+
+        self.assertEqual(sorted(cm.REL_PLAIN), sorted(REL_TYPES),
+                         "白话表必须与关系白名单逐一对应（多一种少一种都不行）")
+        for rel_type, plain in cm.REL_PLAIN.items():
+            self.assertTrue(str(plain).strip(), f"「{rel_type}」的白话不能是空的")
+        joined = "".join(cm.REL_PLAIN_ROWS)
+        for rel_type in REL_TYPES:
+            self.assertIn(rel_type, joined, f"「{rel_type}」必须出现在对照表里")
+
+    def test_the_folded_line_can_be_opened_again(self):
+        """折叠那一行点一下 = 重新展开，且**这一轮不再自动收**（用户自己要看的）。"""
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                self._run_fade_timer(win)
+                self.assertFalse(win._hint_expanded)
+                # 点那一行（假 Tk 里 bind 只记函数，这里直接调产品绑上去的那个）
+                handler = win.hint_rows[0].binds.get("<Button-1>")
+                self.assertTrue(callable(handler), "折叠那一行必须能点开")
+                handler(None)
+                self.assertTrue(win._hint_expanded, "点完要重新展开")
+                self.assertFalse(win.win.after_cancelled,
+                                 "点开是「不再自动收」，不是「重新计时」："
+                                 "既不该取消什么，也不该再排新的定时器")
+                self.assertIsNone(win._hint_fade_id, "点开之后不该再排定时器")
+                win.win.after_calls.clear()
+                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
+                                 list(cm.HINT_LINES) + list(cm.REL_PLAIN_ROWS),
+                                 "展开回来还是操作说明 + 关系词表")
+                self.assertTrue(win._hint_user_collapsed,
+                                "用户自己点开的这一次不能再被定时器收走")
+                # 再跑一遍定时器：这次它必须**不再**自动折叠
+                # （产品在用户点开时干脆不再排定时器，所以最后一拍还是上一轮的残留）
+                self._run_fade_timer(win)
+                self.assertTrue(win._hint_expanded,
+                                "用户点开之后不许再自动折叠（否则点了像没点）")
+
+    def test_clicking_any_expanded_line_folds_it_right_away(self):
+        """★ 用户报的次要问题：「导图提示被折叠展开之后无法折叠」。
+
+        以前展开态**只有**一条路能收起来 —— 20 秒的自动淡出；而用户一旦点开过
+        （``_hint_user_collapsed`` 被闩上），自动淡出就永久关掉了，于是「点开之后
+        再也收不回去，只能关窗」。这条用例钉住修法：展开的**每一行**（含关系词表）
+        都绑着「点一下立刻收成一行的那个回调」，点完定时器也一并清掉。
+        """
+        from app.ui import concept_map as cm
+
+        with support.temp_db() as db:
+            with _FakeTkEnv():
+                win = self._window(db)
+                # 先走一遍「点开」：把用户闩上，让自动淡出这条路彻底失效
+                self._run_fade_timer(win)
+                win.hint_rows[0].binds.get("<Button-1>")(None)
+                self.assertTrue(win._hint_expanded)
+                rows = list(win.hint_rows)
+                self.assertEqual(len(rows), len(cm.HINT_LINES) + len(cm.REL_PLAIN_ROWS))
+                for index, label in enumerate(rows):
+                    # 展开态的每一行都必须挂上折叠回调（就是「点开」那个的另一个方向）
+                    self.assertEqual(label.binds.get("<Button-1>"),
+                                     win._on_hint_collapse_click,
+                                     f"展开态第 {index + 1} 行必须点一下就收起来")
+                win.win.after_calls.clear()
+                rows[-1].binds.get("<Button-1>")(None)      # 点最后一行（关系词表那行）
+                self.assertFalse(win._hint_expanded,
+                                 "点展开态任意一行都要立刻收成一行")
+                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
+                                 [cm.HINT_COLLAPSED_TEXT], "收成那行「操作说明」")
+                self.assertIsNone(win._hint_fade_id,
+                                  "收起来之后不许还留着待执行的淡出定时器")
+                # 收起来之后还能再点开（两个方向都通）
+                win.hint_rows[0].binds.get("<Button-1>")(None)
+                self.assertTrue(win._hint_expanded, "收起来之后还要能再点开")
 
     def test_it_folds_into_one_line_after_the_20_seconds(self):
         """20 秒一到：三行淡出，收成一行「操作说明」。"""
@@ -8171,35 +8888,6 @@ class TestConceptMapHintFold(unittest.TestCase):
                 distances = [sum(abs(a - b) for a, b in zip(step, end)) for step in steps]
                 self.assertEqual(distances, sorted(distances, reverse=True),
                                  "每一格都要比上一格更靠近底色")
-
-    def test_the_folded_line_can_be_opened_again(self):
-        """折叠那一行点一下 = 重新展开，且**这一轮不再自动收**（用户自己要看的）。"""
-        from app.ui import concept_map as cm
-
-        with support.temp_db() as db:
-            with _FakeTkEnv():
-                win = self._window(db)
-                self._run_fade_timer(win)
-                self.assertFalse(win._hint_expanded)
-                # 点那一行（假 Tk 里 bind 只记函数，这里直接调产品绑上去的那个）
-                handler = win.hint_rows[0].binds.get("<Button-1>")
-                self.assertTrue(callable(handler), "折叠那一行必须能点开")
-                handler(None)
-                self.assertTrue(win._hint_expanded, "点完要重新展开")
-                self.assertFalse(win.win.after_cancelled,
-                                 "点开是「不再自动收」，不是「重新计时」："
-                                 "既不该取消什么，也不该再排新的定时器")
-                self.assertIsNone(win._hint_fade_id, "点开之后不该再排定时器")
-                win.win.after_calls.clear()
-                self.assertEqual([str(label.cget("text")) for label in win.hint_rows],
-                                 list(cm.HINT_LINES), "展开回来还是那三行")
-                self.assertTrue(win._hint_user_collapsed,
-                                "用户自己点开的这一次不能再被定时器收走")
-                # 再跑一遍定时器：这次它必须**不再**自动折叠
-                # （产品在用户点开时干脆不再排定时器，所以最后一拍还是上一轮的残留）
-                self._run_fade_timer(win)
-                self.assertTrue(win._hint_expanded,
-                                "用户点开之后不许再自动折叠（否则点了像没点）")
 
     def test_the_box_has_no_background_of_its_own(self):
         """「这个背景要是透明的，不要给提示背景板设置颜色」——底板不要颜色、不要边框。"""

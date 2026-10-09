@@ -82,19 +82,40 @@ def good_copy(**overrides) -> dict:
 class FakeClient:
     """假模型客户端：按顺序把预置的响应吐出来，并记下每次收到的 logic。"""
 
-    def __init__(self, *responses):
+    def __init__(self, *responses, logic_chain=None):
         self.responses = list(responses)
         self.calls: list[dict] = []
         self.titles: list[str] = []
         #: 每次调用的「换思路」参数（批次 M21-B）：vary / temperature / effort。
         self.vary: list[dict] = []
+        #: ★ 第零轮逻辑链（批次 M24）：``None``（默认）= **这个方法根本不存在**
+        #: （老口径，一次都不跑）；给了字典 = 正常回一份骨架，用来验证骨架真的
+        #: 作为前置认知进了归纳那一轮的用户消息。
+        if logic_chain is None:
+            self.map_logic_chain = None            # type: ignore[assignment]
+        self.logic_chain = None if logic_chain is None else dict(logic_chain)
+        self.logic_chain_calls: list[dict] = []
+        #: 归纳那一轮实际看到的是哪份骨架（M24；一次遍历一个）。
+        self.logic_chains_seen: list = []
+
+    def map_logic_chain(self, article, *, topic="", terms=(), **_kw):
+        """假第零轮：条件同上，**只有显式配了骨架才存在这个方法**。"""
+        if self.logic_chain is None:               # pragma: no cover - 上面已摘掉
+            raise AssertionError("假的 FakeClient 没配 logic_chain，不该被调用")
+        self.logic_chain_calls.append({"article": str(article), "topic": str(topic),
+                                       "terms": [str(item) for item in terms]})
+        return dict(self.logic_chain)
 
     def article_logic(self, logic, *, title="", temperature=0.0, vary=0,
-                      reasoning_effort=None):
+                      reasoning_effort=None, logic_chain=None):
         self.calls.append(dict(logic))
         self.titles.append(title)
+        #: 这一档的参数（**键集合刻意保持老口径**：老用例整字典比对过它）。
         self.vary.append({"vary": int(vary), "temperature": float(temperature),
                           "effort": reasoning_effort})
+        #: 这一次归纳看到的是哪份骨架（M24）：留档才能断言「骨架真的进了用户消息」
+        #: 而不是只在内存里传了一圈。不放进上面的 ``vary`` 是为了不改老断言的形状。
+        self.logic_chains_seen.append(logic_chain)
         if not self.responses:
             raise AssertionError("假 client 的响应不够用了（用例设计错了）")
         item = self.responses.pop(0)
@@ -624,6 +645,63 @@ class TestVaryLadder(unittest.TestCase):
         self.assertEqual(graph.vary, 0)
         self.assertEqual(graph.vary_label, "")
         self.assertEqual(client.vary[0], {"vary": 0, "temperature": 0.0, "effort": ""})
+
+    def test_without_a_sink_the_chain_round_never_runs(self):
+        """★ 兼容性守卫（M24）：没要骨架就一次都不跑第零轮。
+
+        老口径的调用序列一字不变 —— 模型、请求体、花钱的次数全都不变。
+        """
+        client = FakeClient(GOOD, logic_chain={"logic_type": "时序"})
+        run_logic_graph(client, doc_key="k", text=ARTICLE)
+        self.assertEqual(client.logic_chain_calls, [], "没要骨架就不许偷偷多花一次钱")
+        self.assertEqual(client.logic_chains_seen, [None],
+                         "归纳那一轮的用户消息必须逐字等于老文本")
+        self.assertEqual(len(client.calls), 1)
+
+    def test_the_chain_round_runs_first_and_is_handed_to_the_induction(self):
+        """★ 用户口径（M24）：读懂逻辑链是**不可省略**的一步，而且要先跑。"""
+        chain = {"logic_type": "依赖",
+                 "dependency": [{"dependent": "任务拆解", "prerequisite": "确定项目需求",
+                                 "basis": "必须依赖"}]}
+        client = FakeClient(GOOD, logic_chain=chain)
+        sink: dict = {"chain": {}}
+        graph = run_logic_graph(client, doc_key="k", title="项目开发", text=ARTICLE,
+                                terms=("重排模型",), logic_sink=sink)
+        self.assertEqual(len(client.logic_chain_calls), 1, "第零轮只跑一次")
+        self.assertEqual(client.logic_chain_calls[0]["topic"], "项目开发")
+        self.assertEqual(client.logic_chain_calls[0]["terms"], ["重排模型"])
+        self.assertIn("重排把准确率", client.logic_chain_calls[0]["article"],
+                      "第零轮看的是整篇原文，不是词条碎片")
+        self.assertEqual(sink["chain"], chain, "骨架要留给调用方（落缓存 / 界面）")
+        self.assertEqual(client.logic_chains_seen, [chain],
+                         "归纳那一轮必须拿着同一份骨架")
+        # 骨架真的进了用户消息（不是只在内存里传了一圈）
+        payload = build_article_logic_payload(
+            "m", {"text": ARTICLE}, title="项目开发", logic_chain=chain)
+        user = payload["messages"][1]["content"]
+        self.assertIn("方向是 确定项目需求 → 任务拆解", user)
+        self.assertEqual(len(client.calls), 1, "归纳还是只花一次钱")
+        self.assertEqual(len(graph.branches), 3)
+
+    def test_a_broken_chain_round_never_breaks_the_induction(self):
+        """第零轮失败（抛异常 / 回空骨架）⇒ 按老路径继续，不编造骨架。"""
+        for reply in (RuntimeError("网络断了"), {}):
+            with self.subTest(reply=repr(reply)):
+                client = FakeClient(GOOD, logic_chain={"logic_type": "时序"})
+
+                def boom(article, *, topic="", terms=(), **_kw):
+                    if isinstance(reply, Exception):
+                        raise reply
+                    return dict(reply)
+
+                client.map_logic_chain = boom
+                sink: dict = {"chain": {}}
+                graph = run_logic_graph(client, doc_key="k", text=ARTICLE,
+                                        logic_sink=sink)
+                self.assertEqual(sink["chain"], {}, "拿不到就空着，不许编")
+                self.assertEqual(client.logic_chains_seen, [None],
+                                 "没有骨架时归纳那一轮逐字等于老文本")
+                self.assertEqual(len(graph.branches), 3, "照样画得出图")
 
     def test_label_is_silent_for_the_first_version(self):
         self.assertEqual(logic_vary_label({"vary": 0, "vary_label": "标准"}), "")
