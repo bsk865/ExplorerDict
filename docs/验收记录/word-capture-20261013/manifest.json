@@ -1,5 +1,9 @@
 [
   {
+    "path": "latency.json",
+    "sha256": "cf78b4aad87430cbebfc2caff5718ad2404d6f2ac4e6854ba9f8d3046f5a069f"
+  },
+  {
     "path": "receipt.json",
     "sha256": "43497cac2d5d3d4fa987064cc1c2ff8d3d55d4c892995a611c758bd958f31f91"
   },
@@ -13,7 +17,7 @@
   },
   {
     "path": "Word文档划词修复.md",
-    "sha256": "dbeffda3ead0f512cb31e023197bc89883980fb0948684df02a5c1e978a1be56"
+    "sha256": "e1b5b267d801a6bb950d90c3263df44785c4a92caaf87a221a8c3d8c3164ff22"
   },
   {
     "path": "实际划选与浮窗.png",

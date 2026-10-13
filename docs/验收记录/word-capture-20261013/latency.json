@@ -1,0 +1,35 @@
+{
+  "checked_at": "2026-10-13T19:53:23.407517+08:00",
+  "source_commit": "1891e60a640498114500098c6167f628ad68e696",
+  "measurement_scope": "Live scratch WPS selection: helper request until response; excludes helper startup, mouse settling delay and UI render",
+  "before_ms": [
+    943.4,
+    634.5,
+    652.7,
+    642.2,
+    666.5
+  ],
+  "before_median_ms": 652.7,
+  "after_skipping_address_bar_ms": [
+    724.6,
+    443.6,
+    419.3,
+    417.8,
+    404.6
+  ],
+  "after_skipping_address_bar_median_ms": 419.3,
+  "per_request_process_cache": "Implemented and verified by controlled tests; live latency not measured after user switched to another application",
+  "additional_tests": {
+    "unittest": 7,
+    "result": "OK",
+    "controlled_powershell_assertions": 19
+  },
+  "runtime_sha256": "9e21f8f1e1e2e32007be6d2b840537fba429545797eae36d55a8cc53c5d0945b",
+  "source_sha256": "9e21f8f1e1e2e32007be6d2b840537fba429545797eae36d55a8cc53c5d0945b",
+  "source_runtime_match": true,
+  "running_dictionary_pid": 66248,
+  "running_instance_restarted_for_performance_patch": false,
+  "effect": "Performance patch loads after next dictionary restart; running instance already has functional Word/WPS selection fix",
+  "remote_main": "6dc97c1b789d88fdd4ae51eede12baeead84660f",
+  "pushed": false
+}
