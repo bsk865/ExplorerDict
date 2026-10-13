@@ -56,6 +56,7 @@ $script:MaxCandidates = 18
 $script:MaxAncestors = 4
 $script:MaxTopDocuments = 3
 $script:MaxTopTextControls = 6
+$script:ProcessImages = @{}
 
 # Chromium / Gecko -- and CEF-based suites such as WPS ("Prome" shell) -- expose
 # page content from a CHILD helper process, so the element pid legitimately
@@ -218,30 +219,29 @@ function Test-Candidate($el, $exp) {
 }
 
 # Image name (lower case, with extension) of a process; '' when unavailable.
-function Get-ProcessImageName($processId) {
-    if ($processId -le 0) { return '' }
+function Get-ProcessIdentity($processId) {
+    $key = [int]$processId
+    $none = @{ name = ''; path = '' }
+    if ($key -le 0) { return $none }
+    if ($script:ProcessImages.ContainsKey($key)) { return $script:ProcessImages[$key] }
     try {
-        $p = Get-Process -Id $processId -ErrorAction Stop
-        if ($null -eq $p) { return '' }
-        return ([string]$p.ProcessName).ToLowerInvariant() + '.exe'
-    } catch {
-        return ''
-    }
+        $p = Get-Process -Id $key -ErrorAction Stop
+        $name = ([string]$p.ProcessName).ToLowerInvariant() + '.exe'
+        $path = ''
+        try { $path = ([string]$p.Path).ToLowerInvariant() } catch { }
+        $script:ProcessImages[$key] = @{ name = $name; path = $path }
+    } catch { $script:ProcessImages[$key] = $none }
+    return $script:ProcessImages[$key]
+}
+
+function Get-ProcessImageName($processId) {
+    return (Get-ProcessIdentity $processId).name
 }
 
 # Full image path (lower case) of a process; '' when unavailable (access denied,
 # 32/64-bit mismatch, process gone). Never throws.
 function Get-ProcessImagePath($processId) {
-    if ($processId -le 0) { return '' }
-    try {
-        $p = Get-Process -Id $processId -ErrorAction Stop
-        if ($null -eq $p) { return '' }
-        $path = [string]$p.Path
-        if ([string]::IsNullOrEmpty($path)) { return '' }
-        return $path.ToLowerInvariant()
-    } catch {
-        return ''
-    }
+    return (Get-ProcessIdentity $processId).path
 }
 
 # Is this element hosted by a CHILD process of the SAME application as the
@@ -343,6 +343,11 @@ function Add-TopLevelCandidates($list, $exp) {
 # Address metadata is optional: never enumerate all document descendants for it.
 function Get-WindowUrl($win, $exp) {
     if ($null -eq $win -or -not (Test-ForegroundIs $exp)) { return @{ url = ''; how = '' } }
+    # Native Office documents have no browser address bar. Avoid traversing
+    # their large ribbons after a successful selection just to obtain no URL.
+    if ((Get-ProcessImageName $exp.pid) -in @('wps.exe', 'winword.exe')) {
+        return @{ url = ''; how = '' }
+    }
     $ids = @('addressEditBox', 'omnibox', 'urlbar-input', 'address-bar', 'AddressEditBox', 'urlBar')
     foreach ($el in (Get-BoundedElements $win $exp $true)) {
         if (-not (Test-ForegroundIs $exp)) { break }
@@ -709,6 +714,9 @@ while ($true) {
     }
 
     $resp = $null
+    # Executable identities are immutable during a process lifetime. Reuse them
+    # only within this request; never retain a cached PID across requests.
+    $script:ProcessImages = @{}
     try {
         switch ($cmd) {
             'ping' {

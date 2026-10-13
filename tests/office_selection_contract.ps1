@@ -6,7 +6,7 @@ $tokens=$null; $errors=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile($HelperPath,[ref]$tokens,[ref]$errors)
 if ($errors.Count) { throw 'Helper parse failed' }
 $functions=$ast.FindAll({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst]},$false)
-foreach ($name in @('Test-OfficeHwnd','Try-OfficeSelectionFrom')) {
+foreach ($name in @('Test-OfficeHwnd','Try-OfficeSelectionFrom','Get-ProcessIdentity')) {
     $code=($functions | Where-Object Name -eq $name).Extent.Text
     Invoke-Expression ($code.Replace('[ExplorerDict.Native]','[OfficeContract.Native]'))
 }
@@ -98,4 +98,11 @@ Reset-Fixture; $script:Window.Selection.Value.End=6
 Assert (-not (Try-OfficeSelectionFrom $script:El $exp 3).ok) 'Collapsed range must not be read as a word'
 Reset-Fixture; $script:Window.Selection.Value.SwitchOnRead=$true
 Assert (-not (Try-OfficeSelectionFrom $script:El $exp 3).ok) 'Foreground change during range read must discard result'
+$script:ProcessImages=@{}; $script:ProcessQueries=0; $script:FakePath='c:/wps.exe'
+function Get-Process { param($Id,$ErrorAction) $script:ProcessQueries++; return [pscustomobject]@{ProcessName='wps';Path=$script:FakePath} }
+$first=Get-ProcessIdentity 100
+$second=Get-ProcessIdentity ([uint32]100)
+Assert ($first.name -eq 'wps.exe' -and $second.path -eq 'c:/wps.exe' -and $script:ProcessQueries -eq 1) 'Reuse process identity only within current request'
+$script:ProcessImages=@{}; $script:FakePath='c:/changed/wps.exe'
+Assert ((Get-ProcessIdentity 100).path -eq $script:FakePath -and $script:ProcessQueries -eq 2) 'New request must re-query process identity'
 Write-Output ('PASS assertions=' + $script:Count)
