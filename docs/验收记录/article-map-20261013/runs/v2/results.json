@@ -1,0 +1,40 @@
+[
+  {
+    "case_id": "seed-process",
+    "file": "自编01-育苗步骤与可选处理.txt",
+    "approved": true,
+    "rounds": 1,
+    "nodes": 21,
+    "relations": 15
+  },
+  {
+    "case_id": "robot-conditions",
+    "file": "自编02-设备条件与否定.txt",
+    "approved": false,
+    "error": "网络不可达：无法连接：[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "case_id": "evidence-not-cause",
+    "file": "自编03-对比与证据限制.txt",
+    "approved": false,
+    "error": "网络不可达：无法连接：[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "case_id": "backup-alternatives",
+    "file": "自编04-指代与备份方案.txt",
+    "approved": false,
+    "error": "网络不可达：无法连接：[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "case_id": "feedback-loop",
+    "file": "自编05-迭代反馈与分支.txt",
+    "approved": false,
+    "error": "网络不可达：无法连接：[Errno 11001] getaddrinfo failed"
+  },
+  {
+    "case_id": "multi-section",
+    "file": "自编06-多段材料与稀疏划词.txt",
+    "approved": false,
+    "error": "网络不可达：无法连接：[Errno 11001] getaddrinfo failed"
+  }
+]

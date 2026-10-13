@@ -1,0 +1,136 @@
+{
+  "claims": [
+    {
+      "subject": "一份虚构的课堂观察记录",
+      "predicate": "比较了",
+      "object": "甲班和乙班",
+      "quote": "一份虚构的课堂观察记录比较了甲班和乙班。",
+      "relation_required": false
+    },
+    {
+      "subject": "两班",
+      "predicate": "使用",
+      "object": "同一份练习题",
+      "quote": "两班使用同一份练习题。",
+      "relation_required": false
+    },
+    {
+      "subject": "甲班",
+      "predicate": "自愿参加",
+      "object": "每周一次的讨论",
+      "quote": "甲班自愿参加每周一次的讨论",
+      "relation_required": false
+    },
+    {
+      "subject": "乙班",
+      "predicate": "没有组织",
+      "object": "讨论",
+      "quote": "乙班没有组织讨论。",
+      "relation_required": false
+    },
+    {
+      "subject": "甲班的平均分",
+      "predicate": "四周后比自己起始时提高了",
+      "object": "八分",
+      "quote": "四周后，甲班的平均分比自己起始时提高了八分",
+      "relation_required": false
+    },
+    {
+      "subject": "乙班",
+      "predicate": "提高了",
+      "object": "三分",
+      "quote": "乙班提高了三分。",
+      "relation_required": false
+    },
+    {
+      "subject": "参加讨论",
+      "predicate": "与分数提高同时出现（共存/相关，方向不表示因果）",
+      "object": "分数提高",
+      "quote": "记录发现参加讨论与分数提高同时出现",
+      "relation_required": true
+    },
+    {
+      "subject": "参加讨论与分数提高同时出现",
+      "predicate": "不证明（否定因果推断；同时出现不等于讨论导致提分）",
+      "object": "讨论导致提分",
+      "quote": "但这不证明讨论导致提分",
+      "relation_required": true
+    },
+    {
+      "subject": "两班的起始基础和课外练习时间并不相同",
+      "predicate": "是‘不证明讨论导致提分’的理由（方向：理由→否定因果推断；并非证明讨论不导致提分）",
+      "object": "不证明讨论导致提分",
+      "quote": "但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。",
+      "relation_required": true
+    },
+    {
+      "subject": "记录",
+      "predicate": "没有说（未陈述；不能据此推出乙班成绩下降，也不能推出未下降）",
+      "object": "乙班成绩下降",
+      "quote": "记录也没有说乙班成绩下降。",
+      "relation_required": false
+    },
+    {
+      "subject": "下一阶段",
+      "predicate": "可以增加（可选）",
+      "object": "随机分组",
+      "quote": "下一阶段可以增加随机分组",
+      "relation_required": false
+    },
+    {
+      "subject": "下一阶段",
+      "predicate": "也可以继续记录（可选，与增加随机分组并列）",
+      "object": "练习时间",
+      "quote": "也可以继续记录练习时间",
+      "relation_required": false
+    },
+    {
+      "subject": "增加随机分组和继续记录练习时间（两项）",
+      "predicate": "都属于",
+      "object": "改进建议，尚未执行",
+      "quote": "两项都属于改进建议，尚未执行。",
+      "relation_required": false
+    },
+    {
+      "subject": "分组方案通过审查且学生同意参加",
+      "predicate": "是团队才会开始新一轮观察的必要条件（只有…才；未满足则不会开始）",
+      "object": "团队开始新一轮观察",
+      "quote": "只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。",
+      "relation_required": true
+    },
+    {
+      "subject": "讨论次数本身",
+      "predicate": "不能作为（不可用作，方向：讨论次数≠直接测量）",
+      "object": "学生理解能力的直接测量",
+      "quote": "讨论次数本身不能作为学生理解能力的直接测量。",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "甲班自愿参加每周一次的讨论，乙班没有组织讨论。",
+      "note": "“讨论”在此指甲班自愿参加的每周一次活动；乙班没有组织讨论，不是两班都进行了讨论。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。",
+      "note": "“八分”是甲班平均分相对自己起始时的提高量，不是甲班与乙班的分数差距。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。",
+      "note": "“提高”指各班平均分相对自身起始时的变化，不表示讨论导致提高。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。",
+      "note": "“因为”引出不能证明因果的理由，并非确认讨论导致提分。"
+    },
+    {
+      "selection_index": 4,
+      "quote": "下一阶段可以增加随机分组，也可以继续记录练习时间",
+      "note": "“随机分组”是下一阶段可选改进建议，尚未执行。"
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "claims": [
+    {
+      "subject": "准备一次短途徒步",
+      "predicate": "需要",
+      "object": "按步骤做好筹备",
+      "quote": "准备一次短途徒步，需要按步骤做好筹备。",
+      "relation_required": true
+    },
+    {
+      "subject": "查看天气预报",
+      "predicate": "确认",
+      "object": "不会遇到暴雨或强风",
+      "quote": "首先查看天气预报，确认不会遇到暴雨或强风；",
+      "relation_required": true
+    },
+    {
+      "subject": "整理背包",
+      "predicate": "装入",
+      "object": "饮用水、少量零食、急救创可贴与充电宝",
+      "quote": "其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；",
+      "relation_required": true
+    },
+    {
+      "subject": "规划徒步路线",
+      "predicate": "标记",
+      "object": "沿途休息点与岔路口",
+      "quote": "接着规划徒步路线，标记沿途休息点与岔路口；",
+      "relation_required": true
+    },
+    {
+      "subject": "出发前告知家人",
+      "predicate": "告知内容为",
+      "object": "出行路线与预计返程时间",
+      "quote": "出发前告知家人出行路线与预计返程时间。",
+      "relation_required": true
+    },
+    {
+      "subject": "徒步途中",
+      "predicate": "优先选择",
+      "object": "沿着成熟步道行走",
+      "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。",
+      "relation_required": true
+    },
+    {
+      "subject": "徒步途中",
+      "predicate": "不要随意进入",
+      "object": "偏僻野路",
+      "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。",
+      "relation_required": true
+    },
+    {
+      "subject": "抵达终点后",
+      "predicate": "简单记录",
+      "object": "沿途见闻",
+      "quote": "抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    },
+    {
+      "subject": "回家后",
+      "predicate": "整理",
+      "object": "装备",
+      "quote": "抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    },
+    {
+      "subject": "回家后整理装备",
+      "predicate": "并检查",
+      "object": "有无物品遗失",
+      "quote": "抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    },
+    {
+      "subject": "查看天气预报，确认不会遇到暴雨或强风",
+      "predicate": "先于",
+      "object": "整理背包，装入饮用水、少量零食、急救创可贴与充电宝",
+      "quote": "首先查看天气预报，确认不会遇到暴雨或强风；其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；",
+      "relation_required": true
+    },
+    {
+      "subject": "整理背包，装入饮用水、少量零食、急救创可贴与充电宝",
+      "predicate": "先于",
+      "object": "规划徒步路线，标记沿途休息点与岔路口",
+      "quote": "其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；接着规划徒步路线，标记沿途休息点与岔路口；",
+      "relation_required": true
+    },
+    {
+      "subject": "规划徒步路线，标记沿途休息点与岔路口",
+      "predicate": "先于",
+      "object": "出发前告知家人出行路线与预计返程时间",
+      "quote": "接着规划徒步路线，标记沿途休息点与岔路口；出发前告知家人出行路线与预计返程时间。",
+      "relation_required": true
+    },
+    {
+      "subject": "出发前告知家人出行路线与预计返程时间",
+      "predicate": "先于",
+      "object": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路",
+      "quote": "出发前告知家人出行路线与预计返程时间。徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。",
+      "relation_required": true
+    },
+    {
+      "subject": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路",
+      "predicate": "先于",
+      "object": "抵达终点后简单记录沿途见闻",
+      "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    },
+    {
+      "subject": "抵达终点后简单记录沿途见闻",
+      "predicate": "先于",
+      "object": "回家后整理装备，检查有无物品遗失",
+      "quote": "抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    },
+    {
+      "subject": "回家后整理装备，检查有无物品遗失",
+      "predicate": "先于",
+      "object": "完成本次徒步的全部流程",
+      "quote": "回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；",
+      "note": "此处“背包”为名词，作“整理”的对象；原文未说明背包的具体类型或容量。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "出发前告知家人出行路线与预计返程时间。",
+      "note": "此处“家人”是告知对象；原文未说明具体告知哪位家人。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。",
+      "note": "此处“偏僻野路”与“成熟步道”相对，指不应随意进入的野路；原文未列举其具体范围。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "首先查看天气预报，确认不会遇到暴雨或强风；",
+      "note": "此处“首先”表示筹备步骤中的第一步，不表示唯一原因或全部步骤。"
+    }
+  ]
+}

@@ -1,0 +1,332 @@
+{
+  "root": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "parent": null,
+      "label": "制作一杯热咖啡的完整流程",
+      "kind": "branch",
+      "quote": "制作一杯热咖啡的完整流程，包含准备材料、冲泡咖啡两个核心环节。"
+    },
+    {
+      "id": "n1",
+      "parent": "n0",
+      "label": "准备材料",
+      "kind": "branch",
+      "quote": "准备材料"
+    },
+    {
+      "id": "n2",
+      "parent": "n0",
+      "label": "冲泡咖啡",
+      "kind": "branch",
+      "quote": "冲泡咖啡"
+    },
+    {
+      "id": "n3",
+      "parent": "n0",
+      "label": "调味与完成",
+      "kind": "branch",
+      "quote": "得到咖啡原液之后，可以根据个人口味加入少量糖或者牛奶进行调味。调味完成，一杯热咖啡就制作完成。"
+    },
+    {
+      "id": "n4",
+      "parent": "n0",
+      "label": "水温限制",
+      "kind": "branch",
+      "quote": "整个过程需要控制水温，水温过高会破坏咖啡香气，水温过低则难以萃取足够风味。"
+    },
+    {
+      "id": "n5",
+      "parent": "n1",
+      "label": "准备咖啡豆与热水",
+      "kind": "concept",
+      "quote": "首先准备咖啡豆与热水"
+    },
+    {
+      "id": "n6",
+      "parent": "n1",
+      "label": "仔细检查材料品质",
+      "kind": "concept",
+      "quote": "仔细检查材料品质"
+    },
+    {
+      "id": "n7",
+      "parent": "n1",
+      "label": "准备好材料",
+      "kind": "concept",
+      "quote": "准备好材料之后"
+    },
+    {
+      "id": "n8",
+      "parent": "n2",
+      "label": "将热水缓缓接触研磨好的咖啡豆",
+      "kind": "concept",
+      "quote": "冲泡时将热水缓缓接触研磨好的咖啡豆"
+    },
+    {
+      "id": "n9",
+      "parent": "n2",
+      "label": "热水能够溶解咖啡内部的风味物质",
+      "kind": "concept",
+      "quote": "因为热水能够溶解咖啡内部的风味物质"
+    },
+    {
+      "id": "n10",
+      "parent": "n2",
+      "label": "得到香气浓郁的咖啡原液",
+      "kind": "concept",
+      "quote": "所以会得到香气浓郁的咖啡原液"
+    },
+    {
+      "id": "n11",
+      "parent": "n2",
+      "label": "热水",
+      "kind": "concept",
+      "quote": "热水"
+    },
+    {
+      "id": "n12",
+      "parent": "n2",
+      "label": "咖啡内部的风味物质",
+      "kind": "concept",
+      "quote": "咖啡内部的风味物质"
+    },
+    {
+      "id": "n13",
+      "parent": "n3",
+      "label": "根据个人口味加入少量糖或者牛奶进行调味",
+      "kind": "concept",
+      "quote": "可以根据个人口味加入少量糖或者牛奶进行调味"
+    },
+    {
+      "id": "n14",
+      "parent": "n3",
+      "label": "一杯热咖啡制作完成",
+      "kind": "concept",
+      "quote": "一杯热咖啡就制作完成"
+    },
+    {
+      "id": "n15",
+      "parent": "n4",
+      "label": "控制水温",
+      "kind": "concept",
+      "quote": "整个过程需要控制水温"
+    },
+    {
+      "id": "n16",
+      "parent": "n4",
+      "label": "水温过高",
+      "kind": "concept",
+      "quote": "水温过高"
+    },
+    {
+      "id": "n17",
+      "parent": "n4",
+      "label": "咖啡香气",
+      "kind": "concept",
+      "quote": "咖啡香气"
+    },
+    {
+      "id": "n18",
+      "parent": "n4",
+      "label": "水温过低",
+      "kind": "concept",
+      "quote": "水温过低"
+    },
+    {
+      "id": "n19",
+      "parent": "n4",
+      "label": "足够风味",
+      "kind": "concept",
+      "quote": "足够风味"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r0",
+      "src": "n0",
+      "dst": "n1",
+      "label": "包含",
+      "quote": "包含准备材料、冲泡咖啡两个核心环节"
+    },
+    {
+      "id": "r1",
+      "src": "n0",
+      "dst": "n2",
+      "label": "包含",
+      "quote": "包含准备材料、冲泡咖啡两个核心环节"
+    },
+    {
+      "id": "r2",
+      "src": "n1",
+      "dst": "n5",
+      "label": "首先准备",
+      "quote": "首先准备咖啡豆与热水"
+    },
+    {
+      "id": "r3",
+      "src": "n5",
+      "dst": "n6",
+      "label": "并",
+      "quote": "首先准备咖啡豆与热水，仔细检查材料品质"
+    },
+    {
+      "id": "r4",
+      "src": "n7",
+      "dst": "n2",
+      "label": "之后就可以开始",
+      "quote": "准备好材料之后，就可以开始冲泡咖啡"
+    },
+    {
+      "id": "r5",
+      "src": "n2",
+      "dst": "n8",
+      "label": "具体做法是",
+      "quote": "冲泡时将热水缓缓接触研磨好的咖啡豆"
+    },
+    {
+      "id": "r6",
+      "src": "n8",
+      "dst": "n9",
+      "label": "因为",
+      "quote": "因为热水能够溶解咖啡内部的风味物质"
+    },
+    {
+      "id": "r7",
+      "src": "n9",
+      "dst": "n10",
+      "label": "所以会得到",
+      "quote": "所以会得到香气浓郁的咖啡原液"
+    },
+    {
+      "id": "r8",
+      "src": "n11",
+      "dst": "n12",
+      "label": "能够溶解",
+      "quote": "因为热水能够溶解咖啡内部的风味物质"
+    },
+    {
+      "id": "r9",
+      "src": "n10",
+      "dst": "n13",
+      "label": "之后可以",
+      "quote": "得到咖啡原液之后，可以根据个人口味加入少量糖或者牛奶进行调味"
+    },
+    {
+      "id": "r10",
+      "src": "n13",
+      "dst": "n14",
+      "label": "完成后",
+      "quote": "调味完成，一杯热咖啡就制作完成"
+    },
+    {
+      "id": "r11",
+      "src": "n0",
+      "dst": "n15",
+      "label": "整个过程需要",
+      "quote": "整个过程需要控制水温"
+    },
+    {
+      "id": "r12",
+      "src": "n16",
+      "dst": "n17",
+      "label": "会破坏",
+      "quote": "水温过高会破坏咖啡香气"
+    },
+    {
+      "id": "r13",
+      "src": "n18",
+      "dst": "n19",
+      "label": "则难以萃取",
+      "quote": "水温过低则难以萃取足够风味"
+    },
+    {
+      "id": "r14",
+      "src": "n16",
+      "dst": "n15",
+      "label": "因此需要",
+      "quote": "整个过程需要控制水温，水温过高会破坏咖啡香气，水温过低则难以萃取足够风味。"
+    },
+    {
+      "id": "r15",
+      "src": "n18",
+      "dst": "n15",
+      "label": "因此需要",
+      "quote": "整个过程需要控制水温，水温过高会破坏咖啡香气，水温过低则难以萃取足够风味。"
+    }
+  ],
+  "bindings": [
+    {
+      "selection_index": 0,
+      "node_ids": [
+        "n15",
+        "n16",
+        "n18"
+      ],
+      "suggest_exclude": false,
+      "note": "“水温”有实际含义，补全并关联到“控制水温”“水温过高”“水温过低”等原文条件节点。",
+      "candidates": [
+        {
+          "node_id": "n15",
+          "quote": "整个过程需要控制水温"
+        },
+        {
+          "node_id": "n16",
+          "quote": "水温过高会破坏咖啡香气"
+        },
+        {
+          "node_id": "n18",
+          "quote": "水温过低则难以萃取足够风味"
+        }
+      ]
+    },
+    {
+      "selection_index": 1,
+      "node_ids": [
+        "n13"
+      ],
+      "suggest_exclude": false,
+      "note": "“糖”有实际含义，补全为“根据个人口味加入少量糖或者牛奶进行调味”，保留可选“或者”和“少量”。",
+      "candidates": [
+        {
+          "node_id": "n13",
+          "quote": "可以根据个人口味加入少量糖或者牛奶进行调味"
+        }
+      ]
+    },
+    {
+      "selection_index": 2,
+      "node_ids": [
+        "n10"
+      ],
+      "suggest_exclude": false,
+      "note": "“咖啡原液”有实际含义，补全为“得到香气浓郁的咖啡原液”。",
+      "candidates": [
+        {
+          "node_id": "n10",
+          "quote": "所以会得到香气浓郁的咖啡原液"
+        }
+      ]
+    },
+    {
+      "selection_index": 3,
+      "node_ids": [
+        "n5",
+        "n8"
+      ],
+      "suggest_exclude": false,
+      "note": "“咖啡豆”有实际含义，分别关联到“准备咖啡豆与热水”和“将热水缓缓接触研磨好的咖啡豆”。",
+      "candidates": [
+        {
+          "node_id": "n5",
+          "quote": "首先准备咖啡豆与热水"
+        },
+        {
+          "node_id": "n8",
+          "quote": "冲泡时将热水缓缓接触研磨好的咖啡豆"
+        }
+      ]
+    }
+  ]
+}

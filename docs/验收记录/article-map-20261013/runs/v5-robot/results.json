@@ -1,0 +1,8 @@
+[
+  {
+    "case_id": "robot-conditions",
+    "file": "自编02-设备条件与否定.txt",
+    "approved": false,
+    "error": "未知错误 (HTTP 402)：HTTP 402：{\"error\":{\"message\":\"Insufficient Balance (request_id: 2ecc70cb-049d-4c0a-a0b1-ec239b4bd104)\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\""
+  }
+]

@@ -1,0 +1,254 @@
+{
+  "root": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "parent": null,
+      "label": "规律阅读的益处、限制与提升方法",
+      "kind": "branch",
+      "quote": "长期保持规律阅读能够提升文字理解能力。"
+    },
+    {
+      "id": "n1",
+      "parent": "n0",
+      "label": "规律阅读提升理解能力",
+      "kind": "branch",
+      "quote": "长期保持规律阅读能够提升文字理解能力。"
+    },
+    {
+      "id": "n2",
+      "parent": "n1",
+      "label": "长期保持规律阅读",
+      "kind": "concept",
+      "quote": "长期保持规律阅读"
+    },
+    {
+      "id": "n3",
+      "parent": "n1",
+      "label": "文字理解能力",
+      "kind": "concept",
+      "quote": "文字理解能力"
+    },
+    {
+      "id": "n4",
+      "parent": "n1",
+      "label": "坚持阅读的递增作用",
+      "kind": "branch",
+      "quote": "坚持阅读可以接触更多陌生词汇与表达方式，因此阅读理解速度会慢慢提高。"
+    },
+    {
+      "id": "n5",
+      "parent": "n4",
+      "label": "坚持阅读",
+      "kind": "concept",
+      "quote": "坚持阅读"
+    },
+    {
+      "id": "n6",
+      "parent": "n4",
+      "label": "接触更多陌生词汇与表达方式",
+      "kind": "concept",
+      "quote": "接触更多陌生词汇与表达方式"
+    },
+    {
+      "id": "n7",
+      "parent": "n4",
+      "label": "阅读理解速度慢慢提高",
+      "kind": "concept",
+      "quote": "阅读理解速度会慢慢提高"
+    },
+    {
+      "id": "n8",
+      "parent": "n1",
+      "label": "阅读锻炼信息抓取能力",
+      "kind": "branch",
+      "quote": "同时阅读会锻炼信息抓取能力，所以更容易快速抓住一段文字的核心观点。"
+    },
+    {
+      "id": "n9",
+      "parent": "n8",
+      "label": "阅读",
+      "kind": "concept",
+      "quote": "同时阅读会锻炼信息抓取能力"
+    },
+    {
+      "id": "n10",
+      "parent": "n8",
+      "label": "锻炼信息抓取能力",
+      "kind": "concept",
+      "quote": "锻炼信息抓取能力"
+    },
+    {
+      "id": "n11",
+      "parent": "n8",
+      "label": "更容易快速抓住一段文字的核心观点",
+      "kind": "concept",
+      "quote": "更容易快速抓住一段文字的核心观点"
+    },
+    {
+      "id": "n12",
+      "parent": "n0",
+      "label": "走马观花浏览的限制",
+      "kind": "branch",
+      "quote": "但如果只是走马观花浏览，不做简单思考，阅读效果就会大打折扣。"
+    },
+    {
+      "id": "n13",
+      "parent": "n12",
+      "label": "只是走马观花浏览且不做简单思考",
+      "kind": "concept",
+      "quote": "只是走马观花浏览，不做简单思考"
+    },
+    {
+      "id": "n14",
+      "parent": "n12",
+      "label": "阅读效果大打折扣",
+      "kind": "concept",
+      "quote": "阅读效果就会大打折扣"
+    },
+    {
+      "id": "n15",
+      "parent": "n0",
+      "label": "提升阅读效果的方法",
+      "kind": "branch",
+      "quote": "想要收获更好效果，可以读完一小段简单复盘核心内容，持续积累，阅读带来的思维提升才会逐步显现。"
+    },
+    {
+      "id": "n16",
+      "parent": "n15",
+      "label": "想要收获更好效果",
+      "kind": "concept",
+      "quote": "想要收获更好效果"
+    },
+    {
+      "id": "n17",
+      "parent": "n15",
+      "label": "读完一小段简单复盘核心内容，持续积累",
+      "kind": "concept",
+      "quote": "读完一小段简单复盘核心内容，持续积累"
+    },
+    {
+      "id": "n18",
+      "parent": "n15",
+      "label": "阅读带来的思维提升逐步显现",
+      "kind": "concept",
+      "quote": "阅读带来的思维提升才会逐步显现"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r0",
+      "src": "n2",
+      "dst": "n3",
+      "label": "能够提升",
+      "quote": "长期保持规律阅读能够提升文字理解能力。"
+    },
+    {
+      "id": "r1",
+      "src": "n5",
+      "dst": "n6",
+      "label": "可以",
+      "quote": "坚持阅读可以接触更多陌生词汇与表达方式"
+    },
+    {
+      "id": "r2",
+      "src": "n6",
+      "dst": "n7",
+      "label": "因此使",
+      "quote": "接触更多陌生词汇与表达方式，因此阅读理解速度会慢慢提高。"
+    },
+    {
+      "id": "r3",
+      "src": "n9",
+      "dst": "n10",
+      "label": "会",
+      "quote": "同时阅读会锻炼信息抓取能力"
+    },
+    {
+      "id": "r4",
+      "src": "n10",
+      "dst": "n11",
+      "label": "所以能",
+      "quote": "锻炼信息抓取能力，所以更容易快速抓住一段文字的核心观点。"
+    },
+    {
+      "id": "r5",
+      "src": "n13",
+      "dst": "n14",
+      "label": "就会导致",
+      "quote": "但如果只是走马观花浏览，不做简单思考，阅读效果就会大打折扣。"
+    },
+    {
+      "id": "r6",
+      "src": "n16",
+      "dst": "n17",
+      "label": "可以通过",
+      "quote": "想要收获更好效果，可以读完一小段简单复盘核心内容，持续积累"
+    },
+    {
+      "id": "r7",
+      "src": "n17",
+      "dst": "n18",
+      "label": "才会使",
+      "quote": "可以读完一小段简单复盘核心内容，持续积累，阅读带来的思维提升才会逐步显现。"
+    }
+  ],
+  "bindings": [
+    {
+      "selection_index": 0,
+      "node_ids": [
+        "n11"
+      ],
+      "suggest_exclude": false,
+      "note": "“核心观点”出现在“更容易快速抓住一段文字的核心观点”中，已补全为完整动作节点。",
+      "candidates": [
+        {
+          "node_id": "n11",
+          "quote": "更容易快速抓住一段文字的核心观点"
+        }
+      ]
+    },
+    {
+      "selection_index": 1,
+      "node_ids": [
+        "n9"
+      ],
+      "suggest_exclude": false,
+      "note": "“阅读”绑定到直接动作“阅读会锻炼信息抓取能力”的主体节点。",
+      "candidates": [
+        {
+          "node_id": "n9",
+          "quote": "同时阅读会锻炼信息抓取能力"
+        }
+      ]
+    },
+    {
+      "selection_index": 2,
+      "node_ids": [
+        "n13"
+      ],
+      "suggest_exclude": false,
+      "note": "“走马观花”补全为“只是走马观花浏览且不做简单思考”的合取条件，不能拆成单独充分条件。",
+      "candidates": [
+        {
+          "node_id": "n13",
+          "quote": "只是走马观花浏览，不做简单思考"
+        }
+      ]
+    },
+    {
+      "selection_index": 3,
+      "node_ids": [
+        "n18"
+      ],
+      "suggest_exclude": false,
+      "note": "“思维提升”补全为“阅读带来的思维提升逐步显现”，保留逐步显现的结果与时间意味。",
+      "candidates": [
+        {
+          "node_id": "n18",
+          "quote": "阅读带来的思维提升才会逐步显现"
+        }
+      ]
+    }
+  ]
+}

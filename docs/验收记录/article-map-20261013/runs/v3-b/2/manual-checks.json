@@ -1,0 +1,71 @@
+{
+  "case_id": "evidence-not-cause",
+  "model_approved": true,
+  "codex_independent_accepted": true,
+  "reviewer": "Codex independently compares source, nodes, labels, directions and qualifiers; not a human review",
+  "rounds": 1,
+  "checks": [
+    {
+      "id": "comparison",
+      "quote": "甲班的平均分比自己起始时提高了八分，乙班提高了三分。",
+      "criterion": "各班与自身基线比+8与+3，不误成甲乙差八分",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r4 explicitly compares class A against its own start and +8; r5 class B +3, no A-minus-B +8 edge."
+    },
+    {
+      "id": "association",
+      "quote": "记录发现参加讨论与分数提高同时出现，但这不证明讨论导致提分，",
+      "criterion": "同时出现不证明因果，不画讨论→必然提分",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r6 expresses coexistence; r7 explicitly says this does not prove discussion causes gains."
+    },
+    {
+      "id": "confound",
+      "quote": "因为两班的起始基础和课外练习时间并不相同。",
+      "criterion": "基础与练习时间不同是因果结论受限理由",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r8 gives unequal starting levels AND extracurricular practice time as reason for the causal limit."
+    },
+    {
+      "id": "no-decline",
+      "quote": "记录也没有说乙班成绩下降。",
+      "criterion": "乙班未声称下降，限制可见",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r9 uses 记录 -> 没有说 -> 乙班成绩下降, not factual denial or assertion of decline."
+    },
+    {
+      "id": "suggestions",
+      "quote": "下一阶段可以增加随机分组，也可以继续记录练习时间，两项都属于改进建议，尚未执行。",
+      "criterion": "两个改进建议为可选未执行，不当已经完成步骤",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r10/r11 use 可以/也可以, r12/r13 classify as proposals, n22 keeps 尚未执行."
+    },
+    {
+      "id": "and",
+      "quote": "只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。",
+      "criterion": "审查通过且同意共同条件→才开始观察",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n23 keeps review approval AND consent together, r14 only starts observation under that combined condition; r15 does not make either individually sufficient."
+    },
+    {
+      "id": "measure",
+      "quote": "讨论次数本身不能作为学生理解能力的直接测量。",
+      "criterion": "次数不能直接量理解能力，否定不能丢",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r16 preserves 不能作为 direct measurement of understanding."
+    }
+  ],
+  "issues": [],
+  "readability_notes": [
+    "50 nodes for 241 characters: many full-sentence cards duplicate atomic endpoints. Logical checks pass, but concision is poor.",
+    "Suggested exclusion 因为 remains stored and visible; no forced relation to unrelated concepts."
+  ],
+  "scope": "Frozen check coverage and additional full-edge review; one output is not a population accuracy estimate"
+}

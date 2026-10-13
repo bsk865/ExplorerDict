@@ -1,0 +1,143 @@
+{
+  "claims": [
+    {
+      "subject": "小林为项目资料建立备份",
+      "predicate": "作为独立信息描述",
+      "object": "项目资料备份",
+      "quote": "小林为项目资料建立备份。",
+      "relation_required": false
+    },
+    {
+      "subject": "她先把源文件复制到本地备份盘",
+      "predicate": "复制完成后",
+      "object": "核对文件数量",
+      "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+      "relation_required": true
+    },
+    {
+      "subject": "它",
+      "predicate": "指",
+      "object": "本地备份盘",
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "它出现读写错误",
+      "predicate": "如果发生，则",
+      "object": "她会更换备份盘",
+      "quote": "如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "她更换备份盘",
+      "predicate": "而不会",
+      "object": "删除源文件",
+      "quote": "她会更换备份盘，而不会删除源文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "备份",
+      "predicate": "可以选择",
+      "object": "加密压缩包",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "relation_required": true
+    },
+    {
+      "subject": "备份",
+      "predicate": "也可以选择",
+      "object": "普通文件夹",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "relation_required": true
+    },
+    {
+      "subject": "两种形式",
+      "predicate": "不要求",
+      "object": "同时采用",
+      "quote": "两种形式不要求同时采用。",
+      "relation_required": false
+    },
+    {
+      "subject": "计划把备份发给外部协作者",
+      "predicate": "只有...时才需要",
+      "object": "去掉个人联系方式",
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+      "relation_required": true
+    },
+    {
+      "subject": "仅保存在自己电脑上的备份",
+      "predicate": "不受",
+      "object": "这条规则约束",
+      "quote": "仅保存在自己电脑上的备份不受这条规则约束。",
+      "relation_required": true
+    },
+    {
+      "subject": "去掉联系方式",
+      "predicate": "之后仍要",
+      "object": "核对技术内容是否完整",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。",
+      "relation_required": true
+    },
+    {
+      "subject": "核对通过",
+      "predicate": "后可以",
+      "object": "上传共享区",
+      "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+      "relation_required": true
+    },
+    {
+      "subject": "上传共享区",
+      "predicate": "不要求立刻",
+      "object": "上传",
+      "quote": "但不要求立刻上传。",
+      "relation_required": false
+    },
+    {
+      "subject": "上传成功",
+      "predicate": "不代表",
+      "object": "协作者已经读过文件",
+      "quote": "上传成功不代表协作者已经读过文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "项目当天还讨论了会议室座位安排",
+      "predicate": "作为独立信息描述",
+      "object": "会议室座位安排讨论",
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+      "relation_required": false
+    },
+    {
+      "subject": "会议室座位安排讨论",
+      "predicate": "与...没有直接关系",
+      "object": "备份检查",
+      "quote": "这与备份检查没有直接关系。",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "note": "“它”指本地备份盘，不是源文件或其他对象。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+      "note": "“联系方式”指备份中的个人联系方式；仅在计划发给外部协作者时才要求去掉。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "note": "“加密”修饰压缩包，表示可选备份形式之一，不是强制采用。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+      "note": "“上传”指将备份上传到共享区；允许但不要求立刻上传。"
+    },
+    {
+      "selection_index": 4,
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+      "note": "“座位”出现在会议室座位安排话题中，与备份检查没有直接关系。"
+    }
+  ]
+}

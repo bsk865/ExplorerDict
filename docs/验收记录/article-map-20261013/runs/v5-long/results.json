@@ -1,0 +1,8 @@
+[
+  {
+    "case_id": "multi-section",
+    "file": "自编06-多段材料与稀疏划词.txt",
+    "approved": false,
+    "error": "未知错误 (HTTP 402)：HTTP 402：{\"error\":{\"message\":\"Insufficient Balance (request_id: 0bf473ad-bc92-452b-aaa6-a59d8dbcbb80)\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\""
+  }
+]

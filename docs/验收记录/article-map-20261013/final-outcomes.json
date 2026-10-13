@@ -1,0 +1,74 @@
+{
+  "cases": [
+    {
+      "case_id": "seed-process",
+      "run": "v4/1",
+      "status": "accepted",
+      "model_approved": true,
+      "independently_accepted": true,
+      "checks": 8,
+      "check_passed": 8,
+      "independent_record": "runs/v4/1/manual-checks.json"
+    },
+    {
+      "case_id": "robot-conditions",
+      "run": "v5-robot/1",
+      "status": "review_blocked_billing",
+      "model_approved": false,
+      "independently_accepted": false,
+      "checks": 7,
+      "check_passed": 7,
+      "independent_record": "runs/v5-robot/1/manual-checks-last-draft.json"
+    },
+    {
+      "case_id": "evidence-not-cause",
+      "run": "v3-b/2",
+      "status": "accepted",
+      "model_approved": true,
+      "independently_accepted": true,
+      "checks": 7,
+      "check_passed": 7,
+      "independent_record": "runs/v3-b/2/manual-checks.json"
+    },
+    {
+      "case_id": "backup-alternatives",
+      "run": "v5-backup/1",
+      "status": "model_approved_independently_rejected",
+      "model_approved": true,
+      "independently_accepted": false,
+      "checks": 8,
+      "check_passed": 8,
+      "independent_record": "runs/v5-backup/1/manual-checks.json"
+    },
+    {
+      "case_id": "feedback-loop",
+      "run": "v5-feedback/1",
+      "status": "validation_rejected",
+      "model_approved": false,
+      "independently_accepted": false,
+      "checks": 8,
+      "check_passed": 8,
+      "independent_record": "runs/v5-feedback/1/manual-checks-last-draft.json"
+    },
+    {
+      "case_id": "multi-section",
+      "run": "v5-long/1",
+      "status": "review_blocked_billing",
+      "model_approved": false,
+      "independently_accepted": false,
+      "checks": 14,
+      "check_passed": 13,
+      "independent_record": "runs/v5-long/1/manual-checks-last-draft.json"
+    }
+  ],
+  "checks_frozen": 52,
+  "independent_cases_accepted": 2,
+  "model_approved_but_rejected_examples": [
+    "runs/v2/1",
+    "runs/v4-c/1",
+    "runs/v5-backup/1"
+  ],
+  "same_final_prompt_full_suite_run": false,
+  "live_calls_finished": true,
+  "further_live_calls_blocked_by": "HTTP 402 Insufficient Balance"
+}

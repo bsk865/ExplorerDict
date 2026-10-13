@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "frozen_fixture_sha256": "fcfbf1c89ba49c7222f13679e7b986e1f768b6456e0d91dd61d0eaa79f36dd8e",
+  "runs_checked": 12,
+  "source_snapshots_checked": 36,
+  "production_key_not_in_retained_text": true,
+  "production_db_access": "read only; no contents copied",
+  "errors": []
+}

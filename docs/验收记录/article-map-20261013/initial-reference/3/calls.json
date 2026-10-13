@@ -1,0 +1,14 @@
+[
+  {
+    "stage": "read",
+    "seconds": 17.46
+  },
+  {
+    "stage": "generate",
+    "seconds": 53.71
+  },
+  {
+    "stage": "review",
+    "seconds": 107.77
+  }
+]

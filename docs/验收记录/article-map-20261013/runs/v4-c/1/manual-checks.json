@@ -1,0 +1,84 @@
+{
+  "case_id": "feedback-loop",
+  "model_approved": true,
+  "codex_independent_accepted": false,
+  "reviewer": "Codex independently compares source, nodes, labels, directions and qualifiers; not a human review",
+  "rounds": 1,
+  "checks": [
+    {
+      "id": "order",
+      "quote": "先整理需求，再制作原型，然后邀请三位用户试用。",
+      "criterion": "需求→原型→三人试用先后",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r0/r1 retain requirements -> prototype -> three-user trial."
+    },
+    {
+      "id": "feedback",
+      "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。",
+      "criterion": "困难→清单→修订需求→下一轮原型完整循环",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r2/r3/r4/r5 retain trial difficulties -> list -> requirements revision -> next-round prototype; r6/r7 explicitly characterize repetition rather than a one-off line. Return is textual, not a geometrically closed cycle."
+    },
+    {
+      "id": "steps",
+      "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。",
+      "criterion": "操作问题简化步骤、仅文字问题可改提示两条件分开",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r8/r9 distinguish operational-step difficulties from text-only difficulties, retain priority and optionality."
+    },
+    {
+      "id": "branches",
+      "quote": "两种处理针对不同问题，不要求先改步骤再改提示语。",
+      "criterion": "无强制两处理先后关系",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r10 explicitly says different issues and no required order; n18 repeats the constraint."
+    },
+    {
+      "id": "retest",
+      "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。",
+      "criterion": "修改→再试用，修改不足以证明解决",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r11 requires repeat trial; r12 modification alone cannot prove resolution."
+    },
+    {
+      "id": "and",
+      "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。",
+      "criterion": "未发现同问题且所有三人确认共同条件",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n24 keeps no recurrence AND all three users confirming together; r13 only then marks solved."
+    },
+    {
+      "id": "optional",
+      "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计，",
+      "criterion": "可暂缓无关装饰，非所有设计都禁止",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r14 allows deferring only decorative design unrelated to current issues."
+    },
+    {
+      "id": "records",
+      "quote": "但不能删掉尚未解决的问题记录。",
+      "criterion": "不能删除未解决问题记录",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r15 prohibits deleting unresolved problem records."
+    }
+  ],
+  "issues": [
+    {
+      "relation_id": "r16",
+      "finding": "两种处理针对不同问题 — 并且 → 不要求先改步骤再改提示语 is a sentence-splitting pseudo relation between two already complete statements. It duplicates the valid r10 constraint and is not a useful source-backed concept relation. Model review approved it despite the no-duplicate-sentence rule."
+    }
+  ],
+  "readability_notes": [
+    "8 frozen checks are covered, but an additional invalid edge means the whole map is not independently accepted.",
+    "Loop is stated through next-round wording; a clear return connection would improve visual comprehension."
+  ],
+  "scope": "Frozen check coverage and additional full-edge review; one output is not a population accuracy estimate"
+}

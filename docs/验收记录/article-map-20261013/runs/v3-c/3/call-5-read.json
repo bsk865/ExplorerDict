@@ -1,0 +1,358 @@
+{
+  "claims": [
+    {
+      "subject": "社区阅读室",
+      "predicate": "试行",
+      "object": "一套图书流转办法",
+      "quote": "社区阅读室试行一套图书流转办法",
+      "relation_required": false
+    },
+    {
+      "subject": "下面的规定",
+      "predicate": "只适用于",
+      "object": "这次试行",
+      "quote": "下面的规定只适用于这次试行",
+      "relation_required": true
+    },
+    {
+      "subject": "下面的规定",
+      "predicate": "不表示",
+      "object": "其它机构也采用相同规则",
+      "quote": "不表示其它机构也采用相同规则",
+      "relation_required": true
+    },
+    {
+      "subject": "入库时志愿者先登记书名、捐赠日期和捐赠者代号",
+      "predicate": "然后",
+      "object": "检查书页是否完整",
+      "quote": "入库时，志愿者先登记书名、捐赠日期和捐赠者代号，然后检查书页是否完整。",
+      "relation_required": true
+    },
+    {
+      "subject": "书页完整且封面没有霉斑的图书",
+      "predicate": "可以进入",
+      "object": "待分类区",
+      "quote": "书页完整且封面没有霉斑的图书可以进入待分类区",
+      "relation_required": true
+    },
+    {
+      "subject": "只满足其中一项",
+      "predicate": "仍不能",
+      "object": "入区",
+      "quote": "只满足其中一项仍不能入区",
+      "relation_required": true
+    },
+    {
+      "subject": "书页缺失的图书",
+      "predicate": "送到",
+      "object": "修补区",
+      "quote": "书页缺失的图书送到修补区",
+      "relation_required": true
+    },
+    {
+      "subject": "出现霉斑的图书",
+      "predicate": "暂不入库",
+      "object": "入库",
+      "quote": "出现霉斑的图书暂不入库",
+      "relation_required": true
+    },
+    {
+      "subject": "同一本书同时存在两种问题",
+      "predicate": "先按暂不入库处理",
+      "object": "暂不入库",
+      "quote": "如果同一本书同时存在两种问题，先按暂不入库处理",
+      "relation_required": true
+    },
+    {
+      "subject": "同一本书同时存在两种问题",
+      "predicate": "不必先送去",
+      "object": "修补",
+      "quote": "不必先送去修补",
+      "relation_required": true
+    },
+    {
+      "subject": "修补完成并通过再次检查",
+      "predicate": "之后图书才可以回到",
+      "object": "待分类区",
+      "quote": "修补完成并通过再次检查后，图书才可以回到待分类区",
+      "relation_required": true
+    },
+    {
+      "subject": "这里的检查",
+      "predicate": "不是",
+      "object": "对捐赠者身份的审查",
+      "quote": "这里的检查不是对捐赠者身份的审查",
+      "relation_required": true
+    },
+    {
+      "subject": "管理员",
+      "predicate": "按内容选择",
+      "object": "一个主要类别",
+      "quote": "分类时，管理员按内容选择一个主要类别",
+      "relation_required": true
+    },
+    {
+      "subject": "一本书",
+      "predicate": "也可以贴",
+      "object": "多个检索标签",
+      "quote": "一本书也可以贴多个检索标签",
+      "relation_required": true
+    },
+    {
+      "subject": "检索标签",
+      "predicate": "不等于",
+      "object": "主要类别",
+      "quote": "检索标签不等于主要类别",
+      "relation_required": true
+    },
+    {
+      "subject": "贴标签",
+      "predicate": "不要画成",
+      "object": "更换主要类别",
+      "quote": "不要把贴标签画成更换主要类别",
+      "relation_required": true
+    },
+    {
+      "subject": "类别选择不清楚时",
+      "predicate": "可以",
+      "object": "查目录",
+      "quote": "类别选择不清楚时，可以查目录，也可以请另一位管理员协助",
+      "relation_required": true
+    },
+    {
+      "subject": "类别选择不清楚时",
+      "predicate": "也可以",
+      "object": "请另一位管理员协助",
+      "quote": "类别选择不清楚时，可以查目录，也可以请另一位管理员协助",
+      "relation_required": true
+    },
+    {
+      "subject": "两种办法",
+      "predicate": "不要求都做",
+      "object": "查目录和请另一位管理员协助都做",
+      "quote": "两种办法不要求都做",
+      "relation_required": false
+    },
+    {
+      "subject": "完成分类之后",
+      "predicate": "管理员记录",
+      "object": "架位",
+      "quote": "完成分类之后，管理员记录架位，志愿者再把书放到对应书架",
+      "relation_required": true
+    },
+    {
+      "subject": "管理员记录架位",
+      "predicate": "之后志愿者再把书放到",
+      "object": "对应书架",
+      "quote": "完成分类之后，管理员记录架位，志愿者再把书放到对应书架",
+      "relation_required": true
+    },
+    {
+      "subject": "阅读室",
+      "predicate": "设有",
+      "object": "自然、历史和文学三类书架",
+      "quote": "阅读室设有自然、历史和文学三类书架",
+      "relation_required": false
+    },
+    {
+      "subject": "自然、历史和文学三类书架",
+      "predicate": "只是",
+      "object": "本室的分类方式",
+      "quote": "这只是本室的分类方式",
+      "relation_required": true
+    },
+    {
+      "subject": "借阅时",
+      "predicate": "读者先登记",
+      "object": "借阅证号",
+      "quote": "借阅时，读者先登记借阅证号",
+      "relation_required": false
+    },
+    {
+      "subject": "没有超期未还的图书且本次借阅数量不超过三本",
+      "predicate": "才允许",
+      "object": "办理借阅",
+      "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅",
+      "relation_required": true
+    },
+    {
+      "subject": "登记借阅证号本身",
+      "predicate": "并不保证",
+      "object": "借阅成功",
+      "quote": "登记借阅证号本身并不保证借阅成功",
+      "relation_required": true
+    },
+    {
+      "subject": "办理完成后",
+      "predicate": "系统生成",
+      "object": "到期日期",
+      "quote": "办理完成后，系统生成到期日期并提醒读者",
+      "relation_required": true
+    },
+    {
+      "subject": "办理完成后",
+      "predicate": "系统提醒",
+      "object": "读者",
+      "quote": "办理完成后，系统生成到期日期并提醒读者",
+      "relation_required": true
+    },
+    {
+      "subject": "提前归还",
+      "predicate": "可以直接登记",
+      "object": "登记",
+      "quote": "提前归还可以直接登记，不需要等到期日期",
+      "relation_required": true
+    },
+    {
+      "subject": "提前归还",
+      "predicate": "不需要等到",
+      "object": "到期日期",
+      "quote": "提前归还可以直接登记，不需要等到期日期",
+      "relation_required": true
+    },
+    {
+      "subject": "需要延长借阅时间的读者",
+      "predicate": "可以申请",
+      "object": "一次续借",
+      "quote": "需要延长借阅时间的读者可以申请一次续借",
+      "relation_required": true
+    },
+    {
+      "subject": "已有其他读者预约该书",
+      "predicate": "则拒绝",
+      "object": "续借",
+      "quote": "如果已有其他读者预约该书，则拒绝续借",
+      "relation_required": true
+    },
+    {
+      "subject": "没有预约",
+      "predicate": "只表示可以继续审查",
+      "object": "申请",
+      "quote": "没有预约只表示可以继续审查申请，不表示续借一定获批",
+      "relation_required": true
+    },
+    {
+      "subject": "没有预约",
+      "predicate": "不表示",
+      "object": "续借一定获批",
+      "quote": "没有预约只表示可以继续审查申请，不表示续借一定获批",
+      "relation_required": true
+    },
+    {
+      "subject": "归还时志愿者先检查图书状态",
+      "predicate": "再",
+      "object": "记录归还日期",
+      "quote": "归还时，志愿者先检查图书状态，再记录归还日期。",
+      "relation_required": true
+    },
+    {
+      "subject": "发现新损坏时",
+      "predicate": "需要保留",
+      "object": "损坏记录",
+      "quote": "发现新损坏时，需要保留损坏记录并告知管理员",
+      "relation_required": true
+    },
+    {
+      "subject": "发现新损坏时",
+      "predicate": "需要告知",
+      "object": "管理员",
+      "quote": "发现新损坏时，需要保留损坏记录并告知管理员",
+      "relation_required": true
+    },
+    {
+      "subject": "这份记录",
+      "predicate": "不能用来认定",
+      "object": "读者一定故意损坏",
+      "quote": "这份记录不能用来认定读者一定故意损坏",
+      "relation_required": true
+    },
+    {
+      "subject": "管理员",
+      "predicate": "可以把受损图书送到",
+      "object": "修补区",
+      "quote": "管理员可以把受损图书送到修补区",
+      "relation_required": true
+    },
+    {
+      "subject": "修补和再次检查沿用入库阶段的办法",
+      "predicate": "因此",
+      "object": "图书可能多次返回待分类区",
+      "quote": "修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区",
+      "relation_required": true
+    },
+    {
+      "subject": "没有损坏的图书",
+      "predicate": "可以重新上架",
+      "object": "重新上架",
+      "quote": "没有损坏的图书可以重新上架",
+      "relation_required": true
+    },
+    {
+      "subject": "一个月后",
+      "predicate": "阅读室比较流转记录并调整",
+      "object": "架位",
+      "quote": "一个月后，阅读室比较流转记录并调整架位",
+      "relation_required": true
+    },
+    {
+      "subject": "比较记录",
+      "predicate": "有助于发现",
+      "object": "拥挤位置",
+      "quote": "比较记录有助于发现拥挤位置",
+      "relation_required": true
+    },
+    {
+      "subject": "仅凭借阅次数",
+      "predicate": "不能判断",
+      "object": "图书质量",
+      "quote": "但不能仅凭借阅次数判断图书质量",
+      "relation_required": true
+    },
+    {
+      "subject": "活动海报",
+      "predicate": "由另一个小组制作",
+      "object": "另一个小组",
+      "quote": "活动海报由另一个小组制作",
+      "relation_required": false
+    },
+    {
+      "subject": "海报设计",
+      "predicate": "与续借审查没有直接关系",
+      "object": "续借审查",
+      "quote": "海报设计与续借审查没有直接关系",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "书页完整且封面没有霉斑的图书可以进入待分类区；只满足其中一项仍不能入区。书页缺失的图书送到修补区，出现霉斑的图书暂不入库。",
+      "note": "“霉斑”出现时图书暂不入库；封面没有霉斑是入待分类区的条件之一，只书页完整或只无霉斑一项仍不能入区。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "一本书也可以贴多个检索标签，但检索标签不等于主要类别，不要把贴标签画成更换主要类别。",
+      "note": "检索标签是可多个的检索标记，不等同主要类别；贴标签不等于更换主要类别。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。",
+      "note": "“三本”是本次借阅数量上限，并和“没有超期未还的图书”共同构成允许办理借阅的条件。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "如果已有其他读者预约该书，则拒绝续借。没有预约只表示可以继续审查申请，不表示续借一定获批。",
+      "note": "“预约”是其他读者对该书的预约；有预约则拒绝续借，没有预约也不保证续借获批。"
+    },
+    {
+      "selection_index": 4,
+      "quote": "这份记录不能用来认定读者一定故意损坏。",
+      "note": "损坏记录不能用来认定读者一定故意损坏；原文否定的是“一定故意”的认定，不是直接认定损坏事实。"
+    },
+    {
+      "selection_index": 5,
+      "quote": "活动海报由另一个小组制作，海报设计与续借审查没有直接关系。",
+      "note": "原文只说活动海报由另一个小组制作；没有直接说海报设计由另一个小组制作。海报设计与续借审查没有直接关系。"
+    }
+  ]
+}

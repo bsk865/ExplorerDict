@@ -1,0 +1,385 @@
+{
+  "node_verdicts": [
+    {
+      "id": "n0",
+      "verdict": "supported",
+      "note": "原文包含建立备份、复制核对、错误处理、形式选择、联系方式规则、技术核对和上传共享区，概括成立。"
+    },
+    {
+      "id": "n1",
+      "verdict": "supported",
+      "note": "原文先复制到本地备份盘，复制完成后核对文件数量。"
+    },
+    {
+      "id": "n1_1",
+      "verdict": "supported",
+      "note": "原文明确她先把源文件复制到本地备份盘。"
+    },
+    {
+      "id": "n1_2",
+      "verdict": "supported",
+      "note": "原文明确复制完成后核对文件数量。"
+    },
+    {
+      "id": "n2",
+      "verdict": "supported",
+      "note": "原文说明本地备份盘读写错误时的处理。"
+    },
+    {
+      "id": "n2_1",
+      "verdict": "supported",
+      "note": "原文明确这里的“它”指本地备份盘。"
+    },
+    {
+      "id": "n2_2",
+      "verdict": "supported",
+      "note": "结合前文指代，读写错误指本地备份盘出现读写错误。"
+    },
+    {
+      "id": "n2_3",
+      "verdict": "supported",
+      "note": "原文同时包含更换备份盘和不会删除源文件两种结果。"
+    },
+    {
+      "id": "n3",
+      "verdict": "supported",
+      "note": "原文讨论加密压缩包和普通文件夹两种备份形式。"
+    },
+    {
+      "id": "n3_1",
+      "verdict": "supported",
+      "note": "原文明确可以选加密压缩包，也可以选普通文件夹。"
+    },
+    {
+      "id": "n3_2",
+      "verdict": "supported",
+      "note": "作为“不要求同时采用”的对象节点，正面表述“同时采用两种形式”，否定由关系 r2 表达。"
+    },
+    {
+      "id": "n4",
+      "verdict": "supported",
+      "note": "原文说明发给外部协作者时才需要去掉个人联系方式，并说明自存备份不受约束。"
+    },
+    {
+      "id": "n4_1",
+      "verdict": "supported",
+      "note": "原文条件为计划把备份发给外部协作者时。"
+    },
+    {
+      "id": "n4_2",
+      "verdict": "supported",
+      "note": "原文明确才需要去掉个人联系方式。"
+    },
+    {
+      "id": "n4_3",
+      "verdict": "supported",
+      "note": "原文明确仅保存在自己电脑上的备份。"
+    },
+    {
+      "id": "n5",
+      "verdict": "supported",
+      "note": "原文说明去掉联系方式之后仍要核对技术内容是否完整。"
+    },
+    {
+      "id": "n5_1",
+      "verdict": "supported",
+      "note": "原文明确她仍要核对技术内容是否完整。"
+    },
+    {
+      "id": "n6",
+      "verdict": "supported",
+      "note": "原文说明核对通过后可以上传共享区、不要求立刻上传，以及上传成功不等于协作者已读。"
+    },
+    {
+      "id": "n6_1",
+      "verdict": "supported",
+      "note": "原文明确可以上传共享区。"
+    },
+    {
+      "id": "n6_2",
+      "verdict": "supported",
+      "note": "原文提到上传成功。"
+    },
+    {
+      "id": "n6_3",
+      "verdict": "supported",
+      "note": "作为“不代表”的对象节点，保留正面表述“协作者已经读过文件”，否定由关系 r7 表达。"
+    },
+    {
+      "id": "n7",
+      "verdict": "contradicted",
+      "note": "原文是“没有直接关系”，标题写成“无关”，去掉了“直接”限制，程度过强。"
+    },
+    {
+      "id": "n7_1",
+      "verdict": "supported",
+      "note": "原文明确项目当天还讨论了会议室座位安排。"
+    },
+    {
+      "id": "n7_2",
+      "verdict": "supported",
+      "note": "原文在“这与备份检查没有直接关系”中提到备份检查。"
+    }
+  ],
+  "relation_verdicts": [
+    {
+      "id": "r0",
+      "src": "n1_1",
+      "dst": "n1_2",
+      "label": "复制完成后",
+      "verdict": "supported",
+      "note": "方向为复制到本地备份盘后核对文件数量，符合原文先后。"
+    },
+    {
+      "id": "r1",
+      "src": "n2_2",
+      "dst": "n2_3",
+      "label": "如果出现读写错误，她会",
+      "verdict": "supported",
+      "note": "条件为本地备份盘读写错误，结果是更换备份盘且不删除源文件。"
+    },
+    {
+      "id": "r2",
+      "src": "n3_1",
+      "dst": "n3_2",
+      "label": "不要求",
+      "verdict": "supported",
+      "note": "原文明确两种形式不要求同时采用，否定和可选性保留。"
+    },
+    {
+      "id": "r3",
+      "src": "n4_1",
+      "dst": "n4_2",
+      "label": "只有此时才需要",
+      "verdict": "supported",
+      "note": "原文条件是计划发给外部协作者，动作是去掉个人联系方式，条件唯一性保留。"
+    },
+    {
+      "id": "r4",
+      "src": "n4_3",
+      "dst": "n4_2",
+      "label": "不受这条规则约束",
+      "verdict": "supported",
+      "note": "原文说明仅保存在自己电脑上的备份不受去掉联系方式这条规则约束，方向正确。"
+    },
+    {
+      "id": "r5",
+      "src": "n4_2",
+      "dst": "n5_1",
+      "label": "之后仍要",
+      "verdict": "supported",
+      "note": "原文说明去掉联系方式之后仍要核对技术内容是否完整。"
+    },
+    {
+      "id": "r6",
+      "src": "n5_1",
+      "dst": "n6_1",
+      "label": "核对通过后可以，不要求立刻",
+      "verdict": "supported",
+      "note": "原文为核对通过后可以上传共享区但不要求立刻上传，条件、可选性和时间顺序保留。"
+    },
+    {
+      "id": "r7",
+      "src": "n6_2",
+      "dst": "n6_3",
+      "label": "不代表",
+      "verdict": "supported",
+      "note": "原文明确上传成功不代表协作者已经读过文件。"
+    },
+    {
+      "id": "r8",
+      "src": "n7_1",
+      "dst": "n7_2",
+      "label": "与备份检查没有直接关系",
+      "verdict": "supported",
+      "note": "原文明确会议室座位安排与备份检查没有直接关系，方向正确。"
+    }
+  ],
+  "binding_verdicts": [
+    {
+      "selection_index": 0,
+      "verdict": "supported",
+      "note": "“它”在原文中明确指本地备份盘，并关联读写错误语境。"
+    },
+    {
+      "selection_index": 1,
+      "verdict": "supported",
+      "note": "“联系方式”补全为“个人联系方式”，并落在去掉个人联系方式这一动作上。"
+    },
+    {
+      "selection_index": 2,
+      "verdict": "supported",
+      "note": "“加密”补全为“加密压缩包”，属于可选备份形式。"
+    },
+    {
+      "selection_index": 3,
+      "verdict": "supported",
+      "note": "“上传”分别关联上传共享区和上传成功，定位成立。"
+    },
+    {
+      "selection_index": 4,
+      "verdict": "supported",
+      "note": "“座位”补全为“会议室座位安排”，绑定到讨论会议室座位安排这一节点。"
+    }
+  ],
+  "claim_coverage": [
+    {
+      "claim_index": 0,
+      "node_ids": [
+        "n0"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 1,
+      "node_ids": [
+        "n1_1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 2,
+      "node_ids": [
+        "n1_1",
+        "n1_2"
+      ],
+      "relation_ids": [
+        "r0"
+      ]
+    },
+    {
+      "claim_index": 3,
+      "node_ids": [
+        "n2_1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 4,
+      "node_ids": [
+        "n2_2",
+        "n2_3"
+      ],
+      "relation_ids": [
+        "r1"
+      ]
+    },
+    {
+      "claim_index": 5,
+      "node_ids": [
+        "n2_2",
+        "n2_3"
+      ],
+      "relation_ids": [
+        "r1"
+      ]
+    },
+    {
+      "claim_index": 6,
+      "node_ids": [
+        "n3_1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 7,
+      "node_ids": [
+        "n3_1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 8,
+      "node_ids": [
+        "n3_1",
+        "n3_2"
+      ],
+      "relation_ids": [
+        "r2"
+      ]
+    },
+    {
+      "claim_index": 9,
+      "node_ids": [
+        "n4_1",
+        "n4_2"
+      ],
+      "relation_ids": [
+        "r3"
+      ]
+    },
+    {
+      "claim_index": 10,
+      "node_ids": [
+        "n4_3",
+        "n4_2"
+      ],
+      "relation_ids": [
+        "r4"
+      ]
+    },
+    {
+      "claim_index": 11,
+      "node_ids": [
+        "n4_2",
+        "n5_1"
+      ],
+      "relation_ids": [
+        "r5"
+      ]
+    },
+    {
+      "claim_index": 12,
+      "node_ids": [
+        "n5_1",
+        "n6_1"
+      ],
+      "relation_ids": [
+        "r6"
+      ]
+    },
+    {
+      "claim_index": 13,
+      "node_ids": [
+        "n5_1",
+        "n6_1"
+      ],
+      "relation_ids": [
+        "r6"
+      ]
+    },
+    {
+      "claim_index": 14,
+      "node_ids": [
+        "n6_2",
+        "n6_3"
+      ],
+      "relation_ids": [
+        "r7"
+      ]
+    },
+    {
+      "claim_index": 15,
+      "node_ids": [
+        "n7_1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 16,
+      "node_ids": [
+        "n7_1",
+        "n7_2"
+      ],
+      "relation_ids": [
+        "r8"
+      ]
+    }
+  ],
+  "coverage_ok": false,
+  "issues": [
+    "n7 分支标题将原文“与备份检查没有直接关系”写成“与备份检查无关”，程度过强；应改为“与备份检查没有直接关系的会议室座位安排”。",
+    "独立阅读清单 claim 3 “这里的‘它’指本地备份盘”为 relation_required=true，但草稿只有节点 n2_1，没有对应关系；应补关系：src 为“这里的‘它’”，label 为“指”，dst 为“本地备份盘”。"
+  ],
+  "reader_issues": []
+}

@@ -1,0 +1,722 @@
+{
+  "stage": "review",
+  "text": "一份虚构的课堂观察记录比较了甲班和乙班。两班使用同一份练习题。甲班自愿参加每周一次的讨论，乙班没有组织讨论。四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。记录发现参加讨论与分数提高同时出现，但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。记录也没有说乙班成绩下降。下一阶段可以增加随机分组，也可以继续记录练习时间，两项都属于改进建议，尚未执行。只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。讨论次数本身不能作为学生理解能力的直接测量。",
+  "selected_words": [
+    "讨论",
+    "八分",
+    "提高",
+    "因为",
+    "随机分组"
+  ],
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "课堂观察记录比较甲班乙班",
+        "kind": "branch",
+        "quote": "一份虚构的课堂观察记录比较了甲班和乙班。"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "两班比较与共同条件",
+        "kind": "branch",
+        "quote": "一份虚构的课堂观察记录比较了甲班和乙班。两班使用同一份练习题。"
+      },
+      {
+        "id": "n2",
+        "parent": "n0",
+        "label": "两班讨论安排",
+        "kind": "branch",
+        "quote": "甲班自愿参加每周一次的讨论，乙班没有组织讨论。"
+      },
+      {
+        "id": "n3",
+        "parent": "n0",
+        "label": "四周后成绩变化",
+        "kind": "branch",
+        "quote": "四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。"
+      },
+      {
+        "id": "n4",
+        "parent": "n0",
+        "label": "同时出现与因果限制",
+        "kind": "branch",
+        "quote": "记录发现参加讨论与分数提高同时出现，但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。"
+      },
+      {
+        "id": "n5",
+        "parent": "n0",
+        "label": "未说明内容",
+        "kind": "branch",
+        "quote": "记录也没有说乙班成绩下降。"
+      },
+      {
+        "id": "n6",
+        "parent": "n0",
+        "label": "下一阶段改进建议",
+        "kind": "branch",
+        "quote": "下一阶段可以增加随机分组，也可以继续记录练习时间，两项都属于改进建议，尚未执行。"
+      },
+      {
+        "id": "n7",
+        "parent": "n0",
+        "label": "新一轮观察条件",
+        "kind": "branch",
+        "quote": "只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。"
+      },
+      {
+        "id": "n8",
+        "parent": "n0",
+        "label": "讨论次数的测量限制",
+        "kind": "branch",
+        "quote": "讨论次数本身不能作为学生理解能力的直接测量。"
+      },
+      {
+        "id": "n9",
+        "parent": "n1",
+        "label": "观察记录比较甲班和乙班",
+        "kind": "concept",
+        "quote": "一份虚构的课堂观察记录比较了甲班和乙班。"
+      },
+      {
+        "id": "n10",
+        "parent": "n1",
+        "label": "两班使用同一份练习题",
+        "kind": "concept",
+        "quote": "两班使用同一份练习题。"
+      },
+      {
+        "id": "n11",
+        "parent": "n2",
+        "label": "甲班自愿参加每周一次的讨论",
+        "kind": "concept",
+        "quote": "甲班自愿参加每周一次的讨论"
+      },
+      {
+        "id": "n12",
+        "parent": "n2",
+        "label": "乙班没有组织讨论",
+        "kind": "concept",
+        "quote": "乙班没有组织讨论"
+      },
+      {
+        "id": "n13",
+        "parent": "n3",
+        "label": "四周后甲班平均分提高八分",
+        "kind": "concept",
+        "quote": "四周后，甲班的平均分比自己起始时提高了八分"
+      },
+      {
+        "id": "n14",
+        "parent": "n3",
+        "label": "乙班提高三分",
+        "kind": "concept",
+        "quote": "乙班提高了三分"
+      },
+      {
+        "id": "n15",
+        "parent": "n4",
+        "label": "参加讨论与分数提高同时出现",
+        "kind": "concept",
+        "quote": "记录发现参加讨论与分数提高同时出现"
+      },
+      {
+        "id": "n16",
+        "parent": "n4",
+        "label": "不证明讨论导致提分",
+        "kind": "concept",
+        "quote": "但这不证明讨论导致提分"
+      },
+      {
+        "id": "n17",
+        "parent": "n4",
+        "label": "两班起始基础和课外练习时间不相同",
+        "kind": "concept",
+        "quote": "因为两班的起始基础和课外练习时间并不相同"
+      },
+      {
+        "id": "n18",
+        "parent": "n4",
+        "label": "因为",
+        "kind": "selection",
+        "quote": "因为两班的起始基础和课外练习时间并不相同"
+      },
+      {
+        "id": "n19",
+        "parent": "n5",
+        "label": "记录也没有说乙班成绩下降",
+        "kind": "concept",
+        "quote": "记录也没有说乙班成绩下降。"
+      },
+      {
+        "id": "n20",
+        "parent": "n6",
+        "label": "下一阶段可以增加随机分组",
+        "kind": "concept",
+        "quote": "下一阶段可以增加随机分组"
+      },
+      {
+        "id": "n21",
+        "parent": "n6",
+        "label": "也可以继续记录练习时间",
+        "kind": "concept",
+        "quote": "也可以继续记录练习时间"
+      },
+      {
+        "id": "n22",
+        "parent": "n6",
+        "label": "两项都属于改进建议，尚未执行",
+        "kind": "concept",
+        "quote": "两项都属于改进建议，尚未执行。"
+      },
+      {
+        "id": "n23",
+        "parent": "n7",
+        "label": "分组方案通过审查且学生同意参加",
+        "kind": "concept",
+        "quote": "只有分组方案通过审查且学生同意参加时"
+      },
+      {
+        "id": "n24",
+        "parent": "n7",
+        "label": "团队才会开始新一轮观察",
+        "kind": "concept",
+        "quote": "团队才会开始新一轮观察"
+      },
+      {
+        "id": "n25",
+        "parent": "n8",
+        "label": "讨论次数本身不能作为学生理解能力的直接测量",
+        "kind": "concept",
+        "quote": "讨论次数本身不能作为学生理解能力的直接测量。"
+      },
+      {
+        "id": "n26",
+        "parent": "n1",
+        "label": "甲班和乙班",
+        "kind": "concept",
+        "quote": "甲班和乙班"
+      },
+      {
+        "id": "n27",
+        "parent": "n1",
+        "label": "练习题",
+        "kind": "concept",
+        "quote": "同一份练习题"
+      },
+      {
+        "id": "n28",
+        "parent": "n1",
+        "label": "课堂观察记录",
+        "kind": "concept",
+        "quote": "课堂观察记录"
+      },
+      {
+        "id": "n29",
+        "parent": "n2",
+        "label": "每周一次的讨论",
+        "kind": "concept",
+        "quote": "每周一次的讨论"
+      },
+      {
+        "id": "n30",
+        "parent": "n2",
+        "label": "甲班",
+        "kind": "concept",
+        "quote": "甲班"
+      },
+      {
+        "id": "n31",
+        "parent": "n2",
+        "label": "乙班",
+        "kind": "concept",
+        "quote": "乙班"
+      },
+      {
+        "id": "n32",
+        "parent": "n2",
+        "label": "讨论",
+        "kind": "concept",
+        "quote": "讨论"
+      },
+      {
+        "id": "n33",
+        "parent": "n3",
+        "label": "甲班平均分",
+        "kind": "concept",
+        "quote": "甲班的平均分"
+      },
+      {
+        "id": "n34",
+        "parent": "n3",
+        "label": "八分",
+        "kind": "concept",
+        "quote": "提高了八分"
+      },
+      {
+        "id": "n35",
+        "parent": "n3",
+        "label": "三分",
+        "kind": "concept",
+        "quote": "提高了三分"
+      },
+      {
+        "id": "n36",
+        "parent": "n4",
+        "label": "参加讨论",
+        "kind": "concept",
+        "quote": "参加讨论"
+      },
+      {
+        "id": "n37",
+        "parent": "n4",
+        "label": "分数提高",
+        "kind": "concept",
+        "quote": "分数提高"
+      },
+      {
+        "id": "n38",
+        "parent": "n4",
+        "label": "讨论导致提分",
+        "kind": "concept",
+        "quote": "讨论导致提分"
+      },
+      {
+        "id": "n39",
+        "parent": "n5",
+        "label": "记录",
+        "kind": "concept",
+        "quote": "记录"
+      },
+      {
+        "id": "n40",
+        "parent": "n5",
+        "label": "乙班成绩下降",
+        "kind": "concept",
+        "quote": "乙班成绩下降"
+      },
+      {
+        "id": "n41",
+        "parent": "n6",
+        "label": "下一阶段",
+        "kind": "concept",
+        "quote": "下一阶段"
+      },
+      {
+        "id": "n42",
+        "parent": "n6",
+        "label": "增加随机分组",
+        "kind": "concept",
+        "quote": "增加随机分组"
+      },
+      {
+        "id": "n43",
+        "parent": "n6",
+        "label": "继续记录练习时间",
+        "kind": "concept",
+        "quote": "继续记录练习时间"
+      },
+      {
+        "id": "n44",
+        "parent": "n6",
+        "label": "改进建议",
+        "kind": "concept",
+        "quote": "改进建议"
+      },
+      {
+        "id": "n45",
+        "parent": "n6",
+        "label": "尚未执行",
+        "kind": "concept",
+        "quote": "尚未执行"
+      },
+      {
+        "id": "n46",
+        "parent": "n7",
+        "label": "分组方案通过审查",
+        "kind": "concept",
+        "quote": "分组方案通过审查"
+      },
+      {
+        "id": "n47",
+        "parent": "n7",
+        "label": "学生同意参加",
+        "kind": "concept",
+        "quote": "学生同意参加"
+      },
+      {
+        "id": "n48",
+        "parent": "n8",
+        "label": "讨论次数",
+        "kind": "concept",
+        "quote": "讨论次数本身"
+      },
+      {
+        "id": "n49",
+        "parent": "n8",
+        "label": "学生理解能力的直接测量",
+        "kind": "concept",
+        "quote": "学生理解能力的直接测量"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n28",
+        "dst": "n26",
+        "label": "比较",
+        "quote": "一份虚构的课堂观察记录比较了甲班和乙班。"
+      },
+      {
+        "id": "r1",
+        "src": "n26",
+        "dst": "n27",
+        "label": "使用同一份",
+        "quote": "两班使用同一份练习题。"
+      },
+      {
+        "id": "r2",
+        "src": "n30",
+        "dst": "n29",
+        "label": "自愿参加",
+        "quote": "甲班自愿参加每周一次的讨论"
+      },
+      {
+        "id": "r3",
+        "src": "n31",
+        "dst": "n32",
+        "label": "没有组织",
+        "quote": "乙班没有组织讨论"
+      },
+      {
+        "id": "r4",
+        "src": "n33",
+        "dst": "n34",
+        "label": "比自己起始时提高",
+        "quote": "甲班的平均分比自己起始时提高了八分"
+      },
+      {
+        "id": "r5",
+        "src": "n31",
+        "dst": "n35",
+        "label": "提高",
+        "quote": "乙班提高了三分"
+      },
+      {
+        "id": "r6",
+        "src": "n36",
+        "dst": "n37",
+        "label": "同时出现",
+        "quote": "记录发现参加讨论与分数提高同时出现"
+      },
+      {
+        "id": "r7",
+        "src": "n15",
+        "dst": "n38",
+        "label": "不证明",
+        "quote": "参加讨论与分数提高同时出现，但这不证明讨论导致提分"
+      },
+      {
+        "id": "r8",
+        "src": "n16",
+        "dst": "n17",
+        "label": "因为",
+        "quote": "但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。"
+      },
+      {
+        "id": "r9",
+        "src": "n39",
+        "dst": "n40",
+        "label": "没有说",
+        "quote": "记录也没有说乙班成绩下降。"
+      },
+      {
+        "id": "r10",
+        "src": "n41",
+        "dst": "n42",
+        "label": "可以",
+        "quote": "下一阶段可以增加随机分组"
+      },
+      {
+        "id": "r11",
+        "src": "n41",
+        "dst": "n43",
+        "label": "也可以",
+        "quote": "也可以继续记录练习时间"
+      },
+      {
+        "id": "r12",
+        "src": "n42",
+        "dst": "n44",
+        "label": "属于",
+        "quote": "两项都属于改进建议"
+      },
+      {
+        "id": "r13",
+        "src": "n43",
+        "dst": "n44",
+        "label": "属于",
+        "quote": "两项都属于改进建议"
+      },
+      {
+        "id": "r14",
+        "src": "n23",
+        "dst": "n24",
+        "label": "只有满足时",
+        "quote": "只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。"
+      },
+      {
+        "id": "r15",
+        "src": "n46",
+        "dst": "n47",
+        "label": "且",
+        "quote": "分组方案通过审查且学生同意参加"
+      },
+      {
+        "id": "r16",
+        "src": "n48",
+        "dst": "n49",
+        "label": "不能作为",
+        "quote": "讨论次数本身不能作为学生理解能力的直接测量。"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n11",
+          "n12",
+          "n15",
+          "n25"
+        ],
+        "suggest_exclude": false,
+        "note": "“讨论”在不同原句中出现，已分别补全为甲班参加讨论、乙班未组织讨论、参加讨论与提分同时出现、讨论次数不能直接测量等完整概念或动作。",
+        "candidates": [
+          {
+            "node_id": "n11",
+            "quote": "甲班自愿参加每周一次的讨论"
+          },
+          {
+            "node_id": "n12",
+            "quote": "乙班没有组织讨论"
+          },
+          {
+            "node_id": "n15",
+            "quote": "记录发现参加讨论与分数提高同时出现"
+          },
+          {
+            "node_id": "n25",
+            "quote": "讨论次数本身不能作为学生理解能力的直接测量。"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n13"
+        ],
+        "suggest_exclude": false,
+        "note": "“八分”是甲班四周后平均分提高的具体数值，关联到完整成绩变化动作。",
+        "candidates": [
+          {
+            "node_id": "n13",
+            "quote": "四周后，甲班的平均分比自己起始时提高了八分"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n13",
+          "n14"
+        ],
+        "suggest_exclude": false,
+        "note": "“提高”在甲班和乙班的成绩变化中均出现，关联到两个完整成绩变化节点。",
+        "candidates": [
+          {
+            "node_id": "n13",
+            "quote": "四周后，甲班的平均分比自己起始时提高了八分"
+          },
+          {
+            "node_id": "n14",
+            "quote": "乙班提高了三分"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n18"
+        ],
+        "suggest_exclude": true,
+        "note": "“因为”是因果连接词，不承担独立概念，建议排除；已保留为 selection 节点。",
+        "candidates": [
+          {
+            "node_id": "n18",
+            "quote": "因为两班的起始基础和课外练习时间并不相同"
+          }
+        ]
+      },
+      {
+        "selection_index": 4,
+        "node_ids": [
+          "n20",
+          "n42"
+        ],
+        "suggest_exclude": false,
+        "note": "“随机分组”是下一阶段改进建议之一，关联到完整动作节点。",
+        "candidates": [
+          {
+            "node_id": "n20",
+            "quote": "下一阶段可以增加随机分组"
+          },
+          {
+            "node_id": "n42",
+            "quote": "增加随机分组"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "c4f9f39e1a2626c28472c8a31b1aacb72e033d949403f3884ec398d34e97ab64"
+  },
+  "reading": {
+    "claims": [
+      {
+        "subject": "一份虚构的课堂观察记录",
+        "predicate": "比较了",
+        "object": "甲班和乙班",
+        "quote": "一份虚构的课堂观察记录比较了甲班和乙班。",
+        "relation_required": false
+      },
+      {
+        "subject": "两班",
+        "predicate": "使用",
+        "object": "同一份练习题",
+        "quote": "两班使用同一份练习题。",
+        "relation_required": false
+      },
+      {
+        "subject": "甲班",
+        "predicate": "自愿参加",
+        "object": "每周一次的讨论",
+        "quote": "甲班自愿参加每周一次的讨论",
+        "relation_required": false
+      },
+      {
+        "subject": "乙班",
+        "predicate": "没有组织",
+        "object": "讨论",
+        "quote": "乙班没有组织讨论。",
+        "relation_required": false
+      },
+      {
+        "subject": "甲班的平均分",
+        "predicate": "四周后比自己起始时提高了",
+        "object": "八分",
+        "quote": "四周后，甲班的平均分比自己起始时提高了八分",
+        "relation_required": false
+      },
+      {
+        "subject": "乙班",
+        "predicate": "提高了",
+        "object": "三分",
+        "quote": "乙班提高了三分。",
+        "relation_required": false
+      },
+      {
+        "subject": "参加讨论",
+        "predicate": "与分数提高同时出现（共存/相关，方向不表示因果）",
+        "object": "分数提高",
+        "quote": "记录发现参加讨论与分数提高同时出现",
+        "relation_required": true
+      },
+      {
+        "subject": "参加讨论与分数提高同时出现",
+        "predicate": "不证明（否定因果推断；同时出现不等于讨论导致提分）",
+        "object": "讨论导致提分",
+        "quote": "但这不证明讨论导致提分",
+        "relation_required": true
+      },
+      {
+        "subject": "两班的起始基础和课外练习时间并不相同",
+        "predicate": "是‘不证明讨论导致提分’的理由（方向：理由→否定因果推断；并非证明讨论不导致提分）",
+        "object": "不证明讨论导致提分",
+        "quote": "但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。",
+        "relation_required": true
+      },
+      {
+        "subject": "记录",
+        "predicate": "没有说（未陈述；不能据此推出乙班成绩下降，也不能推出未下降）",
+        "object": "乙班成绩下降",
+        "quote": "记录也没有说乙班成绩下降。",
+        "relation_required": false
+      },
+      {
+        "subject": "下一阶段",
+        "predicate": "可以增加（可选）",
+        "object": "随机分组",
+        "quote": "下一阶段可以增加随机分组",
+        "relation_required": false
+      },
+      {
+        "subject": "下一阶段",
+        "predicate": "也可以继续记录（可选，与增加随机分组并列）",
+        "object": "练习时间",
+        "quote": "也可以继续记录练习时间",
+        "relation_required": false
+      },
+      {
+        "subject": "增加随机分组和继续记录练习时间（两项）",
+        "predicate": "都属于",
+        "object": "改进建议，尚未执行",
+        "quote": "两项都属于改进建议，尚未执行。",
+        "relation_required": false
+      },
+      {
+        "subject": "分组方案通过审查且学生同意参加",
+        "predicate": "是团队才会开始新一轮观察的必要条件（只有…才；未满足则不会开始）",
+        "object": "团队开始新一轮观察",
+        "quote": "只有分组方案通过审查且学生同意参加时，团队才会开始新一轮观察。",
+        "relation_required": true
+      },
+      {
+        "subject": "讨论次数本身",
+        "predicate": "不能作为（不可用作，方向：讨论次数≠直接测量）",
+        "object": "学生理解能力的直接测量",
+        "quote": "讨论次数本身不能作为学生理解能力的直接测量。",
+        "relation_required": true
+      }
+    ],
+    "selections": [
+      {
+        "selection_index": 0,
+        "quote": "甲班自愿参加每周一次的讨论，乙班没有组织讨论。",
+        "note": "“讨论”在此指甲班自愿参加的每周一次活动；乙班没有组织讨论，不是两班都进行了讨论。"
+      },
+      {
+        "selection_index": 1,
+        "quote": "四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。",
+        "note": "“八分”是甲班平均分相对自己起始时的提高量，不是甲班与乙班的分数差距。"
+      },
+      {
+        "selection_index": 2,
+        "quote": "四周后，甲班的平均分比自己起始时提高了八分，乙班提高了三分。",
+        "note": "“提高”指各班平均分相对自身起始时的变化，不表示讨论导致提高。"
+      },
+      {
+        "selection_index": 3,
+        "quote": "但这不证明讨论导致提分，因为两班的起始基础和课外练习时间并不相同。",
+        "note": "“因为”引出不能证明因果的理由，并非确认讨论导致提分。"
+      },
+      {
+        "selection_index": 4,
+        "quote": "下一阶段可以增加随机分组，也可以继续记录练习时间",
+        "note": "“随机分组”是下一阶段可选改进建议，尚未执行。"
+      }
+    ]
+  }
+}

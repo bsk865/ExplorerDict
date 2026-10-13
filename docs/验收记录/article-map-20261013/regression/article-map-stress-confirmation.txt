@@ -1,0 +1,25 @@
+...........导出关系图失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 6440, in export_map_files
+    result = map_export.export_map(
+        layout=self._layout, style=self.export_style(), canvas=self.canvas,
+    ...<3 lines>...
+        **({"article_map":full.article_map} if full is not None else {}),
+    )
+  File "C:\Python314\Lib\unittest\mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1247, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "D:\探索工具\探索词典\tests\test_full_article_map.py", line 322, in export
+    raise RuntimeError("模拟导出失败")
+RuntimeError: 模拟导出失败
+...........................
+----------------------------------------------------------------------
+Ran 38 tests in 2.539s
+
+OK
+{"directory": "C:\\Users\\张哲铭\\AppData\\Local\\Temp\\tmplchfrfye", "ok": false, "counts": {"passed": 1, "failed": 0, "not_approved": 1, "input_error": 1}}

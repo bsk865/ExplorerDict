@@ -1,0 +1,351 @@
+{
+  "root": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "parent": null,
+      "label": "育苗记录三阶段",
+      "kind": "branch",
+      "quote": "育苗记录包含准备容器、播种和观察三个阶段。"
+    },
+    {
+      "id": "n1",
+      "parent": "n0",
+      "label": "准备容器阶段",
+      "kind": "branch",
+      "quote": "准备容器"
+    },
+    {
+      "id": "n2",
+      "parent": "n0",
+      "label": "播种阶段",
+      "kind": "branch",
+      "quote": "播种"
+    },
+    {
+      "id": "n3",
+      "parent": "n0",
+      "label": "观察阶段",
+      "kind": "branch",
+      "quote": "观察"
+    },
+    {
+      "id": "n4",
+      "parent": "n1",
+      "label": "清洗育苗盘",
+      "kind": "concept",
+      "quote": "清洗育苗盘"
+    },
+    {
+      "id": "n5",
+      "parent": "n1",
+      "label": "装入基质",
+      "kind": "concept",
+      "quote": "清洗完成后可以装入基质"
+    },
+    {
+      "id": "n6",
+      "parent": "n1",
+      "label": "首先",
+      "kind": "selection",
+      "quote": "首先"
+    },
+    {
+      "id": "n7",
+      "parent": "n2",
+      "label": "播种覆薄土",
+      "kind": "concept",
+      "quote": "装好基质后，把种子放进浅孔并覆上一层薄土。"
+    },
+    {
+      "id": "n8",
+      "parent": "n2",
+      "label": "播种后保持基质湿润",
+      "kind": "concept",
+      "quote": "播种后需要保持基质湿润"
+    },
+    {
+      "id": "n9",
+      "parent": "n2",
+      "label": "积水",
+      "kind": "concept",
+      "quote": "积水"
+    },
+    {
+      "id": "n10",
+      "parent": "n2",
+      "label": "盘底持续积水",
+      "kind": "concept",
+      "quote": "盘底持续积水"
+    },
+    {
+      "id": "n11",
+      "parent": "n2",
+      "label": "先排水再暂停当天浇水",
+      "kind": "concept",
+      "quote": "先排水，再暂停当天的浇水"
+    },
+    {
+      "id": "n12",
+      "parent": "n2",
+      "label": "基质表层变干且盘底没有积水",
+      "kind": "concept",
+      "quote": "只有基质表层变干且盘底没有积水时"
+    },
+    {
+      "id": "n13",
+      "parent": "n2",
+      "label": "再次浇水",
+      "kind": "concept",
+      "quote": "才需要再次浇水"
+    },
+    {
+      "id": "n14",
+      "parent": "n3",
+      "label": "每天记录湿度",
+      "kind": "concept",
+      "quote": "每天需要记录湿度"
+    },
+    {
+      "id": "n15",
+      "parent": "n3",
+      "label": "出苗后记录株高",
+      "kind": "concept",
+      "quote": "出苗后再记录株高"
+    },
+    {
+      "id": "n16",
+      "parent": "n3",
+      "label": "出苗速度较慢",
+      "kind": "concept",
+      "quote": "若出苗速度较慢"
+    },
+    {
+      "id": "n17",
+      "parent": "n3",
+      "label": "继续观察两天",
+      "kind": "concept",
+      "quote": "可以继续观察两天"
+    },
+    {
+      "id": "n18",
+      "parent": "n3",
+      "label": "请管理员检查种子",
+      "kind": "concept",
+      "quote": "也可以请管理员检查种子"
+    },
+    {
+      "id": "n19",
+      "parent": "n3",
+      "label": "记录没有规定必须采用哪一种方法",
+      "kind": "concept",
+      "quote": "记录没有规定必须采用哪一种方法"
+    },
+    {
+      "id": "n20",
+      "parent": "n3",
+      "label": "株高记录",
+      "kind": "concept",
+      "quote": "株高记录"
+    },
+    {
+      "id": "n21",
+      "parent": "n3",
+      "label": "比较同一批幼苗的变化",
+      "kind": "concept",
+      "quote": "比较同一批幼苗的变化"
+    },
+    {
+      "id": "n22",
+      "parent": "n3",
+      "label": "仅凭一天的株高",
+      "kind": "concept",
+      "quote": "仅凭一天的株高"
+    },
+    {
+      "id": "n23",
+      "parent": "n3",
+      "label": "判定种子品质",
+      "kind": "concept",
+      "quote": "判定种子品质"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r0",
+      "src": "n4",
+      "dst": "n5",
+      "label": "完成后可",
+      "quote": "清洗完成后可以装入基质"
+    },
+    {
+      "id": "r1",
+      "src": "n5",
+      "dst": "n7",
+      "label": "装好基质后",
+      "quote": "装好基质后，把种子放进浅孔并覆上一层薄土。"
+    },
+    {
+      "id": "r2",
+      "src": "n7",
+      "dst": "n8",
+      "label": "播种后需要",
+      "quote": "播种后需要保持基质湿润"
+    },
+    {
+      "id": "r3",
+      "src": "n8",
+      "dst": "n9",
+      "label": "不等于",
+      "quote": "但湿润不等于积水"
+    },
+    {
+      "id": "r4",
+      "src": "n10",
+      "dst": "n11",
+      "label": "记录要求",
+      "quote": "如果盘底持续积水，记录要求先排水，再暂停当天的浇水。"
+    },
+    {
+      "id": "r5",
+      "src": "n12",
+      "dst": "n13",
+      "label": "才需要",
+      "quote": "只有基质表层变干且盘底没有积水时，才需要再次浇水。"
+    },
+    {
+      "id": "r6",
+      "src": "n14",
+      "dst": "n15",
+      "label": "出苗后再",
+      "quote": "每天需要记录湿度，出苗后再记录株高。"
+    },
+    {
+      "id": "r7",
+      "src": "n16",
+      "dst": "n17",
+      "label": "可以",
+      "quote": "若出苗速度较慢，可以继续观察两天"
+    },
+    {
+      "id": "r8",
+      "src": "n16",
+      "dst": "n18",
+      "label": "也可以",
+      "quote": "也可以请管理员检查种子"
+    },
+    {
+      "id": "r9",
+      "src": "n17",
+      "dst": "n18",
+      "label": "或也可以",
+      "quote": "可以继续观察两天，也可以请管理员检查种子"
+    },
+    {
+      "id": "r10",
+      "src": "n20",
+      "dst": "n21",
+      "label": "可用于",
+      "quote": "株高记录可用于比较同一批幼苗的变化"
+    },
+    {
+      "id": "r11",
+      "src": "n22",
+      "dst": "n23",
+      "label": "不能用于",
+      "quote": "不能仅凭一天的株高判定种子品质"
+    }
+  ],
+  "bindings": [
+    {
+      "selection_index": 0,
+      "node_ids": [
+        "n5",
+        "n8",
+        "n12"
+      ],
+      "suggest_exclude": false,
+      "note": "“基质”分别补全为“装入基质”“播种后保持基质湿润”“基质表层变干且盘底没有积水”等动作或条件。",
+      "candidates": [
+        {
+          "node_id": "n5",
+          "quote": "清洗完成后可以装入基质"
+        },
+        {
+          "node_id": "n8",
+          "quote": "播种后需要保持基质湿润"
+        },
+        {
+          "node_id": "n12",
+          "quote": "只有基质表层变干且盘底没有积水时"
+        }
+      ]
+    },
+    {
+      "selection_index": 1,
+      "node_ids": [
+        "n6"
+      ],
+      "suggest_exclude": true,
+      "note": "“首先”是顺序连接词，无独立概念义，建议排除；保留 selection 节点。",
+      "candidates": [
+        {
+          "node_id": "n6",
+          "quote": "首先"
+        }
+      ]
+    },
+    {
+      "selection_index": 2,
+      "node_ids": [
+        "n12"
+      ],
+      "suggest_exclude": false,
+      "note": "“表层变干”补全为完整合取条件“基质表层变干且盘底没有积水”，不拆成分别足够的条件。",
+      "candidates": [
+        {
+          "node_id": "n12",
+          "quote": "只有基质表层变干且盘底没有积水时"
+        }
+      ]
+    },
+    {
+      "selection_index": 3,
+      "node_ids": [
+        "n18"
+      ],
+      "suggest_exclude": false,
+      "note": "“管理员”补全为可选动作“请管理员检查种子”。",
+      "candidates": [
+        {
+          "node_id": "n18",
+          "quote": "也可以请管理员检查种子"
+        }
+      ]
+    },
+    {
+      "selection_index": 4,
+      "node_ids": [
+        "n15",
+        "n20",
+        "n22"
+      ],
+      "suggest_exclude": false,
+      "note": "“株高”分别关联“出苗后记录株高”“株高记录”的用途与“仅凭一天的株高”的限制。",
+      "candidates": [
+        {
+          "node_id": "n15",
+          "quote": "出苗后再记录株高"
+        },
+        {
+          "node_id": "n20",
+          "quote": "株高记录"
+        },
+        {
+          "node_id": "n22",
+          "quote": "仅凭一天的株高"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+[
+  {
+    "article": "1",
+    "nodes": 20,
+    "labels": 16,
+    "missing_labels": 0,
+    "label_line_collisions": 0,
+    "label_node_collisions": 0,
+    "label_label_collisions": 0,
+    "minimum_text_box_to_line_gap_px": 8.0,
+    "nonorthogonal_segments": 0
+  },
+  {
+    "article": "2",
+    "nodes": 29,
+    "labels": 17,
+    "missing_labels": 0,
+    "label_line_collisions": 0,
+    "label_node_collisions": 0,
+    "label_label_collisions": 0,
+    "minimum_text_box_to_line_gap_px": 8.0,
+    "nonorthogonal_segments": 0
+  },
+  {
+    "article": "3",
+    "nodes": 19,
+    "labels": 8,
+    "missing_labels": 0,
+    "label_line_collisions": 0,
+    "label_node_collisions": 0,
+    "label_label_collisions": 0,
+    "minimum_text_box_to_line_gap_px": 8.0,
+    "nonorthogonal_segments": 0
+  }
+]

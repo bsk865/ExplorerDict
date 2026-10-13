@@ -1,0 +1,89 @@
+{
+  "case_id": "backup-alternatives",
+  "model_approved": true,
+  "codex_independent_accepted": false,
+  "reviewer": "Codex independently compares source, nodes, labels, directions and qualifiers; not a human review",
+  "rounds": 1,
+  "checks": [
+    {
+      "id": "copy",
+      "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+      "criterion": "复制→完成后核对数量",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r0 keeps copy completion -> count verification."
+    },
+    {
+      "id": "reference",
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "criterion": "它指备份盘，读写错误→更换，不删除源文件",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n5 explicitly says 它指本地备份盘; n6/r1/r2 express disk read/write error -> replace disk and do not delete source."
+    },
+    {
+      "id": "options",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "criterion": "两形式可替选，不要求两者或强制链",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n10/n11 and r3 keep encrypted archive OR ordinary folder, not mandatory simultaneous use or a compulsory sequence."
+    },
+    {
+      "id": "scope",
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+      "criterion": "去掉联系方式条件限定外发，本地不适用",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r4 retains external-sharing scope; r5 explicitly exempts local-only backups."
+    },
+    {
+      "id": "integrity",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。",
+      "criterion": "删联系方式之后核对技术完整",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r6 keeps removal of contact details -> still check technical content integrity."
+    },
+    {
+      "id": "upload",
+      "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+      "criterion": "核对通过→可以上传，非立即强制",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r7 only permits upload after verification; r8 does not require immediate upload."
+    },
+    {
+      "id": "not-read",
+      "quote": "上传成功不代表协作者已经读过文件。",
+      "criterion": "上传成功不推出已阅读",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r9 explicitly says upload success does not imply collaborators read the file."
+    },
+    {
+      "id": "separate",
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+      "criterion": "座位有合理独立分支，不为避免孤立强造备份边",
+      "relation_required": false,
+      "passed": true,
+      "evidence": "n25/n26 keep meeting seating on its own organizational branch; r10 is explicitly a no-direct-relation statement, not a fabricated backup dependency."
+    }
+  ],
+  "issues": [
+    {
+      "node_id": "n25",
+      "finding": "Branch label 与备份检查无关的讨论 drops the source qualifier 直接 from 没有直接关系, strengthening the scope. r10 preserves the qualifier but does not repair the visible branch title. Model review missed this."
+    },
+    {
+      "selection_index": 1,
+      "node_id": "n19",
+      "finding": "联系方式 also highlights 核对技术内容是否完整, whose visible concept is the subsequent technical integrity check rather than the selected contact-details concept; the word is only in the larger supporting quote. This binding is too broad."
+    }
+  ],
+  "readability_notes": [
+    "8 frozen checks are covered, but extra visible-title and selection-binding issues prevent whole-map acceptance.",
+    "r0/r6 retain repeated temporal wording; this is a readability issue, not counted as a logical failure."
+  ],
+  "scope": "Frozen check coverage and additional full-edge review; one output is not a population accuracy estimate"
+}

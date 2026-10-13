@@ -1,0 +1,1576 @@
+{
+  "schema": "article_layout_audit_v1",
+  "created_utc": "2026-10-13T10:29:25.733612+00:00",
+  "directory": "artifacts\\article-map-stress-20261013-v3-b\\2",
+  "minimum_gap_px": 8,
+  "render_requested": false,
+  "desktop_gui_tested": false,
+  "model_called": false,
+  "cases": [
+    {
+      "directory": "artifacts\\article-map-stress-20261013-v3-b\\2",
+      "status": "passed",
+      "errors": [],
+      "title": "自编03-对比与证据限制.txt",
+      "case_id": "evidence-not-cause",
+      "model_config": {},
+      "initial": {
+        "ok": true,
+        "nodes": 50,
+        "relations": 17,
+        "nonorthogonal_segments": 0,
+        "labels": [
+          {
+            "index": 0,
+            "label": "比较",
+            "source": -29,
+            "target": -27,
+            "status": "ok",
+            "box": [
+              764.9800000000001,
+              361.01111111111106,
+              788.58,
+              379.7888888888889
+            ],
+            "position": [
+              776.7800000000001,
+              370.4
+            ],
+            "placement": "vertical_left",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 1,
+            "label": "使用同一份",
+            "source": -27,
+            "target": -28,
+            "status": "ok",
+            "box": [
+              934.0,
+              338.6111111111111,
+              987.0,
+              357.3888888888889
+            ],
+            "position": [
+              960.5,
+              348.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 2,
+            "label": "自愿参加",
+            "source": -31,
+            "target": -30,
+            "status": "ok",
+            "box": [
+              934.0,
+              898.6111111111111,
+              977.2,
+              917.3888888888889
+            ],
+            "position": [
+              955.6,
+              908.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 3,
+            "label": "没有组织",
+            "source": -32,
+            "target": -33,
+            "status": "ok",
+            "box": [
+              934.0,
+              1122.611111111111,
+              977.2,
+              1141.388888888889
+            ],
+            "position": [
+              955.6,
+              1132.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 4,
+            "label": "比自己起始时提高",
+            "source": -34,
+            "target": -35,
+            "status": "ok",
+            "box": [
+              934.0,
+              1570.611111111111,
+              1016.4000000000001,
+              1589.388888888889
+            ],
+            "position": [
+              975.2,
+              1580.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 5,
+            "label": "提高",
+            "source": -32,
+            "target": -36,
+            "status": "ok",
+            "box": [
+              764.9800000000001,
+              1201.0111111111112,
+              788.58,
+              1219.788888888889
+            ],
+            "position": [
+              776.7800000000001,
+              1210.4
+            ],
+            "placement": "vertical_left",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 6,
+            "label": "同时出现",
+            "source": -37,
+            "target": -38,
+            "status": "ok",
+            "box": [
+              934.0,
+              2368.6111111111113,
+              977.2,
+              2387.3888888888887
+            ],
+            "position": [
+              955.6,
+              2378.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 7,
+            "label": "不证明",
+            "source": -16,
+            "target": -39,
+            "status": "ok",
+            "box": [
+              755.18,
+              1987.8111111111111,
+              788.58,
+              2006.588888888889
+            ],
+            "position": [
+              771.88,
+              1997.2
+            ],
+            "placement": "vertical_left",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 8,
+            "label": "因为",
+            "source": -17,
+            "target": -18,
+            "status": "ok",
+            "box": [
+              934.0,
+              2018.611111111111,
+              957.5999999999999,
+              2037.388888888889
+            ],
+            "position": [
+              945.8,
+              2028.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 9,
+            "label": "没有说",
+            "source": -40,
+            "target": -41,
+            "status": "ok",
+            "box": [
+              934.0,
+              2816.6111111111113,
+              967.4000000000001,
+              2835.3888888888887
+            ],
+            "position": [
+              950.7,
+              2826.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 10,
+            "label": "可以",
+            "source": -42,
+            "target": -43,
+            "status": "ok",
+            "box": [
+              934.0,
+              3376.6111111111113,
+              957.5999999999999,
+              3395.3888888888887
+            ],
+            "position": [
+              945.8,
+              3386.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 11,
+            "label": "也可以",
+            "source": -42,
+            "target": -44,
+            "status": "ok",
+            "box": [
+              755.18,
+              3399.0111111111114,
+              788.58,
+              3417.788888888889
+            ],
+            "position": [
+              771.88,
+              3408.4
+            ],
+            "placement": "vertical_left",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 12,
+            "label": "属于",
+            "source": -43,
+            "target": -45,
+            "status": "ok",
+            "box": [
+              764.9800000000001,
+              3511.0111111111114,
+              788.58,
+              3529.788888888889
+            ],
+            "position": [
+              776.7800000000001,
+              3520.4
+            ],
+            "placement": "vertical_left",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 13,
+            "label": "属于",
+            "source": -44,
+            "target": -45,
+            "status": "ok",
+            "box": [
+              934.0,
+              3600.6111111111113,
+              957.5999999999999,
+              3619.3888888888887
+            ],
+            "position": [
+              945.8,
+              3610.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 14,
+            "label": "只有满足时",
+            "source": -24,
+            "target": -25,
+            "status": "ok",
+            "box": [
+              934.0,
+              3950.6111111111113,
+              987.0,
+              3969.3888888888887
+            ],
+            "position": [
+              960.5,
+              3960.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 15,
+            "label": "且",
+            "source": -47,
+            "target": -48,
+            "status": "ok",
+            "box": [
+              934.0,
+              4174.611111111111,
+              947.8,
+              4193.388888888889
+            ],
+            "position": [
+              940.9,
+              4184.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          },
+          {
+            "index": 16,
+            "label": "不能作为",
+            "source": -49,
+            "target": -50,
+            "status": "ok",
+            "box": [
+              934.0,
+              4524.611111111111,
+              977.2,
+              4543.388888888889
+            ],
+            "position": [
+              955.6,
+              4534.0
+            ],
+            "placement": "vertical_right",
+            "minimum_line_gap_px": 8.0,
+            "line_collisions": 0,
+            "node_collisions": [],
+            "label_collisions": []
+          }
+        ],
+        "errors": []
+      },
+      "drag_checks": [
+        {
+          "ok": true,
+          "nodes": 50,
+          "relations": 17,
+          "nonorthogonal_segments": 0,
+          "labels": [
+            {
+              "index": 0,
+              "label": "比较",
+              "source": -29,
+              "target": -27,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                361.01111111111106,
+                788.58,
+                379.7888888888889
+              ],
+              "position": [
+                776.7800000000001,
+                370.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 1,
+              "label": "使用同一份",
+              "source": -27,
+              "target": -28,
+              "status": "ok",
+              "box": [
+                934.0,
+                338.6111111111111,
+                987.0,
+                357.3888888888889
+              ],
+              "position": [
+                960.5,
+                348.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 2,
+              "label": "自愿参加",
+              "source": -31,
+              "target": -30,
+              "status": "ok",
+              "box": [
+                934.0,
+                898.6111111111111,
+                977.2,
+                917.3888888888889
+              ],
+              "position": [
+                955.6,
+                908.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 3,
+              "label": "没有组织",
+              "source": -32,
+              "target": -33,
+              "status": "ok",
+              "box": [
+                934.0,
+                1122.611111111111,
+                977.2,
+                1141.388888888889
+              ],
+              "position": [
+                955.6,
+                1132.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 4,
+              "label": "比自己起始时提高",
+              "source": -34,
+              "target": -35,
+              "status": "ok",
+              "box": [
+                934.0,
+                1570.611111111111,
+                1016.4000000000001,
+                1589.388888888889
+              ],
+              "position": [
+                975.2,
+                1580.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 5,
+              "label": "提高",
+              "source": -32,
+              "target": -36,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                1201.0111111111112,
+                788.58,
+                1219.788888888889
+              ],
+              "position": [
+                776.7800000000001,
+                1210.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 6,
+              "label": "同时出现",
+              "source": -37,
+              "target": -38,
+              "status": "ok",
+              "box": [
+                934.0,
+                2368.6111111111113,
+                977.2,
+                2387.3888888888887
+              ],
+              "position": [
+                955.6,
+                2378.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 7,
+              "label": "不证明",
+              "source": -16,
+              "target": -39,
+              "status": "ok",
+              "box": [
+                755.18,
+                1987.8111111111111,
+                788.58,
+                2006.588888888889
+              ],
+              "position": [
+                771.88,
+                1997.2
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 8,
+              "label": "因为",
+              "source": -17,
+              "target": -18,
+              "status": "ok",
+              "box": [
+                934.0,
+                2018.611111111111,
+                957.5999999999999,
+                2037.388888888889
+              ],
+              "position": [
+                945.8,
+                2028.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 9,
+              "label": "没有说",
+              "source": -40,
+              "target": -41,
+              "status": "ok",
+              "box": [
+                934.0,
+                2816.6111111111113,
+                967.4000000000001,
+                2835.3888888888887
+              ],
+              "position": [
+                950.7,
+                2826.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 10,
+              "label": "可以",
+              "source": -42,
+              "target": -43,
+              "status": "ok",
+              "box": [
+                934.0,
+                3376.6111111111113,
+                957.5999999999999,
+                3395.3888888888887
+              ],
+              "position": [
+                945.8,
+                3386.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 11,
+              "label": "也可以",
+              "source": -42,
+              "target": -44,
+              "status": "ok",
+              "box": [
+                755.18,
+                3399.0111111111114,
+                788.58,
+                3417.788888888889
+              ],
+              "position": [
+                771.88,
+                3408.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 12,
+              "label": "属于",
+              "source": -43,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                3511.0111111111114,
+                788.58,
+                3529.788888888889
+              ],
+              "position": [
+                776.7800000000001,
+                3520.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 13,
+              "label": "属于",
+              "source": -44,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                934.0,
+                3600.6111111111113,
+                957.5999999999999,
+                3619.3888888888887
+              ],
+              "position": [
+                945.8,
+                3610.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 14,
+              "label": "只有满足时",
+              "source": -24,
+              "target": -25,
+              "status": "ok",
+              "box": [
+                934.0,
+                3950.6111111111113,
+                987.0,
+                3969.3888888888887
+              ],
+              "position": [
+                960.5,
+                3960.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 15,
+              "label": "且",
+              "source": -47,
+              "target": -48,
+              "status": "ok",
+              "box": [
+                934.0,
+                4174.611111111111,
+                947.8,
+                4193.388888888889
+              ],
+              "position": [
+                940.9,
+                4184.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 16,
+              "label": "不能作为",
+              "source": -49,
+              "target": -50,
+              "status": "ok",
+              "box": [
+                934.0,
+                4524.611111111111,
+                977.2,
+                4543.388888888889
+              ],
+              "position": [
+                955.6,
+                4534.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            }
+          ],
+          "errors": [],
+          "entry_id": -1,
+          "offset": [
+            40,
+            30
+          ]
+        },
+        {
+          "ok": true,
+          "nodes": 50,
+          "relations": 17,
+          "nonorthogonal_segments": 0,
+          "labels": [
+            {
+              "index": 0,
+              "label": "比较",
+              "source": -29,
+              "target": -27,
+              "status": "ok",
+              "box": [
+                1056.84,
+                394.6111111111111,
+                1080.4399999999998,
+                413.3888888888889
+              ],
+              "position": [
+                1068.6399999999999,
+                404.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 1,
+              "label": "使用同一份",
+              "source": -27,
+              "target": -28,
+              "status": "ok",
+              "box": [
+                934.0,
+                338.6111111111111,
+                987.0,
+                357.3888888888889
+              ],
+              "position": [
+                960.5,
+                348.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 2,
+              "label": "自愿参加",
+              "source": -31,
+              "target": -30,
+              "status": "ok",
+              "box": [
+                934.0,
+                898.6111111111111,
+                977.2,
+                917.3888888888889
+              ],
+              "position": [
+                955.6,
+                908.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 3,
+              "label": "没有组织",
+              "source": -32,
+              "target": -33,
+              "status": "ok",
+              "box": [
+                934.0,
+                1122.611111111111,
+                977.2,
+                1141.388888888889
+              ],
+              "position": [
+                955.6,
+                1132.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 4,
+              "label": "比自己起始时提高",
+              "source": -34,
+              "target": -35,
+              "status": "ok",
+              "box": [
+                934.0,
+                1570.611111111111,
+                1016.4000000000001,
+                1589.388888888889
+              ],
+              "position": [
+                975.2,
+                1580.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 5,
+              "label": "提高",
+              "source": -32,
+              "target": -36,
+              "status": "ok",
+              "box": [
+                1056.84,
+                1402.611111111111,
+                1080.4399999999998,
+                1421.388888888889
+              ],
+              "position": [
+                1068.6399999999999,
+                1412.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 6,
+              "label": "同时出现",
+              "source": -37,
+              "target": -38,
+              "status": "ok",
+              "box": [
+                934.0,
+                2368.6111111111113,
+                977.2,
+                2387.3888888888887
+              ],
+              "position": [
+                955.6,
+                2378.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 7,
+              "label": "不证明",
+              "source": -16,
+              "target": -39,
+              "status": "ok",
+              "box": [
+                1056.84,
+                2193.6111111111113,
+                1090.24,
+                2212.3888888888887
+              ],
+              "position": [
+                1073.54,
+                2203.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 8,
+              "label": "因为",
+              "source": -17,
+              "target": -18,
+              "status": "ok",
+              "box": [
+                934.0,
+                2018.611111111111,
+                957.5999999999999,
+                2037.388888888889
+              ],
+              "position": [
+                945.8,
+                2028.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 9,
+              "label": "没有说",
+              "source": -40,
+              "target": -41,
+              "status": "ok",
+              "box": [
+                934.0,
+                2816.6111111111113,
+                967.4000000000001,
+                2835.3888888888887
+              ],
+              "position": [
+                950.7,
+                2826.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 10,
+              "label": "可以",
+              "source": -42,
+              "target": -43,
+              "status": "ok",
+              "box": [
+                934.0,
+                3376.6111111111113,
+                957.5999999999999,
+                3395.3888888888887
+              ],
+              "position": [
+                945.8,
+                3386.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 11,
+              "label": "也可以",
+              "source": -42,
+              "target": -44,
+              "status": "ok",
+              "box": [
+                1056.84,
+                3432.6111111111113,
+                1090.24,
+                3451.3888888888887
+              ],
+              "position": [
+                1073.54,
+                3442.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 12,
+              "label": "属于",
+              "source": -43,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                3511.0111111111114,
+                788.58,
+                3529.788888888889
+              ],
+              "position": [
+                776.7800000000001,
+                3520.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 13,
+              "label": "属于",
+              "source": -44,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                934.0,
+                3600.6111111111113,
+                957.5999999999999,
+                3619.3888888888887
+              ],
+              "position": [
+                945.8,
+                3610.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 14,
+              "label": "只有满足时",
+              "source": -24,
+              "target": -25,
+              "status": "ok",
+              "box": [
+                934.0,
+                3950.6111111111113,
+                987.0,
+                3969.3888888888887
+              ],
+              "position": [
+                960.5,
+                3960.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 15,
+              "label": "且",
+              "source": -47,
+              "target": -48,
+              "status": "ok",
+              "box": [
+                934.0,
+                4174.611111111111,
+                947.8,
+                4193.388888888889
+              ],
+              "position": [
+                940.9,
+                4184.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 16,
+              "label": "不能作为",
+              "source": -49,
+              "target": -50,
+              "status": "ok",
+              "box": [
+                906.0,
+                4545.321111111111,
+                949.2,
+                4564.098888888889
+              ],
+              "position": [
+                927.6,
+                4554.71
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            }
+          ],
+          "errors": [],
+          "entry_id": -50,
+          "offset": [
+            -28,
+            20
+          ]
+        },
+        {
+          "ok": true,
+          "nodes": 50,
+          "relations": 17,
+          "nonorthogonal_segments": 0,
+          "labels": [
+            {
+              "index": 0,
+              "label": "比较",
+              "source": -29,
+              "target": -27,
+              "status": "ok",
+              "box": [
+                811.49,
+                465.2222222222222,
+                835.0899999999999,
+                484.0
+              ],
+              "position": [
+                823.29,
+                474.6111111111111
+              ],
+              "placement": "horizontal_above",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 1,
+              "label": "使用同一份",
+              "source": -27,
+              "target": -28,
+              "status": "ok",
+              "box": [
+                934.0,
+                338.6111111111111,
+                987.0,
+                357.3888888888889
+              ],
+              "position": [
+                960.5,
+                348.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 2,
+              "label": "自愿参加",
+              "source": -31,
+              "target": -30,
+              "status": "ok",
+              "box": [
+                934.0,
+                898.6111111111111,
+                977.2,
+                917.3888888888889
+              ],
+              "position": [
+                955.6,
+                908.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 3,
+              "label": "没有组织",
+              "source": -32,
+              "target": -33,
+              "status": "ok",
+              "box": [
+                934.0,
+                1122.611111111111,
+                977.2,
+                1141.388888888889
+              ],
+              "position": [
+                955.6,
+                1132.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 4,
+              "label": "比自己起始时提高",
+              "source": -34,
+              "target": -35,
+              "status": "ok",
+              "box": [
+                934.0,
+                1570.611111111111,
+                1016.4000000000001,
+                1589.388888888889
+              ],
+              "position": [
+                975.2,
+                1580.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 5,
+              "label": "提高",
+              "source": -32,
+              "target": -36,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                1201.0111111111112,
+                788.58,
+                1219.788888888889
+              ],
+              "position": [
+                776.7800000000001,
+                1210.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 6,
+              "label": "同时出现",
+              "source": -37,
+              "target": -38,
+              "status": "ok",
+              "box": [
+                934.0,
+                2368.6111111111113,
+                977.2,
+                2387.3888888888887
+              ],
+              "position": [
+                955.6,
+                2378.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 7,
+              "label": "不证明",
+              "source": -16,
+              "target": -39,
+              "status": "ok",
+              "box": [
+                755.18,
+                1987.8111111111111,
+                788.58,
+                2006.588888888889
+              ],
+              "position": [
+                771.88,
+                1997.2
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 8,
+              "label": "因为",
+              "source": -17,
+              "target": -18,
+              "status": "ok",
+              "box": [
+                934.0,
+                2018.611111111111,
+                957.5999999999999,
+                2037.388888888889
+              ],
+              "position": [
+                945.8,
+                2028.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 9,
+              "label": "没有说",
+              "source": -40,
+              "target": -41,
+              "status": "ok",
+              "box": [
+                934.0,
+                2816.6111111111113,
+                967.4000000000001,
+                2835.3888888888887
+              ],
+              "position": [
+                950.7,
+                2826.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 10,
+              "label": "可以",
+              "source": -42,
+              "target": -43,
+              "status": "ok",
+              "box": [
+                934.0,
+                3376.6111111111113,
+                957.5999999999999,
+                3395.3888888888887
+              ],
+              "position": [
+                945.8,
+                3386.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 11,
+              "label": "也可以",
+              "source": -42,
+              "target": -44,
+              "status": "ok",
+              "box": [
+                755.18,
+                3399.0111111111114,
+                788.58,
+                3417.788888888889
+              ],
+              "position": [
+                771.88,
+                3408.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 12,
+              "label": "属于",
+              "source": -43,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                764.9800000000001,
+                3511.0111111111114,
+                788.58,
+                3529.788888888889
+              ],
+              "position": [
+                776.7800000000001,
+                3520.4
+              ],
+              "placement": "vertical_left",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 13,
+              "label": "属于",
+              "source": -44,
+              "target": -45,
+              "status": "ok",
+              "box": [
+                934.0,
+                3600.6111111111113,
+                957.5999999999999,
+                3619.3888888888887
+              ],
+              "position": [
+                945.8,
+                3610.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 14,
+              "label": "只有满足时",
+              "source": -24,
+              "target": -25,
+              "status": "ok",
+              "box": [
+                934.0,
+                3950.6111111111113,
+                987.0,
+                3969.3888888888887
+              ],
+              "position": [
+                960.5,
+                3960.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 15,
+              "label": "且",
+              "source": -47,
+              "target": -48,
+              "status": "ok",
+              "box": [
+                934.0,
+                4174.611111111111,
+                947.8,
+                4193.388888888889
+              ],
+              "position": [
+                940.9,
+                4184.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            },
+            {
+              "index": 16,
+              "label": "不能作为",
+              "source": -49,
+              "target": -50,
+              "status": "ok",
+              "box": [
+                934.0,
+                4524.611111111111,
+                977.2,
+                4543.388888888889
+              ],
+              "position": [
+                955.6,
+                4534.0
+              ],
+              "placement": "vertical_right",
+              "minimum_line_gap_px": 8.0,
+              "line_collisions": 0,
+              "node_collisions": [],
+              "label_collisions": []
+            }
+          ],
+          "errors": [],
+          "entry_id": -29,
+          "offset": [
+            32,
+            -24
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "ok": true,
+  "counts": {
+    "passed": 1,
+    "failed": 0,
+    "not_approved": 0,
+    "input_error": 0
+  }
+}

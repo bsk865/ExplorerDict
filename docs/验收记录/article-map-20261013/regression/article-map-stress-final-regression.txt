@@ -1,0 +1,62 @@
+...........导出关系图失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 6440, in export_map_files
+    result = map_export.export_map(
+        layout=self._layout, style=self.export_style(), canvas=self.canvas,
+    ...<3 lines>...
+        **({"article_map":full.article_map} if full is not None else {}),
+    )
+  File "C:\Python314\Lib\unittest\mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1247, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "D:\探索工具\探索词典\tests\test_full_article_map.py", line 322, in export
+    raise RuntimeError("模拟导出失败")
+RuntimeError: 模拟导出失败
+.....................................................................................逻辑链分析失败（按原文归纳）：按老路径继续 doc_key=k
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\map_service.py", line 601, in run_logic_graph
+    candidate = client.map_logic_chain(body, topic=str(title or ""),
+                                       terms=tuple(names))
+  File "D:\探索工具\探索词典\tests\test_article_logic.py", line 787, in boom
+    raise reply
+RuntimeError: 网络断了
+..................................关系图 PNG 导出失败（SVG 已写出）：拿不到画布窗口句柄：窗口已经销毁
+....................................................................................................C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 400: 'Bad Request'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 401: 'Unauthorized'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............................................................................................................................................................重读主题词条失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3887, in _reload_nodes
+    all_nodes, nodes = self._scope_nodes(service, int(topic_id))
+                       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3952, in _scope_nodes
+    all_nodes = list(service.nodes_for_topic(int(topic_id)))
+TypeError: 'NoneType' object is not iterable
+重读主题词条失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3887, in _reload_nodes
+    all_nodes, nodes = self._scope_nodes(service, int(topic_id))
+                       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3952, in _scope_nodes
+    all_nodes = list(service.nodes_for_topic(int(topic_id)))
+TypeError: 'NoneType' object is not iterable
+.................................................关系图 PNG 导出失败（SVG 已写出）：拿不到画布窗口句柄：winfo_id() 返回 0（窗口可能已经销毁）
+............................................................................................................................................................................................................................................D:\探索工具\探索词典\tests\test_ui_roundrect.py:9819: ResourceWarning: unclosed file <_io.TextIOWrapper name='D:\\探索工具\\探索词典\\app\\ui\\reading_panel.py' mode='r' encoding='utf-8'>
+  text = open(panel.__file__, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...........
+----------------------------------------------------------------------
+Ran 682 tests in 28.882s
+
+OK
+{"directory": "C:\\Users\\张哲铭\\AppData\\Local\\Temp\\tmpf070fqfk", "ok": false, "counts": {"passed": 1, "failed": 0, "not_approved": 1, "input_error": 1}}

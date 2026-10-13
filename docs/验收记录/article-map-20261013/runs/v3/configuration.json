@@ -1,0 +1,7 @@
+{
+  "base_url": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "timeout": 120.0,
+  "reasoning_effort": "",
+  "thinking": "enabled"
+}

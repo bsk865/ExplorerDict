@@ -1,0 +1,593 @@
+{
+  "stage": "review",
+  "text": "项目小组采用循环改进流程：先整理需求，再制作原型，然后邀请三位用户试用。试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。这是反馈循环，不是一次性完成后就结束的直线。若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。两种处理针对不同问题，不要求先改步骤再改提示语。修改完成后需要再次试用；仅完成修改不能证明问题已经解决。只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。原型制作中可以暂缓与本轮问题无关的装饰设计，但不能删掉尚未解决的问题记录。",
+  "selected_words": [
+    "需求",
+    "清单",
+    "提示语",
+    "再次",
+    "已解决"
+  ],
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "循环改进流程",
+        "kind": "branch",
+        "quote": "项目小组采用循环改进流程：先整理需求，再制作原型，然后邀请三位用户试用。"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "循环步骤",
+        "kind": "branch",
+        "quote": "先整理需求，再制作原型，然后邀请三位用户试用"
+      },
+      {
+        "id": "n2",
+        "parent": "n0",
+        "label": "反馈循环与需求修订",
+        "kind": "branch",
+        "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。这是反馈循环，不是一次性完成后就结束的直线。"
+      },
+      {
+        "id": "n3",
+        "parent": "n0",
+        "label": "按问题类型处理",
+        "kind": "branch",
+        "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。两种处理针对不同问题，不要求先改步骤再改提示语。"
+      },
+      {
+        "id": "n4",
+        "parent": "n0",
+        "label": "修改后验证与解决判定",
+        "kind": "branch",
+        "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。"
+      },
+      {
+        "id": "n5",
+        "parent": "n0",
+        "label": "原型制作限制",
+        "kind": "branch",
+        "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计，但不能删掉尚未解决的问题记录。"
+      },
+      {
+        "id": "n6",
+        "parent": "n1",
+        "label": "先整理需求",
+        "kind": "concept",
+        "quote": "先整理需求"
+      },
+      {
+        "id": "n7",
+        "parent": "n1",
+        "label": "再制作原型",
+        "kind": "concept",
+        "quote": "再制作原型"
+      },
+      {
+        "id": "n8",
+        "parent": "n1",
+        "label": "然后邀请三位用户试用",
+        "kind": "concept",
+        "quote": "然后邀请三位用户试用"
+      },
+      {
+        "id": "n9",
+        "parent": "n2",
+        "label": "试用中出现的困难",
+        "kind": "concept",
+        "quote": "试用中出现的困难"
+      },
+      {
+        "id": "n10",
+        "parent": "n2",
+        "label": "问题清单",
+        "kind": "concept",
+        "quote": "问题清单"
+      },
+      {
+        "id": "n11",
+        "parent": "n2",
+        "label": "修订需求",
+        "kind": "concept",
+        "quote": "修订需求"
+      },
+      {
+        "id": "n12",
+        "parent": "n2",
+        "label": "修订后的需求",
+        "kind": "concept",
+        "quote": "修订后的需求"
+      },
+      {
+        "id": "n13",
+        "parent": "n2",
+        "label": "下一轮原型制作",
+        "kind": "concept",
+        "quote": "下一轮原型制作"
+      },
+      {
+        "id": "n14",
+        "parent": "n2",
+        "label": "反馈循环",
+        "kind": "concept",
+        "quote": "这是反馈循环"
+      },
+      {
+        "id": "n15",
+        "parent": "n2",
+        "label": "一次性完成后就结束的直线",
+        "kind": "concept",
+        "quote": "不是一次性完成后就结束的直线"
+      },
+      {
+        "id": "n16",
+        "parent": "n3",
+        "label": "若问题涉及操作步骤",
+        "kind": "concept",
+        "quote": "若问题涉及操作步骤"
+      },
+      {
+        "id": "n17",
+        "parent": "n3",
+        "label": "小组优先简化步骤",
+        "kind": "concept",
+        "quote": "小组优先简化步骤"
+      },
+      {
+        "id": "n18",
+        "parent": "n3",
+        "label": "若问题仅涉及文字看不懂",
+        "kind": "concept",
+        "quote": "若问题仅涉及文字看不懂"
+      },
+      {
+        "id": "n19",
+        "parent": "n3",
+        "label": "可以先修改提示语",
+        "kind": "concept",
+        "quote": "可以先修改提示语"
+      },
+      {
+        "id": "n20",
+        "parent": "n3",
+        "label": "两种处理针对不同问题",
+        "kind": "concept",
+        "quote": "两种处理针对不同问题"
+      },
+      {
+        "id": "n21",
+        "parent": "n3",
+        "label": "先改步骤再改提示语",
+        "kind": "concept",
+        "quote": "先改步骤再改提示语"
+      },
+      {
+        "id": "n22",
+        "parent": "n4",
+        "label": "修改完成后",
+        "kind": "concept",
+        "quote": "修改完成后"
+      },
+      {
+        "id": "n23",
+        "parent": "n4",
+        "label": "再次试用",
+        "kind": "concept",
+        "quote": "再次试用"
+      },
+      {
+        "id": "n24",
+        "parent": "n4",
+        "label": "仅完成修改",
+        "kind": "concept",
+        "quote": "仅完成修改"
+      },
+      {
+        "id": "n25",
+        "parent": "n4",
+        "label": "问题已经解决",
+        "kind": "concept",
+        "quote": "问题已经解决"
+      },
+      {
+        "id": "n26",
+        "parent": "n4",
+        "label": "再次试用未发现同一问题且三位用户都确认理解",
+        "kind": "concept",
+        "quote": "再次试用未发现同一问题且三位用户都确认理解"
+      },
+      {
+        "id": "n27",
+        "parent": "n4",
+        "label": "小组才把该问题标记为已解决",
+        "kind": "concept",
+        "quote": "小组才把该问题标记为已解决"
+      },
+      {
+        "id": "n28",
+        "parent": "n5",
+        "label": "原型制作中",
+        "kind": "concept",
+        "quote": "原型制作中"
+      },
+      {
+        "id": "n29",
+        "parent": "n5",
+        "label": "与本轮问题无关的装饰设计",
+        "kind": "concept",
+        "quote": "与本轮问题无关的装饰设计"
+      },
+      {
+        "id": "n30",
+        "parent": "n5",
+        "label": "尚未解决的问题记录",
+        "kind": "concept",
+        "quote": "尚未解决的问题记录"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n6",
+        "dst": "n7",
+        "label": "再制作",
+        "quote": "先整理需求，再制作原型"
+      },
+      {
+        "id": "r1",
+        "src": "n7",
+        "dst": "n8",
+        "label": "然后邀请",
+        "quote": "再制作原型，然后邀请三位用户试用"
+      },
+      {
+        "id": "r2",
+        "src": "n8",
+        "dst": "n9",
+        "label": "试用中出现",
+        "quote": "然后邀请三位用户试用。试用中出现的困难会形成问题清单"
+      },
+      {
+        "id": "r3",
+        "src": "n9",
+        "dst": "n10",
+        "label": "会形成",
+        "quote": "试用中出现的困难会形成问题清单"
+      },
+      {
+        "id": "r4",
+        "src": "n10",
+        "dst": "n11",
+        "label": "用于修订",
+        "quote": "问题清单用于修订需求"
+      },
+      {
+        "id": "r5",
+        "src": "n11",
+        "dst": "n12",
+        "label": "修订后得到",
+        "quote": "修订需求，修订后的需求再进入下一轮原型制作"
+      },
+      {
+        "id": "r6",
+        "src": "n12",
+        "dst": "n13",
+        "label": "再进入",
+        "quote": "修订后的需求再进入下一轮原型制作"
+      },
+      {
+        "id": "r7",
+        "src": "n0",
+        "dst": "n14",
+        "label": "是",
+        "quote": "这是反馈循环"
+      },
+      {
+        "id": "r8",
+        "src": "n0",
+        "dst": "n15",
+        "label": "不是",
+        "quote": "不是一次性完成后就结束的直线"
+      },
+      {
+        "id": "r9",
+        "src": "n16",
+        "dst": "n17",
+        "label": "优先简化步骤",
+        "quote": "若问题涉及操作步骤，小组优先简化步骤"
+      },
+      {
+        "id": "r10",
+        "src": "n18",
+        "dst": "n19",
+        "label": "可以先修改",
+        "quote": "若问题仅涉及文字看不懂，可以先修改提示语"
+      },
+      {
+        "id": "r11",
+        "src": "n20",
+        "dst": "n21",
+        "label": "不要求",
+        "quote": "两种处理针对不同问题，不要求先改步骤再改提示语"
+      },
+      {
+        "id": "r12",
+        "src": "n22",
+        "dst": "n23",
+        "label": "需要",
+        "quote": "修改完成后需要再次试用"
+      },
+      {
+        "id": "r13",
+        "src": "n24",
+        "dst": "n25",
+        "label": "不能证明",
+        "quote": "仅完成修改不能证明问题已经解决"
+      },
+      {
+        "id": "r14",
+        "src": "n26",
+        "dst": "n27",
+        "label": "只有...才",
+        "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决"
+      },
+      {
+        "id": "r15",
+        "src": "n28",
+        "dst": "n29",
+        "label": "可以暂缓",
+        "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计"
+      },
+      {
+        "id": "r16",
+        "src": "n28",
+        "dst": "n30",
+        "label": "不能删掉",
+        "quote": "但不能删掉尚未解决的问题记录"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n6",
+          "n11",
+          "n12"
+        ],
+        "suggest_exclude": false,
+        "note": "“需求”分别出现在“先整理需求”“修订需求”“修订后的需求”中，绑定到含原划选词的完整动作或概念节点；候选给出包含原划选词的原句。",
+        "candidates": [
+          {
+            "node_id": "n6",
+            "quote": "项目小组采用循环改进流程：先整理需求，再制作原型，然后邀请三位用户试用。"
+          },
+          {
+            "node_id": "n11",
+            "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。"
+          },
+          {
+            "node_id": "n12",
+            "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n10"
+        ],
+        "suggest_exclude": false,
+        "note": "“清单”在原文中与“问题”组成“问题清单”，绑定到完整概念节点；候选给出包含原划选词的原句。",
+        "candidates": [
+          {
+            "node_id": "n10",
+            "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n19"
+        ],
+        "suggest_exclude": false,
+        "note": "“提示语”出现在“可以先修改提示语”中，绑定到含可选性的完整动作节点；候选给出包含原划选词的原句。",
+        "candidates": [
+          {
+            "node_id": "n19",
+            "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n23",
+          "n26"
+        ],
+        "suggest_exclude": false,
+        "note": "“再次”限定试用动作，保留在“再次试用”和“再次试用未发现同一问题且三位用户都确认理解”中；候选给出包含原划选词的原句。",
+        "candidates": [
+          {
+            "node_id": "n23",
+            "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。"
+          },
+          {
+            "node_id": "n26",
+            "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。"
+          }
+        ]
+      },
+      {
+        "selection_index": 4,
+        "node_ids": [
+          "n27"
+        ],
+        "suggest_exclude": false,
+        "note": "“已解决”连续出现在“小组才把该问题标记为已解决”中，绑定到该完整动作节点；候选给出包含原划选词的原句。",
+        "candidates": [
+          {
+            "node_id": "n27",
+            "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "00e51ccf08341ed1c8a2a832eb5774e0619fd3d96133cc1b38bb095e9cf3777b"
+  },
+  "reading": {
+    "claims": [
+      {
+        "subject": "项目小组",
+        "predicate": "采用",
+        "object": "循环改进流程",
+        "quote": "项目小组采用循环改进流程",
+        "relation_required": false
+      },
+      {
+        "subject": "整理需求",
+        "predicate": "先于",
+        "object": "制作原型",
+        "quote": "先整理需求，再制作原型",
+        "relation_required": true
+      },
+      {
+        "subject": "制作原型",
+        "predicate": "先于",
+        "object": "邀请三位用户试用",
+        "quote": "再制作原型，然后邀请三位用户试用",
+        "relation_required": true
+      },
+      {
+        "subject": "试用中出现的困难",
+        "predicate": "会形成",
+        "object": "问题清单",
+        "quote": "试用中出现的困难会形成问题清单",
+        "relation_required": true
+      },
+      {
+        "subject": "问题清单",
+        "predicate": "用于",
+        "object": "修订需求",
+        "quote": "问题清单用于修订需求",
+        "relation_required": true
+      },
+      {
+        "subject": "修订后的需求",
+        "predicate": "再进入",
+        "object": "下一轮原型制作",
+        "quote": "修订后的需求再进入下一轮原型制作",
+        "relation_required": true
+      },
+      {
+        "subject": "该流程",
+        "predicate": "是",
+        "object": "反馈循环",
+        "quote": "这是反馈循环",
+        "relation_required": false
+      },
+      {
+        "subject": "该流程",
+        "predicate": "不是",
+        "object": "一次性完成后就结束的直线",
+        "quote": "不是一次性完成后就结束的直线",
+        "relation_required": true
+      },
+      {
+        "subject": "问题涉及操作步骤",
+        "predicate": "若发生则",
+        "object": "小组优先简化步骤",
+        "quote": "若问题涉及操作步骤，小组优先简化步骤",
+        "relation_required": true
+      },
+      {
+        "subject": "问题仅涉及文字看不懂",
+        "predicate": "则可以",
+        "object": "先修改提示语",
+        "quote": "若问题仅涉及文字看不懂，可以先修改提示语",
+        "relation_required": true
+      },
+      {
+        "subject": "两种处理",
+        "predicate": "针对",
+        "object": "不同问题",
+        "quote": "两种处理针对不同问题",
+        "relation_required": true
+      },
+      {
+        "subject": "两种处理",
+        "predicate": "不要求先后顺序为",
+        "object": "先改步骤再改提示语",
+        "quote": "不要求先改步骤再改提示语",
+        "relation_required": true
+      },
+      {
+        "subject": "修改完成",
+        "predicate": "后需要",
+        "object": "再次试用",
+        "quote": "修改完成后需要再次试用",
+        "relation_required": true
+      },
+      {
+        "subject": "仅完成修改",
+        "predicate": "不能证明",
+        "object": "问题已经解决",
+        "quote": "仅完成修改不能证明问题已经解决",
+        "relation_required": true
+      },
+      {
+        "subject": "再次试用未发现同一问题且三位用户都确认理解",
+        "predicate": "是小组把该问题标记为已解决的必要联合条件",
+        "object": "小组把该问题标记为已解决",
+        "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。",
+        "relation_required": true
+      },
+      {
+        "subject": "原型制作中",
+        "predicate": "可以暂缓",
+        "object": "与本轮问题无关的装饰设计",
+        "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计",
+        "relation_required": true
+      },
+      {
+        "subject": "原型制作中",
+        "predicate": "不能删掉",
+        "object": "尚未解决的问题记录",
+        "quote": "但不能删掉尚未解决的问题记录",
+        "relation_required": true
+      }
+    ],
+    "selections": [
+      {
+        "selection_index": 0,
+        "quote": "先整理需求，再制作原型，然后邀请三位用户试用。试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。",
+        "note": "原文中的“需求”可先被整理，也可由问题清单修订，修订后再进入下一轮原型制作；这里只依据原文说明其流程位置。"
+      },
+      {
+        "selection_index": 1,
+        "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求",
+        "note": "原文明确是“问题清单”，由试用中出现的困难形成，并用于修订需求。"
+      },
+      {
+        "selection_index": 2,
+        "quote": "若问题仅涉及文字看不懂，可以先修改提示语",
+        "note": "原文中的“提示语”只在“问题仅涉及文字看不懂”的情况下说可以先修改，指可修改的文字提示内容。"
+      },
+      {
+        "selection_index": 3,
+        "quote": "修改完成后需要再次试用",
+        "note": "原文中的“再次”指修改完成后的重新试用，区别于此前邀请三位用户试用；后文也要求再次试用。"
+      },
+      {
+        "selection_index": 4,
+        "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。",
+        "note": "原文中的“已解决”是需要小组标记的状态；前文还说仅完成修改不能证明问题已经解决。"
+      }
+    ]
+  }
+}

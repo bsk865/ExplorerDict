@@ -1,0 +1,60 @@
+{
+  "fixtures_sha256": "fcfbf1c89ba49c7222f13679e7b986e1f768b6456e0d91dd61d0eaa79f36dd8e",
+  "cases": [
+    {
+      "id": "robot-conditions",
+      "title": "自编02-设备条件与否定.txt",
+      "expected": [
+        {
+          "id": "startup",
+          "quote": "机器人启动的前提是急停已释放且防护门已关闭，两项必须同时满足；",
+          "criterion": "急停释放且门关闭共同必要条件，完整补全门",
+          "relation_required": true
+        },
+        {
+          "id": "permission",
+          "quote": "满足它们只表示可以申请启动，并不保证机器人一定启动。",
+          "criterion": "可申请不保证启动，不能条件充分化",
+          "relation_required": true
+        },
+        {
+          "id": "battery",
+          "quote": "电量不足时拒绝启动。",
+          "criterion": "电量不足→拒绝启动，不能倒置",
+          "relation_required": true
+        },
+        {
+          "id": "obstacle",
+          "quote": "发现障碍物会使机器人减速，而急停被按下会使机器人停止；",
+          "criterion": "障碍→减速、按急停→停止分开",
+          "relation_required": true
+        },
+        {
+          "id": "maintenance",
+          "quote": "操作员只有在机器人已经停止且维护钥匙已插入时，才允许打开检修盖。",
+          "criterion": "停止且插钥匙共同条件→允许开盖",
+          "relation_required": true
+        },
+        {
+          "id": "order",
+          "quote": "检查传感器之后可以检查线缆，规则没有说传感器检查是线缆检查的技术前提。",
+          "criterion": "检查先后可选，不误造技术依赖",
+          "relation_required": true
+        },
+        {
+          "id": "roles",
+          "quote": "维修记录由操作员填写，管理员只负责确认记录，不替操作员填写。",
+          "criterion": "操作员填写，管理员确认且不代填",
+          "relation_required": true
+        }
+      ]
+    }
+  ],
+  "generation_source_sha256": {
+    "app/article_map.py": "0debedbd7091d7c942eba6bc8f05ffaf36ae0e35aefd32fd95b6c9fb922d7d66",
+    "app/api_client.py": "849c5a5432ab8f9d158758ab89eafe3448338a1d3b6d4d91a73341f010a65543",
+    "app/config.py": "02965bbcc5c9de44f0ce1cdb1474df8f970548d6bac2fa92b4d9e7d8ad394c4b"
+  },
+  "checks_frozen_before_generation": true,
+  "expected_sent_to_model": false
+}

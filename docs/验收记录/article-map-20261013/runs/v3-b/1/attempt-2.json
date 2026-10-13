@@ -1,0 +1,823 @@
+{
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "虚构设备的试运行规则",
+        "kind": "branch",
+        "quote": "以下是虚构设备的试运行规则。"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "启动申请条件",
+        "kind": "branch",
+        "quote": "机器人启动的前提是急停已释放且防护门已关闭，两项必须同时满足；满足它们只表示可以申请启动，并不保证机器人一定启动。申请提交后，控制器还要检查电池电量，电量不足时拒绝启动。"
+      },
+      {
+        "id": "n2",
+        "parent": "n1",
+        "label": "急停已释放",
+        "kind": "concept",
+        "quote": "急停已释放"
+      },
+      {
+        "id": "n3",
+        "parent": "n1",
+        "label": "防护门已关闭",
+        "kind": "concept",
+        "quote": "防护门已关闭"
+      },
+      {
+        "id": "n4",
+        "parent": "n1",
+        "label": "急停已释放且防护门已关闭",
+        "kind": "concept",
+        "quote": "急停已释放且防护门已关闭"
+      },
+      {
+        "id": "n5",
+        "parent": "n1",
+        "label": "可以申请启动",
+        "kind": "concept",
+        "quote": "可以申请启动"
+      },
+      {
+        "id": "n6",
+        "parent": "n1",
+        "label": "机器人一定启动",
+        "kind": "concept",
+        "quote": "机器人一定启动"
+      },
+      {
+        "id": "n7",
+        "parent": "n1",
+        "label": "机器人启动",
+        "kind": "concept",
+        "quote": "机器人启动"
+      },
+      {
+        "id": "n8",
+        "parent": "n1",
+        "label": "申请提交后",
+        "kind": "concept",
+        "quote": "申请提交后"
+      },
+      {
+        "id": "n9",
+        "parent": "n1",
+        "label": "电池电量",
+        "kind": "concept",
+        "quote": "电池电量"
+      },
+      {
+        "id": "n10",
+        "parent": "n1",
+        "label": "电池电量不足",
+        "kind": "concept",
+        "quote": "电量不足"
+      },
+      {
+        "id": "n11",
+        "parent": "n0",
+        "label": "运行状态反应",
+        "kind": "branch",
+        "quote": "进入运行状态后，发现障碍物会使机器人减速，而急停被按下会使机器人停止；不要把减速写成停止。"
+      },
+      {
+        "id": "n12",
+        "parent": "n11",
+        "label": "进入运行状态后",
+        "kind": "concept",
+        "quote": "进入运行状态后"
+      },
+      {
+        "id": "n13",
+        "parent": "n11",
+        "label": "发现障碍物",
+        "kind": "concept",
+        "quote": "发现障碍物"
+      },
+      {
+        "id": "n14",
+        "parent": "n11",
+        "label": "机器人减速",
+        "kind": "concept",
+        "quote": "机器人减速"
+      },
+      {
+        "id": "n15",
+        "parent": "n11",
+        "label": "急停被按下",
+        "kind": "concept",
+        "quote": "急停被按下"
+      },
+      {
+        "id": "n16",
+        "parent": "n11",
+        "label": "机器人停止",
+        "kind": "concept",
+        "quote": "机器人停止"
+      },
+      {
+        "id": "n17",
+        "parent": "n0",
+        "label": "打开检修盖条件",
+        "kind": "branch",
+        "quote": "操作员只有在机器人已经停止且维护钥匙已插入时，才允许打开检修盖。"
+      },
+      {
+        "id": "n18",
+        "parent": "n17",
+        "label": "机器人已经停止",
+        "kind": "concept",
+        "quote": "机器人已经停止"
+      },
+      {
+        "id": "n19",
+        "parent": "n17",
+        "label": "维护钥匙已插入",
+        "kind": "concept",
+        "quote": "维护钥匙已插入"
+      },
+      {
+        "id": "n20",
+        "parent": "n17",
+        "label": "机器人已经停止且维护钥匙已插入",
+        "kind": "concept",
+        "quote": "机器人已经停止且维护钥匙已插入"
+      },
+      {
+        "id": "n21",
+        "parent": "n17",
+        "label": "操作员打开检修盖",
+        "kind": "concept",
+        "quote": "操作员只有在机器人已经停止且维护钥匙已插入时，才允许打开检修盖。"
+      },
+      {
+        "id": "n22",
+        "parent": "n0",
+        "label": "检查顺序与限制",
+        "kind": "branch",
+        "quote": "检查传感器之后可以检查线缆，规则没有说传感器检查是线缆检查的技术前提。"
+      },
+      {
+        "id": "n23",
+        "parent": "n22",
+        "label": "检查传感器",
+        "kind": "concept",
+        "quote": "检查传感器"
+      },
+      {
+        "id": "n24",
+        "parent": "n22",
+        "label": "检查线缆",
+        "kind": "concept",
+        "quote": "检查线缆"
+      },
+      {
+        "id": "n25",
+        "parent": "n0",
+        "label": "维修记录职责",
+        "kind": "branch",
+        "quote": "维修记录由操作员填写，管理员只负责确认记录，不替操作员填写。"
+      },
+      {
+        "id": "n26",
+        "parent": "n25",
+        "label": "操作员填写维修记录",
+        "kind": "concept",
+        "quote": "维修记录由操作员填写"
+      },
+      {
+        "id": "n27",
+        "parent": "n25",
+        "label": "管理员只负责确认记录",
+        "kind": "concept",
+        "quote": "管理员只负责确认记录，不替操作员填写"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n7",
+        "dst": "n4",
+        "label": "前提是",
+        "quote": "机器人启动的前提是急停已释放且防护门已关闭"
+      },
+      {
+        "id": "r1",
+        "src": "n2",
+        "dst": "n3",
+        "label": "两项必须同时满足",
+        "quote": "两项必须同时满足"
+      },
+      {
+        "id": "r2",
+        "src": "n4",
+        "dst": "n5",
+        "label": "满足后只表示可以",
+        "quote": "满足它们只表示可以申请启动"
+      },
+      {
+        "id": "r3",
+        "src": "n4",
+        "dst": "n6",
+        "label": "并不保证",
+        "quote": "并不保证机器人一定启动"
+      },
+      {
+        "id": "r4",
+        "src": "n8",
+        "dst": "n9",
+        "label": "控制器还要检查",
+        "quote": "申请提交后，控制器还要检查电池电量"
+      },
+      {
+        "id": "r5",
+        "src": "n10",
+        "dst": "n7",
+        "label": "时拒绝",
+        "quote": "电量不足时拒绝启动"
+      },
+      {
+        "id": "r6",
+        "src": "n12",
+        "dst": "n13",
+        "label": "之后",
+        "quote": "进入运行状态后，发现障碍物"
+      },
+      {
+        "id": "r7",
+        "src": "n13",
+        "dst": "n14",
+        "label": "会使",
+        "quote": "发现障碍物会使机器人减速"
+      },
+      {
+        "id": "r8",
+        "src": "n15",
+        "dst": "n16",
+        "label": "会使",
+        "quote": "急停被按下会使机器人停止"
+      },
+      {
+        "id": "r9",
+        "src": "n14",
+        "dst": "n16",
+        "label": "不要写成",
+        "quote": "不要把减速写成停止"
+      },
+      {
+        "id": "r10",
+        "src": "n18",
+        "dst": "n19",
+        "label": "且",
+        "quote": "机器人已经停止且维护钥匙已插入"
+      },
+      {
+        "id": "r11",
+        "src": "n20",
+        "dst": "n21",
+        "label": "才允许",
+        "quote": "机器人已经停止且维护钥匙已插入时，才允许打开检修盖"
+      },
+      {
+        "id": "r12",
+        "src": "n23",
+        "dst": "n24",
+        "label": "之后可以",
+        "quote": "检查传感器之后可以检查线缆"
+      },
+      {
+        "id": "r13",
+        "src": "n23",
+        "dst": "n24",
+        "label": "规则没有说是技术前提",
+        "quote": "规则没有说传感器检查是线缆检查的技术前提"
+      },
+      {
+        "id": "r14",
+        "src": "n27",
+        "dst": "n26",
+        "label": "不替操作员填写",
+        "quote": "管理员只负责确认记录，不替操作员填写"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n2",
+          "n4",
+          "n15"
+        ],
+        "suggest_exclude": false,
+        "note": "“急停”补全为“急停已释放”和“急停被按下”；分别用于启动前提和运行状态反应。",
+        "candidates": [
+          {
+            "node_id": "n2",
+            "quote": "急停已释放"
+          },
+          {
+            "node_id": "n4",
+            "quote": "急停已释放且防护门已关闭"
+          },
+          {
+            "node_id": "n15",
+            "quote": "急停被按下"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n3",
+          "n4"
+        ],
+        "suggest_exclude": false,
+        "note": "“门”补全为“防护门”，原文要求“防护门已关闭”，并与急停已释放共同满足启动前提。",
+        "candidates": [
+          {
+            "node_id": "n3",
+            "quote": "防护门已关闭"
+          },
+          {
+            "node_id": "n4",
+            "quote": "急停已释放且防护门已关闭"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n14"
+        ],
+        "suggest_exclude": false,
+        "note": "“减速”补全为“机器人减速”，并保留“不要把减速写成停止”的限制关系。",
+        "candidates": [
+          {
+            "node_id": "n14",
+            "quote": "机器人减速"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n19",
+          "n20"
+        ],
+        "suggest_exclude": false,
+        "note": "“钥匙”补全为“维护钥匙已插入”，它是打开检修盖条件之一，须与机器人已经停止同时满足。",
+        "candidates": [
+          {
+            "node_id": "n19",
+            "quote": "维护钥匙已插入"
+          },
+          {
+            "node_id": "n20",
+            "quote": "机器人已经停止且维护钥匙已插入"
+          }
+        ]
+      },
+      {
+        "selection_index": 4,
+        "node_ids": [
+          "n27"
+        ],
+        "suggest_exclude": false,
+        "note": "“管理员”补全为“管理员只负责确认记录”，原文另说不替操作员填写。",
+        "candidates": [
+          {
+            "node_id": "n27",
+            "quote": "管理员只负责确认记录，不替操作员填写"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "a52bb1da4d3c250423adec74f4da8a1fc6dbb1a6b8e41e39e6b1914f22b449c9"
+  },
+  "issues": [
+    "r14尚未明确被原文支持：“不替操作员填写”的完整对象应是维修记录/填写维修记录；dst=n26“操作员填写维修记录”使关系读起来重复且端点不完整。",
+    "独立清单第13项的真实关系未画出：操作员 — 填写 → 维修记录；原句：维修记录由操作员填写。请补上真实语义边；组织父子线不能代替它。",
+    "独立清单第14项的真实关系未画出：管理员 — 只负责确认 → 记录；原句：管理员只负责确认记录。请补上真实语义边；组织父子线不能代替它。",
+    "独立清单第15项的真实关系未画出：管理员 — 不替操作员填写 → 维修记录；原句：管理员只负责确认记录，不替操作员填写。。请补上真实语义边；组织父子线不能代替它。",
+    "claim 12（操作员填写维修记录）和 claim 13（管理员只负责确认记录）在清单中标为 relation_required=true，但图中只有完整动作节点 n26/n27，没有相应关系边；若保留清单要求，应补“操作员—填写→维修记录”和“管理员—只负责确认→记录”。",
+    "claim 14（管理员不替操作员填写维修记录）需要关系“管理员—不替操作员填写→维修记录”，但现有 r14 的 dst=n26 是“操作员填写维修记录”，不是被填写的“维修记录”，端点不完整且读起来重复。",
+    "claim 12 把完整动作节点 n26“操作员填写维修记录”再拆成 relation_required=true，属于过度拆解；n26 已完整表达该单一动作，应将 claim 的 relation_required 改为 false。",
+    "claim 13 把完整动作节点 n27“管理员只负责确认记录”再拆成 relation_required=true，属于过度拆解；n27 已完整表达该单一动作，应将 claim 的 relation_required 改为 false。",
+    "claim 14“管理员不替操作员填写维修记录”也可由 n27 的“不替操作员填写”结合前文“维修记录”完整表达；再标 relation_required=true 有过度拆解之嫌，若保留关系应把对象改为维修记录而非操作员填写动作。",
+    "全文重要信息覆盖未通过"
+  ],
+  "review": {
+    "node_verdicts": [
+      {
+        "id": "n0",
+        "verdict": "supported",
+        "note": "原文首句直接说明是虚构设备的试运行规则。"
+      },
+      {
+        "id": "n1",
+        "verdict": "supported",
+        "note": "该分支汇总启动前提、申请提交后检查电量及拒绝启动，属于合理组织。"
+      },
+      {
+        "id": "n2",
+        "verdict": "supported",
+        "note": "原文明确写“急停已释放”。"
+      },
+      {
+        "id": "n3",
+        "verdict": "supported",
+        "note": "原文明确写“防护门已关闭”。"
+      },
+      {
+        "id": "n4",
+        "verdict": "supported",
+        "note": "原文明确写“急停已释放且防护门已关闭”。"
+      },
+      {
+        "id": "n5",
+        "verdict": "supported",
+        "note": "原文明确写“可以申请启动”。"
+      },
+      {
+        "id": "n6",
+        "verdict": "supported",
+        "note": "原文在“并不保证”后出现“机器人一定启动”，节点保留该被否定内容。"
+      },
+      {
+        "id": "n7",
+        "verdict": "supported",
+        "note": "原文多次出现“机器人启动/启动”。"
+      },
+      {
+        "id": "n8",
+        "verdict": "supported",
+        "note": "原文明确写“申请提交后”。"
+      },
+      {
+        "id": "n9",
+        "verdict": "supported",
+        "note": "原文明确写“电池电量”。"
+      },
+      {
+        "id": "n10",
+        "verdict": "supported",
+        "note": "原文写“电量不足”，结合前文可补为“电池电量不足”。"
+      },
+      {
+        "id": "n11",
+        "verdict": "supported",
+        "note": "该分支汇总运行状态下的障碍物减速与急停停止反应。"
+      },
+      {
+        "id": "n12",
+        "verdict": "supported",
+        "note": "原文明确写“进入运行状态后”。"
+      },
+      {
+        "id": "n13",
+        "verdict": "supported",
+        "note": "原文明确写“发现障碍物”。"
+      },
+      {
+        "id": "n14",
+        "verdict": "supported",
+        "note": "原文明确写“机器人减速”。"
+      },
+      {
+        "id": "n15",
+        "verdict": "supported",
+        "note": "原文明确写“急停被按下”。"
+      },
+      {
+        "id": "n16",
+        "verdict": "supported",
+        "note": "原文明确写“机器人停止”。"
+      },
+      {
+        "id": "n17",
+        "verdict": "supported",
+        "note": "该分支汇总打开检修盖的两个条件。"
+      },
+      {
+        "id": "n18",
+        "verdict": "supported",
+        "note": "原文明确写“机器人已经停止”。"
+      },
+      {
+        "id": "n19",
+        "verdict": "supported",
+        "note": "原文明确写“维护钥匙已插入”。"
+      },
+      {
+        "id": "n20",
+        "verdict": "supported",
+        "note": "原文明确写“机器人已经停止且维护钥匙已插入”。"
+      },
+      {
+        "id": "n21",
+        "verdict": "supported",
+        "note": "原文说“才允许打开检修盖”，节点表达被允许的操作；许可关系由r11体现。"
+      },
+      {
+        "id": "n22",
+        "verdict": "supported",
+        "note": "该分支汇总传感器检查与线缆检查的顺序及非技术前提限制。"
+      },
+      {
+        "id": "n23",
+        "verdict": "supported",
+        "note": "原文明确写“检查传感器”。"
+      },
+      {
+        "id": "n24",
+        "verdict": "supported",
+        "note": "原文明确写“检查线缆”。"
+      },
+      {
+        "id": "n25",
+        "verdict": "supported",
+        "note": "该分支汇总操作员填写记录和管理员确认记录职责。"
+      },
+      {
+        "id": "n26",
+        "verdict": "supported",
+        "note": "原文“维修记录由操作员填写”转换为主动式完整动作节点，语义一致。"
+      },
+      {
+        "id": "n27",
+        "verdict": "supported",
+        "note": "原文明确写管理员只负责确认记录，不替操作员填写。"
+      }
+    ],
+    "relation_verdicts": [
+      {
+        "id": "r0",
+        "verdict": "supported",
+        "note": "“机器人启动—前提是—急停已释放且防护门已关闭”与原文方向一致。"
+      },
+      {
+        "id": "r1",
+        "verdict": "supported",
+        "note": "原文说两项必须同时满足，该边表达合取/同时要求，不表示单向依赖。"
+      },
+      {
+        "id": "r2",
+        "verdict": "supported",
+        "note": "原文说满足条件只表示可以申请启动，方向为条件到可申请。"
+      },
+      {
+        "id": "r3",
+        "verdict": "supported",
+        "note": "原文说满足条件并不保证机器人一定启动，方向为条件到被否定保证。"
+      },
+      {
+        "id": "r4",
+        "verdict": "supported",
+        "note": "读作“申请提交后，控制器还要检查电池电量”，控制器在关系词中体现。"
+      },
+      {
+        "id": "r5",
+        "verdict": "supported",
+        "note": "读作“电池电量不足时拒绝机器人启动”，方向正确。"
+      },
+      {
+        "id": "r6",
+        "verdict": "supported",
+        "note": "原文先进入运行状态后发现障碍物，该边表达时间起点到发现障碍物。"
+      },
+      {
+        "id": "r7",
+        "verdict": "supported",
+        "note": "“发现障碍物会使机器人减速”方向正确。"
+      },
+      {
+        "id": "r8",
+        "verdict": "supported",
+        "note": "“急停被按下会使机器人停止”方向正确。"
+      },
+      {
+        "id": "r9",
+        "verdict": "supported",
+        "note": "“机器人减速不要写成机器人停止”保留否定区别，未把减速等同停止。"
+      },
+      {
+        "id": "r10",
+        "verdict": "supported",
+        "note": "“机器人已经停止且维护钥匙已插入”表达合取条件。"
+      },
+      {
+        "id": "r11",
+        "verdict": "supported",
+        "note": "读作“机器人已经停止且维护钥匙已插入才允许操作员打开检修盖”，方向正确。"
+      },
+      {
+        "id": "r12",
+        "verdict": "supported",
+        "note": "原文说检查传感器之后可以检查线缆，方向正确。"
+      },
+      {
+        "id": "r13",
+        "verdict": "supported",
+        "note": "该负向关系表达“规则没有说传感器检查是线缆检查的技术前提”，未升级为技术前提。"
+      },
+      {
+        "id": "r14",
+        "verdict": "uncertain",
+        "note": "“不替操作员填写”的完整对象应是维修记录/填写维修记录；dst=n26“操作员填写维修记录”使关系读起来重复且端点不完整。"
+      }
+    ],
+    "binding_verdicts": [
+      {
+        "selection_index": 0,
+        "verdict": "supported",
+        "note": "“急停”可补为“急停已释放”和“急停被按下”；n4为含“急停已释放”的组合条件。"
+      },
+      {
+        "selection_index": 1,
+        "verdict": "supported",
+        "note": "“门”在原文中具体为“防护门”，并处于“已关闭”状态；n4含该组合条件。"
+      },
+      {
+        "selection_index": 2,
+        "verdict": "supported",
+        "note": "“减速”对应“机器人减速”，并有“不要写成停止”的限制。"
+      },
+      {
+        "selection_index": 3,
+        "verdict": "supported",
+        "note": "“钥匙”在原文中具体为“维护钥匙已插入”；n20为含该条件的组合条件。"
+      },
+      {
+        "selection_index": 4,
+        "verdict": "supported",
+        "note": "“管理员”对应“管理员只负责确认记录，不替操作员填写”。"
+      }
+    ],
+    "claim_coverage": [
+      {
+        "claim_index": 0,
+        "node_ids": [
+          "n0"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 1,
+        "node_ids": [
+          "n7",
+          "n4",
+          "n2",
+          "n3"
+        ],
+        "relation_ids": [
+          "r0",
+          "r1"
+        ]
+      },
+      {
+        "claim_index": 2,
+        "node_ids": [
+          "n4",
+          "n5"
+        ],
+        "relation_ids": [
+          "r2"
+        ]
+      },
+      {
+        "claim_index": 3,
+        "node_ids": [
+          "n4",
+          "n6"
+        ],
+        "relation_ids": [
+          "r3"
+        ]
+      },
+      {
+        "claim_index": 4,
+        "node_ids": [
+          "n8",
+          "n9"
+        ],
+        "relation_ids": [
+          "r4"
+        ]
+      },
+      {
+        "claim_index": 5,
+        "node_ids": [
+          "n10",
+          "n7"
+        ],
+        "relation_ids": [
+          "r5"
+        ]
+      },
+      {
+        "claim_index": 6,
+        "node_ids": [
+          "n12",
+          "n13",
+          "n14"
+        ],
+        "relation_ids": [
+          "r6",
+          "r7"
+        ]
+      },
+      {
+        "claim_index": 7,
+        "node_ids": [
+          "n15",
+          "n16"
+        ],
+        "relation_ids": [
+          "r8"
+        ]
+      },
+      {
+        "claim_index": 8,
+        "node_ids": [
+          "n14",
+          "n16"
+        ],
+        "relation_ids": [
+          "r9"
+        ]
+      },
+      {
+        "claim_index": 9,
+        "node_ids": [
+          "n20",
+          "n21",
+          "n18",
+          "n19"
+        ],
+        "relation_ids": [
+          "r10",
+          "r11"
+        ]
+      },
+      {
+        "claim_index": 10,
+        "node_ids": [
+          "n23",
+          "n24"
+        ],
+        "relation_ids": [
+          "r12"
+        ]
+      },
+      {
+        "claim_index": 11,
+        "node_ids": [
+          "n23",
+          "n24"
+        ],
+        "relation_ids": [
+          "r13"
+        ]
+      },
+      {
+        "claim_index": 12,
+        "node_ids": [
+          "n26"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 13,
+        "node_ids": [
+          "n27"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 14,
+        "node_ids": [
+          "n27",
+          "n26"
+        ],
+        "relation_ids": []
+      }
+    ],
+    "coverage_ok": false,
+    "issues": [
+      "claim 12（操作员填写维修记录）和 claim 13（管理员只负责确认记录）在清单中标为 relation_required=true，但图中只有完整动作节点 n26/n27，没有相应关系边；若保留清单要求，应补“操作员—填写→维修记录”和“管理员—只负责确认→记录”。",
+      "claim 14（管理员不替操作员填写维修记录）需要关系“管理员—不替操作员填写→维修记录”，但现有 r14 的 dst=n26 是“操作员填写维修记录”，不是被填写的“维修记录”，端点不完整且读起来重复。"
+    ],
+    "reader_issues": [
+      "claim 12 把完整动作节点 n26“操作员填写维修记录”再拆成 relation_required=true，属于过度拆解；n26 已完整表达该单一动作，应将 claim 的 relation_required 改为 false。",
+      "claim 13 把完整动作节点 n27“管理员只负责确认记录”再拆成 relation_required=true，属于过度拆解；n27 已完整表达该单一动作，应将 claim 的 relation_required 改为 false。",
+      "claim 14“管理员不替操作员填写维修记录”也可由 n27 的“不替操作员填写”结合前文“维修记录”完整表达；再标 relation_required=true 有过度拆解之嫌，若保留关系应把对象改为维修记录而非操作员填写动作。"
+    ]
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "claims": [
+    {
+      "subject": "制作一杯热咖啡的完整流程",
+      "predicate": "包含",
+      "object": "准备材料、冲泡咖啡两个核心环节",
+      "quote": "制作一杯热咖啡的完整流程，包含准备材料、冲泡咖啡两个核心环节。",
+      "relation_required": true
+    },
+    {
+      "subject": "准备材料环节",
+      "predicate": "首先准备",
+      "object": "咖啡豆与热水",
+      "quote": "首先准备咖啡豆与热水",
+      "relation_required": true
+    },
+    {
+      "subject": "准备材料时",
+      "predicate": "要",
+      "object": "仔细检查材料品质",
+      "quote": "首先准备咖啡豆与热水，仔细检查材料品质。",
+      "relation_required": true
+    },
+    {
+      "subject": "准备好材料之后",
+      "predicate": "就可以开始",
+      "object": "冲泡咖啡",
+      "quote": "准备好材料之后，就可以开始冲泡咖啡。",
+      "relation_required": true
+    },
+    {
+      "subject": "冲泡时",
+      "predicate": "将热水缓缓接触",
+      "object": "研磨好的咖啡豆",
+      "quote": "冲泡时将热水缓缓接触研磨好的咖啡豆",
+      "relation_required": true
+    },
+    {
+      "subject": "热水",
+      "predicate": "能够溶解",
+      "object": "咖啡内部的风味物质",
+      "quote": "热水能够溶解咖啡内部的风味物质",
+      "relation_required": true
+    },
+    {
+      "subject": "热水能够溶解咖啡内部的风味物质",
+      "predicate": "所以会得到",
+      "object": "香气浓郁的咖啡原液",
+      "quote": "因为热水能够溶解咖啡内部的风味物质，所以会得到香气浓郁的咖啡原液。",
+      "relation_required": true
+    },
+    {
+      "subject": "得到咖啡原液之后",
+      "predicate": "可以根据个人口味加入少量糖或者牛奶进行",
+      "object": "调味",
+      "quote": "得到咖啡原液之后，可以根据个人口味加入少量糖或者牛奶进行调味。",
+      "relation_required": true
+    },
+    {
+      "subject": "调味完成",
+      "predicate": "就",
+      "object": "一杯热咖啡制作完成",
+      "quote": "调味完成，一杯热咖啡就制作完成。",
+      "relation_required": true
+    },
+    {
+      "subject": "整个过程",
+      "predicate": "需要控制",
+      "object": "水温",
+      "quote": "整个过程需要控制水温",
+      "relation_required": true
+    },
+    {
+      "subject": "水温过高",
+      "predicate": "会破坏",
+      "object": "咖啡香气",
+      "quote": "水温过高会破坏咖啡香气",
+      "relation_required": true
+    },
+    {
+      "subject": "水温过低",
+      "predicate": "则难以萃取",
+      "object": "足够风味",
+      "quote": "水温过低则难以萃取足够风味",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "整个过程需要控制水温，水温过高会破坏咖啡香气，水温过低则难以萃取足够风味。",
+      "note": "水温在文中是控制对象；只以过高、过低描述后果，未给出具体温度数值或区间。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "得到咖啡原液之后，可以根据个人口味加入少量糖或者牛奶进行调味。",
+      "note": "糖在文中是可选调味材料，与牛奶用“或者”连接；添加依据个人口味，用量为少量。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "因为热水能够溶解咖啡内部的风味物质，所以会得到香气浓郁的咖啡原液。",
+      "note": "咖啡原液在文中由热水溶解咖啡内部风味物质后得到，并被描述为香气浓郁；后文可在得到原液后调味。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "首先准备咖啡豆与热水，仔细检查材料品质。准备好材料之后，就可以开始冲泡咖啡。冲泡时将热水缓缓接触研磨好的咖啡豆",
+      "note": "咖啡豆在文中是准备材料之一；需仔细检查品质，准备好材料后才开始冲泡，并在冲泡时以研磨好的状态与热水接触；文中未说明研磨方式或用量。"
+    }
+  ]
+}

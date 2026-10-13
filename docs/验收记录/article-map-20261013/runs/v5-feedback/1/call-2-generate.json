@@ -1,0 +1,409 @@
+{
+  "root": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "parent": null,
+      "label": "项目小组循环改进流程",
+      "kind": "branch",
+      "quote": "项目小组采用循环改进流程：先整理需求，再制作原型，然后邀请三位用户试用。"
+    },
+    {
+      "id": "n1",
+      "parent": "n0",
+      "label": "循环改进流程",
+      "kind": "branch",
+      "quote": "项目小组采用循环改进流程"
+    },
+    {
+      "id": "n2",
+      "parent": "n1",
+      "label": "整理需求",
+      "kind": "concept",
+      "quote": "先整理需求"
+    },
+    {
+      "id": "n3",
+      "parent": "n1",
+      "label": "制作原型",
+      "kind": "concept",
+      "quote": "再制作原型"
+    },
+    {
+      "id": "n4",
+      "parent": "n1",
+      "label": "邀请三位用户试用",
+      "kind": "concept",
+      "quote": "然后邀请三位用户试用"
+    },
+    {
+      "id": "n5",
+      "parent": "n1",
+      "label": "问题清单与需求修订",
+      "kind": "branch",
+      "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求"
+    },
+    {
+      "id": "n6",
+      "parent": "n5",
+      "label": "试用中出现的困难",
+      "kind": "concept",
+      "quote": "试用中出现的困难"
+    },
+    {
+      "id": "n7",
+      "parent": "n5",
+      "label": "问题清单",
+      "kind": "concept",
+      "quote": "问题清单"
+    },
+    {
+      "id": "n8",
+      "parent": "n5",
+      "label": "修订需求",
+      "kind": "concept",
+      "quote": "问题清单用于修订需求"
+    },
+    {
+      "id": "n9",
+      "parent": "n5",
+      "label": "下一轮原型制作",
+      "kind": "concept",
+      "quote": "修订后的需求再进入下一轮原型制作"
+    },
+    {
+      "id": "n10",
+      "parent": "n1",
+      "label": "反馈循环",
+      "kind": "concept",
+      "quote": "这是反馈循环"
+    },
+    {
+      "id": "n11",
+      "parent": "n1",
+      "label": "一次性完成后就结束的直线",
+      "kind": "concept",
+      "quote": "不是一次性完成后就结束的直线"
+    },
+    {
+      "id": "n12",
+      "parent": "n0",
+      "label": "问题分类处理",
+      "kind": "branch",
+      "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。"
+    },
+    {
+      "id": "n13",
+      "parent": "n12",
+      "label": "问题涉及操作步骤",
+      "kind": "concept",
+      "quote": "若问题涉及操作步骤"
+    },
+    {
+      "id": "n14",
+      "parent": "n12",
+      "label": "简化步骤",
+      "kind": "concept",
+      "quote": "小组优先简化步骤"
+    },
+    {
+      "id": "n15",
+      "parent": "n12",
+      "label": "问题仅涉及文字看不懂",
+      "kind": "concept",
+      "quote": "若问题仅涉及文字看不懂"
+    },
+    {
+      "id": "n16",
+      "parent": "n12",
+      "label": "修改提示语",
+      "kind": "concept",
+      "quote": "可以先修改提示语"
+    },
+    {
+      "id": "n17",
+      "parent": "n12",
+      "label": "不要求先改步骤再改提示语",
+      "kind": "concept",
+      "quote": "不要求先改步骤再改提示语"
+    },
+    {
+      "id": "n18",
+      "parent": "n0",
+      "label": "修改后的验证与解决",
+      "kind": "branch",
+      "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。"
+    },
+    {
+      "id": "n19",
+      "parent": "n18",
+      "label": "修改完成",
+      "kind": "concept",
+      "quote": "修改完成后"
+    },
+    {
+      "id": "n20",
+      "parent": "n18",
+      "label": "再次试用",
+      "kind": "concept",
+      "quote": "需要再次试用"
+    },
+    {
+      "id": "n21",
+      "parent": "n18",
+      "label": "仅完成修改",
+      "kind": "concept",
+      "quote": "仅完成修改"
+    },
+    {
+      "id": "n22",
+      "parent": "n18",
+      "label": "问题已经解决",
+      "kind": "concept",
+      "quote": "问题已经解决"
+    },
+    {
+      "id": "n23",
+      "parent": "n18",
+      "label": "再次试用未发现同一问题且三位用户都确认理解",
+      "kind": "concept",
+      "quote": "再次试用未发现同一问题且三位用户都确认理解"
+    },
+    {
+      "id": "n24",
+      "parent": "n18",
+      "label": "把该问题标记为已解决",
+      "kind": "concept",
+      "quote": "小组才把该问题标记为已解决"
+    },
+    {
+      "id": "n25",
+      "parent": "n0",
+      "label": "原型制作中的取舍",
+      "kind": "branch",
+      "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计，但不能删掉尚未解决的问题记录。"
+    },
+    {
+      "id": "n26",
+      "parent": "n25",
+      "label": "原型制作中",
+      "kind": "concept",
+      "quote": "原型制作中"
+    },
+    {
+      "id": "n27",
+      "parent": "n25",
+      "label": "与本轮问题无关的装饰设计",
+      "kind": "concept",
+      "quote": "与本轮问题无关的装饰设计"
+    },
+    {
+      "id": "n28",
+      "parent": "n25",
+      "label": "尚未解决的问题记录",
+      "kind": "concept",
+      "quote": "尚未解决的问题记录"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r0",
+      "src": "n2",
+      "dst": "n3",
+      "label": "先进行，再",
+      "quote": "先整理需求，再制作原型"
+    },
+    {
+      "id": "r1",
+      "src": "n3",
+      "dst": "n4",
+      "label": "然后",
+      "quote": "再制作原型，然后邀请三位用户试用"
+    },
+    {
+      "id": "r2",
+      "src": "n6",
+      "dst": "n7",
+      "label": "会形成",
+      "quote": "试用中出现的困难会形成问题清单"
+    },
+    {
+      "id": "r3",
+      "src": "n7",
+      "dst": "n8",
+      "label": "用于",
+      "quote": "问题清单用于修订需求"
+    },
+    {
+      "id": "r4",
+      "src": "n8",
+      "dst": "n9",
+      "label": "再进入",
+      "quote": "修订后的需求再进入下一轮原型制作"
+    },
+    {
+      "id": "r5",
+      "src": "n1",
+      "dst": "n10",
+      "label": "是",
+      "quote": "这是反馈循环"
+    },
+    {
+      "id": "r6",
+      "src": "n10",
+      "dst": "n11",
+      "label": "不是",
+      "quote": "这是反馈循环，不是一次性完成后就结束的直线"
+    },
+    {
+      "id": "r7",
+      "src": "n13",
+      "dst": "n14",
+      "label": "优先简化",
+      "quote": "若问题涉及操作步骤，小组优先简化步骤"
+    },
+    {
+      "id": "r8",
+      "src": "n15",
+      "dst": "n16",
+      "label": "可先修改",
+      "quote": "若问题仅涉及文字看不懂，可以先修改提示语"
+    },
+    {
+      "id": "r9",
+      "src": "n14",
+      "dst": "n16",
+      "label": "针对不同问题",
+      "quote": "两种处理针对不同问题，不要求先改步骤再改提示语"
+    },
+    {
+      "id": "r10",
+      "src": "n19",
+      "dst": "n20",
+      "label": "之后需要",
+      "quote": "修改完成后需要再次试用"
+    },
+    {
+      "id": "r11",
+      "src": "n21",
+      "dst": "n22",
+      "label": "不能证明",
+      "quote": "仅完成修改不能证明问题已经解决"
+    },
+    {
+      "id": "r12",
+      "src": "n23",
+      "dst": "n24",
+      "label": "才标记为已解决",
+      "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决"
+    },
+    {
+      "id": "r13",
+      "src": "n26",
+      "dst": "n27",
+      "label": "可以暂缓",
+      "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计"
+    },
+    {
+      "id": "r14",
+      "src": "n26",
+      "dst": "n28",
+      "label": "不能删掉",
+      "quote": "但不能删掉尚未解决的问题记录"
+    },
+    {
+      "id": "r15",
+      "src": "n4",
+      "dst": "n6",
+      "label": "试用中出现",
+      "quote": "试用中出现的困难"
+    }
+  ],
+  "bindings": [
+    {
+      "selection_index": 0,
+      "node_ids": [
+        "n2",
+        "n8",
+        "n9"
+      ],
+      "suggest_exclude": false,
+      "note": "“需求”分别出现在整理需求、修订需求和修订后的需求进入下一轮原型制作中，因此关联到这些完整动作或概念。",
+      "candidates": [
+        {
+          "node_id": "n2",
+          "quote": "先整理需求"
+        },
+        {
+          "node_id": "n8",
+          "quote": "问题清单用于修订需求"
+        },
+        {
+          "node_id": "n9",
+          "quote": "修订后的需求再进入下一轮原型制作"
+        }
+      ]
+    },
+    {
+      "selection_index": 1,
+      "node_ids": [
+        "n7"
+      ],
+      "suggest_exclude": false,
+      "note": "“清单”补全为原文中的“问题清单”，并作为问题修订需求的来源概念。",
+      "candidates": [
+        {
+          "node_id": "n7",
+          "quote": "问题清单"
+        }
+      ]
+    },
+    {
+      "selection_index": 2,
+      "node_ids": [
+        "n16"
+      ],
+      "suggest_exclude": false,
+      "note": "“提示语”补全为原文动作“修改提示语”，且保留了“可以先修改”的条件限制。",
+      "candidates": [
+        {
+          "node_id": "n16",
+          "quote": "可以先修改提示语"
+        }
+      ]
+    },
+    {
+      "selection_index": 3,
+      "node_ids": [
+        "n20",
+        "n23"
+      ],
+      "suggest_exclude": false,
+      "note": "“再次”分别关联修改完成后需要再次试用，以及再次试用未发现同一问题且三位用户都确认理解的合取条件。",
+      "candidates": [
+        {
+          "node_id": "n20",
+          "quote": "需要再次试用"
+        },
+        {
+          "node_id": "n23",
+          "quote": "再次试用未发现同一问题且三位用户都确认理解"
+        }
+      ]
+    },
+    {
+      "selection_index": 4,
+      "node_ids": [
+        "n24"
+      ],
+      "suggest_exclude": false,
+      "note": "“已解决”出现在只有满足再次试用和用户确认理解的条件后，小组才把该问题标记为已解决。",
+      "candidates": [
+        {
+          "node_id": "n24",
+          "quote": "小组才把该问题标记为已解决"
+        }
+      ]
+    }
+  ]
+}

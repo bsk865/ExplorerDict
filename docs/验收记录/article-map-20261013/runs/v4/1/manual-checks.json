@@ -1,0 +1,78 @@
+{
+  "case_id": "seed-process",
+  "model_approved": true,
+  "codex_independent_accepted": true,
+  "reviewer": "Codex independently compares source, nodes, labels, directions and qualifiers; not a human review",
+  "rounds": 3,
+  "checks": [
+    {
+      "id": "stages",
+      "quote": "育苗记录包含准备容器、播种和观察三个阶段。",
+      "criterion": "明确三个阶段且语义包含关系可见",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r0/r1/r2 explicitly contain preparation, sowing and observation stages."
+    },
+    {
+      "id": "clean",
+      "quote": "清洗完成后可以装入基质。",
+      "criterion": "清洗完成→可装基质，不能升级成唯一必需前提",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r3 keeps 清洗完成后可以; no only/necessary prerequisite is introduced."
+    },
+    {
+      "id": "sow",
+      "quote": "装好基质后，把种子放进浅孔并覆上一层薄土。",
+      "criterion": "装基质之后播种覆土，动作完整",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r4 connects 装好基质 to placing seeds in shallow holes and covering thin soil."
+    },
+    {
+      "id": "flood",
+      "quote": "如果盘底持续积水，记录要求先排水，再暂停当天的浇水。",
+      "criterion": "持续积水条件→先排水→暂停当天浇水，条件保留",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r7 records continuing waterlogging -> drainage; r8 then pauses watering that day."
+    },
+    {
+      "id": "and",
+      "quote": "只有基质表层变干且盘底没有积水时，才需要再次浇水。",
+      "criterion": "表层变干与无积水是共同必要条件，不能任一单独触发",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n16 keeps BOTH dry surface and no waterlogging; r9 uses 才需要."
+    },
+    {
+      "id": "options",
+      "quote": "若出苗速度较慢，可以继续观察两天，也可以请管理员检查种子；",
+      "criterion": "慢出苗下两种可选处理，不画成强制连续步骤",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r10/r11 retain slow-emergence condition and 可以/也可以; r12 is explicitly an alternative, n22 says no compulsory choice."
+    },
+    {
+      "id": "record",
+      "quote": "每天需要记录湿度，出苗后再记录株高。",
+      "criterion": "每天湿度记录，出苗后株高记录，时间限定",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n24 keeps 每天需要记录湿度; r13 starts at 出苗 and says 之后再 -> 记录株高."
+    },
+    {
+      "id": "limits",
+      "quote": "株高记录可用于比较同一批幼苗的变化，不能仅凭一天的株高判定种子品质。",
+      "criterion": "比较变化作用及不能凭一天株高判定品质都可见",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r14 retains same-batch comparison; r15 has correct subject 仅凭一天的株高 -> 不能判定 -> 种子品质."
+    }
+  ],
+  "issues": [],
+  "readability_notes": [
+    "32 nodes for 231 Chinese characters; temporal wording is repeated in r3/r4, so readability can improve without changing the semantics."
+  ],
+  "scope": "Frozen check coverage and additional full-edge review; one output is not a population accuracy estimate"
+}

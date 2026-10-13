@@ -1,0 +1,7 @@
+{
+  "reason": "首篇三轮失败已复现阅读纠错缺失；修复后的v2六篇完整实测正在运行，停止继续调用旧模块，保留所有负证据。",
+  "completed_cases": 1,
+  "case_2": "已发出独立阅读请求，主动停止，无响应结果，不计为模型质量失败。",
+  "other_cases": "未运行",
+  "old_process_module_frozen": true
+}

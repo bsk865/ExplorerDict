@@ -1,0 +1,80 @@
+{
+  "case_id": "robot-conditions",
+  "model_approved": false,
+  "codex_independent_accepted": false,
+  "reviewer": "Codex independently compares final unapproved draft; not a human review",
+  "reviewed_file": "attempt-3.json",
+  "checks": [
+    {
+      "id": "startup",
+      "quote": "机器人启动的前提是急停已释放且防护门已关闭，两项必须同时满足；",
+      "criterion": "急停释放且门关闭共同必要条件，完整补全门",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r2/r3 state necessary prerequisites (前提之一); r4/n10 explicitly require both together, n11/r5 reference the combined conditions."
+    },
+    {
+      "id": "permission",
+      "quote": "满足它们只表示可以申请启动，并不保证机器人一定启动。",
+      "criterion": "可申请不保证启动，不能条件充分化",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r5 only permits applying; r6 does not guarantee startup."
+    },
+    {
+      "id": "battery",
+      "quote": "电量不足时拒绝启动。",
+      "criterion": "电量不足→拒绝启动，不能倒置",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r8 电量不足时 -> 拒绝 -> 启动 retains conditional direction."
+    },
+    {
+      "id": "obstacle",
+      "quote": "发现障碍物会使机器人减速，而急停被按下会使机器人停止；",
+      "criterion": "障碍→减速、按急停→停止分开",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r9 obstacle -> slows, r10 emergency stop pressed -> stops; n35 preserves the distinction."
+    },
+    {
+      "id": "maintenance",
+      "quote": "操作员只有在机器人已经停止且维护钥匙已插入时，才允许打开检修盖。",
+      "criterion": "停止且插钥匙共同条件→允许开盖",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n40/r12 preserve stopped AND maintenance key inserted jointly before opening inspection cover."
+    },
+    {
+      "id": "order",
+      "quote": "检查传感器之后可以检查线缆，规则没有说传感器检查是线缆检查的技术前提。",
+      "criterion": "检查先后可选，不误造技术依赖",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r13 preserves optional checking order; r14 says rule has not stated a technical prerequisite, rather than denying the fact."
+    },
+    {
+      "id": "roles",
+      "quote": "维修记录由操作员填写，管理员只负责确认记录，不替操作员填写。",
+      "criterion": "操作员填写，管理员确认且不代填",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r15 operator writes records; r16/r17 administrator confirms only and does not write in their place."
+    }
+  ],
+  "issues": [
+    {
+      "relation_id": "r11",
+      "finding": "进入运行状态后 — 之后 → 发现障碍物 creates an unconditional sequence to discovering obstacles. The source makes obstacle detection a conditional event during operation, not the required next event."
+    },
+    {
+      "type": "external_block",
+      "finding": "Final review returned HTTP 402 Insufficient Balance. Final draft is independently read, but no complete production review or approved graph exists."
+    }
+  ],
+  "process_issues": [
+    "未知错误 (HTTP 402)：HTTP 402：{\"error\":{\"message\":\"Insufficient Balance (request_id: 2ecc70cb-049d-4c0a-a0b1-ec239b4bd104)\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\""
+  ],
+  "published_as_approved": false,
+  "scope": "A draft may cover frozen checks and still fail extra-edge, quote, binding or final-review checks. No model-review completion inferred after HTTP 402."
+}

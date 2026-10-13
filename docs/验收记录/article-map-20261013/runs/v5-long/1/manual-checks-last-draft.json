@@ -1,0 +1,145 @@
+{
+  "case_id": "multi-section",
+  "model_approved": false,
+  "codex_independent_accepted": false,
+  "reviewer": "Codex independently compares final unapproved draft; not a human review",
+  "reviewed_file": "attempt-2.json",
+  "checks": [
+    {
+      "id": "scope",
+      "quote": "下面的规定只适用于这次试行，不表示其它机构也采用相同规则。",
+      "criterion": "保留试行适用范围",
+      "relation_required": false,
+      "passed": true,
+      "evidence": "n0/n10/n11 retain trial-only applicability and no assertion about other institutions."
+    },
+    {
+      "id": "entry",
+      "quote": "书页完整且封面没有霉斑的图书可以进入待分类区；只满足其中一项仍不能入区。",
+      "criterion": "完整且无霉斑共同条件，可入而非必须入",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n22/r2 require complete pages AND no mildew; r3 rejects one condition alone; 可以 retained."
+    },
+    {
+      "id": "priority",
+      "quote": "如果同一本书同时存在两种问题，先按暂不入库处理，不必先送去修补。",
+      "criterion": "缺页+霉斑时暂不入库优先，非先修补",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r4/r5 preserve both defects -> temporarily no entry first, not repair first."
+    },
+    {
+      "id": "return",
+      "quote": "修补完成并通过再次检查后，图书才可以回到待分类区。",
+      "criterion": "修补且检查通过后可返分类",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n30/r6 require repair completion AND recheck before returning to waiting classification."
+    },
+    {
+      "id": "tags",
+      "quote": "一本书也可以贴多个检索标签，但检索标签不等于主要类别，不要把贴标签画成更换主要类别。",
+      "criterion": "检索标签与主要类别区别，无虚构更换",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r8 labels do not equal main category; n44 explicitly prohibits treating labeling as category replacement."
+    },
+    {
+      "id": "classify",
+      "quote": "完成分类之后，管理员记录架位，志愿者再把书放到对应书架。",
+      "criterion": "分类→管理员记架位→志愿者上架，职责保持",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r10/r11 preserve classification -> administrator records shelf -> volunteer shelves."
+    },
+    {
+      "id": "borrow",
+      "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。",
+      "criterion": "无超期且≤3共同条件→允许借阅",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n61/r13 preserve no overdue books AND no more than three jointly before permission."
+    },
+    {
+      "id": "early",
+      "quote": "提前归还可以直接登记，不需要等到期日期。",
+      "criterion": "可提前登记不必等到期",
+      "relation_required": true,
+      "passed": false,
+      "evidence": "n65 contains the full early-return permission and no need to wait, but no semantic edge is drawn for either required relation."
+    },
+    {
+      "id": "reservation",
+      "quote": "如果已有其他读者预约该书，则拒绝续借。",
+      "criterion": "他人预约→拒绝续借",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r16 other-reader reservation -> rejection of renewal."
+    },
+    {
+      "id": "not-guaranteed",
+      "quote": "没有预约只表示可以继续审查申请，不表示续借一定获批。",
+      "criterion": "无预约可继续审查不保证批准",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r17/r18 no reservation only allows further review and does not guarantee approval."
+    },
+    {
+      "id": "intent",
+      "quote": "这份记录不能用来认定读者一定故意损坏。",
+      "criterion": "记录不能证明故意",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r20 damage record cannot determine deliberate damage."
+    },
+    {
+      "id": "cycle",
+      "quote": "修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区。",
+      "criterion": "损坏处理经修补复查回分类，循环可表达",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n85/n86 and r21 preserve administrator optional repair, reused repair/recheck method and possible repeated return; r6 identifies the shared waiting-classification target. Visual return path remains fragmented."
+    },
+    {
+      "id": "quality",
+      "quote": "比较记录有助于发现拥挤位置，但不能仅凭借阅次数判断图书质量。",
+      "criterion": "比较发现拥挤，次数不能判质量",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r22 comparison helps find congestion; r23 counts alone cannot determine quality."
+    },
+    {
+      "id": "separate",
+      "quote": "海报设计与续借审查没有直接关系。",
+      "criterion": "海报保留独立分支，不强造续借语义关系",
+      "relation_required": false,
+      "passed": true,
+      "evidence": "n94/n95 remain in a separate branch; r24 explicitly says no direct relation to renewal review."
+    }
+  ],
+  "issues": [
+    {
+      "node_id": "n6",
+      "finding": "Branch 后续评估与无关事项 generalizes source 没有直接关系 into 无关事项, losing the qualifier."
+    },
+    {
+      "relation_id": "r15",
+      "finding": "Source endpoint 允许办理借阅 is permission, whereas 办理完成后 requires an actual completed borrowing event; endpoint should distinguish permission from completed processing."
+    },
+    {
+      "selection_index": 5,
+      "node_id": "n96",
+      "finding": "海报 highlights 续借审查 merely because it is the other endpoint in the same quoted sentence. Likewise 标签 binds 主要类别. Selected concepts should not automatically highlight neighboring distinct concepts."
+    },
+    {
+      "type": "external_block",
+      "finding": "First review returned incomplete JSON; second review returned HTTP 402 Insufficient Balance. No complete review or approved graph exists."
+    }
+  ],
+  "process_issues": [
+    "未知错误 (HTTP 402)：HTTP 402：{\"error\":{\"message\":\"Insufficient Balance (request_id: 0bf473ad-bc92-452b-aaa6-a59d8dbcbb80)\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\""
+  ],
+  "published_as_approved": false,
+  "scope": "A draft may cover frozen checks and still fail extra-edge, quote, binding or final-review checks. No model-review completion inferred after HTTP 402."
+}

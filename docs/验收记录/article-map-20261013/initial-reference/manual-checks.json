@@ -1,0 +1,52 @@
+{
+  "checked_at": "2026-10-13",
+  "scope": "三份测试材料的已保存模型结果；不代表任意文章准确率或桌面交互验收",
+  "checks": [
+    {
+      "fixture": "测试.docx",
+      "approved_file": "1/approved.json",
+      "result": "通过",
+      "observed": [
+        "准备材料与冲泡咖啡由原文明说的包含关系连接",
+        "准备完成后可开始冲泡，保留可选性",
+        "热水溶解风味物质与得到原液分别表达",
+        "糖或牛奶的个人口味、少量、可选调味均可见",
+        "过高破坏香气与过低难萃取分别表达",
+        "所有划选词对应原文支持的完整概念或动作"
+      ]
+    },
+    {
+      "fixture": "测试2.docx",
+      "approved_file": "2/approved.json",
+      "result": "通过",
+      "observed": [
+        "步骤关系表达先后，没有升级为必须依赖",
+        "告知家人包含路线与预计返程时间",
+        "成熟步道优先与野路禁止分别可见",
+        "终点记录、回家整理和遗失检查均保留",
+        "背包实际关联整理背包，野路关联带否定的完整动作",
+        "首先建议排除但仍保留"
+      ]
+    },
+    {
+      "fixture": "测试3.docx",
+      "approved_file": "3/approved.json",
+      "result": "通过",
+      "observed": [
+        "规律阅读能够提升理解，保留能够",
+        "陌生词汇与表达对应速度慢慢提高",
+        "信息抓取锻炼对应更容易抓住核心观点",
+        "走马观花浏览且不思考共同构成效果折扣的条件，没有拆为独立充分条件",
+        "复盘及持续积累对应思维提升逐步显现",
+        "核心观点、走马观花、思维提升实际关联完整动作或条件"
+      ]
+    }
+  ],
+  "layout_before_redesign": {
+    "svg_rasterizer": "Sharp",
+    "all_labels_present": true,
+    "routes_clear_of_unrelated_cards": true,
+    "labels_clear_of_cards": true,
+    "desktop_png_capture_verified": false
+  }
+}

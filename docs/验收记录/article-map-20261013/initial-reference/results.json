@@ -1,0 +1,23 @@
+[
+  {
+    "file": "测试.docx",
+    "approved": true,
+    "rounds": 1,
+    "nodes": 20,
+    "relations": 16
+  },
+  {
+    "file": "测试2.docx",
+    "approved": true,
+    "rounds": 2,
+    "nodes": 29,
+    "relations": 17
+  },
+  {
+    "file": "测试3.docx",
+    "approved": true,
+    "rounds": 1,
+    "nodes": 19,
+    "relations": 8
+  }
+]

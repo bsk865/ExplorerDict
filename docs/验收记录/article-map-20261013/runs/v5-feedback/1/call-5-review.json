@@ -1,0 +1,425 @@
+{
+  "node_verdicts": [
+    {
+      "id": "n0",
+      "verdict": "supported",
+      "note": "原文首句明确项目小组采用循环改进流程。"
+    },
+    {
+      "id": "n1",
+      "verdict": "supported",
+      "note": "原文有“循环改进流程”这一概念。"
+    },
+    {
+      "id": "n2",
+      "verdict": "supported",
+      "note": "原文说“先整理需求”。"
+    },
+    {
+      "id": "n3",
+      "verdict": "supported",
+      "note": "原文说“再制作原型”。"
+    },
+    {
+      "id": "n4",
+      "verdict": "supported",
+      "note": "原文说“然后邀请三位用户试用”。"
+    },
+    {
+      "id": "n5",
+      "verdict": "supported",
+      "note": "原文有困难形成问题清单、问题清单用于修订需求的连续表述。"
+    },
+    {
+      "id": "n6",
+      "verdict": "supported",
+      "note": "原文说“试用中出现的困难”。"
+    },
+    {
+      "id": "n7",
+      "verdict": "supported",
+      "note": "原文说困难会形成“问题清单”。"
+    },
+    {
+      "id": "n8",
+      "verdict": "supported",
+      "note": "原文说“问题清单用于修订需求”。"
+    },
+    {
+      "id": "n9",
+      "verdict": "supported",
+      "note": "原文说修订后的需求再进入“下一轮原型制作”。"
+    },
+    {
+      "id": "n10",
+      "verdict": "supported",
+      "note": "原文说“这是反馈循环”。"
+    },
+    {
+      "id": "n11",
+      "verdict": "supported",
+      "note": "原文以“不是一次性完成后就结束的直线”作为否定对象，r6 保留否定。"
+    },
+    {
+      "id": "n12",
+      "verdict": "supported",
+      "note": "原文按操作步骤问题和文字看不懂问题分别处理。"
+    },
+    {
+      "id": "n13",
+      "verdict": "supported",
+      "note": "原文说“若问题涉及操作步骤”。"
+    },
+    {
+      "id": "n14",
+      "verdict": "supported",
+      "note": "原文说“小组优先简化步骤”。"
+    },
+    {
+      "id": "n15",
+      "verdict": "supported",
+      "note": "原文说“若问题仅涉及文字看不懂”。"
+    },
+    {
+      "id": "n16",
+      "verdict": "supported",
+      "note": "原文说“可以先修改提示语”。"
+    },
+    {
+      "id": "n17",
+      "verdict": "supported",
+      "note": "原文明确“不要求先改步骤再改提示语”。"
+    },
+    {
+      "id": "n18",
+      "verdict": "supported",
+      "note": "原文说修改完成后需再次试用，仅完成修改不能证明解决，并给出才标记已解决的条件。"
+    },
+    {
+      "id": "n19",
+      "verdict": "supported",
+      "note": "原文说“修改完成后”。"
+    },
+    {
+      "id": "n20",
+      "verdict": "supported",
+      "note": "原文说“需要再次试用”。"
+    },
+    {
+      "id": "n21",
+      "verdict": "supported",
+      "note": "原文说“仅完成修改”。"
+    },
+    {
+      "id": "n22",
+      "verdict": "supported",
+      "note": "原文以“问题已经解决”作为不能证明的对象，并在后文说标记为已解决。"
+    },
+    {
+      "id": "n23",
+      "verdict": "supported",
+      "note": "原文将“再次试用未发现同一问题”与“三位用户都确认理解”作为合取条件，未拆成各自独立充分条件。"
+    },
+    {
+      "id": "n24",
+      "verdict": "supported",
+      "note": "原文说“小组才把该问题标记为已解决”。"
+    },
+    {
+      "id": "n25",
+      "verdict": "supported",
+      "note": "原文说原型制作中可暂缓无关装饰，但不能删掉未解决问题记录。"
+    },
+    {
+      "id": "n26",
+      "verdict": "supported",
+      "note": "原文说“原型制作中可以暂缓……但不能删掉……”。"
+    },
+    {
+      "id": "n27",
+      "verdict": "supported",
+      "note": "原文说“与本轮问题无关的装饰设计”。"
+    },
+    {
+      "id": "n28",
+      "verdict": "supported",
+      "note": "原文说“尚未解决的问题记录”。"
+    }
+  ],
+  "relation_verdicts": [
+    {
+      "id": "r0",
+      "verdict": "supported",
+      "note": "方向正确：整理需求先于制作原型。"
+    },
+    {
+      "id": "r1",
+      "verdict": "supported",
+      "note": "方向正确：制作原型后邀请三位用户试用。"
+    },
+    {
+      "id": "r2",
+      "verdict": "supported",
+      "note": "方向正确：试用中出现的困难会形成问题清单。"
+    },
+    {
+      "id": "r3",
+      "verdict": "supported",
+      "note": "方向正确：问题清单用于修订需求。"
+    },
+    {
+      "id": "r4",
+      "verdict": "uncertain",
+      "note": "原文是“修订后的需求再进入下一轮原型制作”，当前源端 n8 为“修订需求”，更像修订动作而非“修订后的需求”，动作与结果端点不一致。"
+    },
+    {
+      "id": "r5",
+      "verdict": "supported",
+      "note": "原文“这是反馈循环”指所述循环改进流程，方向可成立。"
+    },
+    {
+      "id": "r6",
+      "verdict": "supported",
+      "note": "否定方向正确：反馈循环不是一次性完成后就结束的直线。"
+    },
+    {
+      "id": "r7",
+      "verdict": "supported",
+      "note": "条件与动作方向正确：问题涉及操作步骤则优先简化步骤。"
+    },
+    {
+      "id": "r8",
+      "verdict": "supported",
+      "note": "条件与动作方向正确：仅涉及文字看不懂可以先修改提示语，保留“仅”和“可以先”。"
+    },
+    {
+      "id": "r10",
+      "verdict": "supported",
+      "note": "方向正确：修改完成之后需要再次试用。"
+    },
+    {
+      "id": "r11",
+      "verdict": "supported",
+      "note": "方向正确：仅完成修改不能证明问题已经解决。"
+    },
+    {
+      "id": "r12",
+      "verdict": "supported",
+      "note": "方向正确且合取条件完整：再次试用未发现同一问题且三位用户都确认理解，才标记为已解决。"
+    },
+    {
+      "id": "r13",
+      "verdict": "supported",
+      "note": "原文说原型制作中可以暂缓与本轮问题无关的装饰设计。"
+    },
+    {
+      "id": "r14",
+      "verdict": "supported",
+      "note": "原文说但不能删掉尚未解决的问题记录。"
+    },
+    {
+      "id": "r15",
+      "verdict": "supported",
+      "note": "原文邀请三位用户试用后，试用中出现的困难；方向为试用事件到试用中困难。"
+    }
+  ],
+  "binding_verdicts": [
+    {
+      "selection_index": 0,
+      "verdict": "supported",
+      "note": "“需求”关联到整理需求、修订需求及修订后的需求进入下一轮原型制作的节点，定位可成立。"
+    },
+    {
+      "selection_index": 1,
+      "verdict": "supported",
+      "note": "“清单”补全为“问题清单”，关联 n7 正确。"
+    },
+    {
+      "selection_index": 2,
+      "verdict": "supported",
+      "note": "“提示语”补全为“修改提示语”，关联 n16 正确并保留可先修改语境。"
+    },
+    {
+      "selection_index": 3,
+      "verdict": "supported",
+      "note": "“再次”关联到再次试用和再次试用未发现同一问题且三位用户都确认理解，定位正确。"
+    },
+    {
+      "selection_index": 4,
+      "verdict": "uncertain",
+      "note": "“已解决”还出现在 n22“问题已经解决”中；当前只关联 n24“标记为已解决”，遗漏了作为“不能证明”宾语的状态节点。"
+    }
+  ],
+  "claim_coverage": [
+    {
+      "claim_index": 0,
+      "node_ids": [
+        "n0",
+        "n1"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 1,
+      "node_ids": [
+        "n2",
+        "n3"
+      ],
+      "relation_ids": [
+        "r0"
+      ]
+    },
+    {
+      "claim_index": 2,
+      "node_ids": [
+        "n3",
+        "n4"
+      ],
+      "relation_ids": [
+        "r1"
+      ]
+    },
+    {
+      "claim_index": 3,
+      "node_ids": [
+        "n4"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 4,
+      "node_ids": [
+        "n6",
+        "n7"
+      ],
+      "relation_ids": [
+        "r2"
+      ]
+    },
+    {
+      "claim_index": 5,
+      "node_ids": [
+        "n7",
+        "n8"
+      ],
+      "relation_ids": [
+        "r3"
+      ]
+    },
+    {
+      "claim_index": 6,
+      "node_ids": [
+        "n8",
+        "n9"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 7,
+      "node_ids": [
+        "n10",
+        "n11"
+      ],
+      "relation_ids": [
+        "r6"
+      ]
+    },
+    {
+      "claim_index": 8,
+      "node_ids": [
+        "n13",
+        "n14"
+      ],
+      "relation_ids": [
+        "r7"
+      ]
+    },
+    {
+      "claim_index": 9,
+      "node_ids": [
+        "n15",
+        "n16"
+      ],
+      "relation_ids": [
+        "r8"
+      ]
+    },
+    {
+      "claim_index": 10,
+      "node_ids": [
+        "n13",
+        "n14",
+        "n15",
+        "n16"
+      ],
+      "relation_ids": [
+        "r7",
+        "r8"
+      ]
+    },
+    {
+      "claim_index": 11,
+      "node_ids": [
+        "n17"
+      ],
+      "relation_ids": []
+    },
+    {
+      "claim_index": 12,
+      "node_ids": [
+        "n19",
+        "n20"
+      ],
+      "relation_ids": [
+        "r10"
+      ]
+    },
+    {
+      "claim_index": 13,
+      "node_ids": [
+        "n21",
+        "n22"
+      ],
+      "relation_ids": [
+        "r11"
+      ]
+    },
+    {
+      "claim_index": 14,
+      "node_ids": [
+        "n23",
+        "n24"
+      ],
+      "relation_ids": [
+        "r12"
+      ]
+    },
+    {
+      "claim_index": 15,
+      "node_ids": [
+        "n26",
+        "n27"
+      ],
+      "relation_ids": [
+        "r13"
+      ]
+    },
+    {
+      "claim_index": 16,
+      "node_ids": [
+        "n26",
+        "n28"
+      ],
+      "relation_ids": [
+        "r14"
+      ]
+    }
+  ],
+  "coverage_ok": false,
+  "issues": [
+    "r4 源端应为“修订后的需求”，当前用 n8“修订需求”混淆了修订动作与修订结果；需补节点“修订后的需求”或修正 n8/r4，并形成“修订后的需求—再进入→下一轮原型制作”。",
+    "claim_index 6 因 r4 不合格，图中尚缺“修订后的需求—再进入→下一轮原型制作”的有效关系，因此 coverage_ok=false。",
+    "binding 4 漏掉 n22“问题已经解决”；“已解决”同时出现在“仅完成修改不能证明问题已经解决”和“标记为已解决”中，应至少关联 n22 与 n24。"
+  ],
+  "reader_issues": []
+}

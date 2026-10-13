@@ -1,0 +1,66 @@
+{
+  "fixtures_sha256": "fcfbf1c89ba49c7222f13679e7b986e1f768b6456e0d91dd61d0eaa79f36dd8e",
+  "cases": [
+    {
+      "id": "backup-alternatives",
+      "title": "自编04-指代与备份方案.txt",
+      "expected": [
+        {
+          "id": "copy",
+          "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+          "criterion": "复制→完成后核对数量",
+          "relation_required": true
+        },
+        {
+          "id": "reference",
+          "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+          "criterion": "它指备份盘，读写错误→更换，不删除源文件",
+          "relation_required": true
+        },
+        {
+          "id": "options",
+          "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+          "criterion": "两形式可替选，不要求两者或强制链",
+          "relation_required": true
+        },
+        {
+          "id": "scope",
+          "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+          "criterion": "去掉联系方式条件限定外发，本地不适用",
+          "relation_required": true
+        },
+        {
+          "id": "integrity",
+          "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。",
+          "criterion": "删联系方式之后核对技术完整",
+          "relation_required": true
+        },
+        {
+          "id": "upload",
+          "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+          "criterion": "核对通过→可以上传，非立即强制",
+          "relation_required": true
+        },
+        {
+          "id": "not-read",
+          "quote": "上传成功不代表协作者已经读过文件。",
+          "criterion": "上传成功不推出已阅读",
+          "relation_required": true
+        },
+        {
+          "id": "separate",
+          "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+          "criterion": "座位有合理独立分支，不为避免孤立强造备份边",
+          "relation_required": false
+        }
+      ]
+    }
+  ],
+  "generation_source_sha256": {
+    "app/article_map.py": "1840f05d1ce6ce0e1e1595fa06d14a4e4de5265f4951c33a101d7741084316bf",
+    "app/api_client.py": "849c5a5432ab8f9d158758ab89eafe3448338a1d3b6d4d91a73341f010a65543",
+    "app/config.py": "02965bbcc5c9de44f0ce1cdb1474df8f970548d6bac2fa92b4d9e7d8ad394c4b"
+  },
+  "checks_frozen_before_generation": true,
+  "expected_sent_to_model": false
+}

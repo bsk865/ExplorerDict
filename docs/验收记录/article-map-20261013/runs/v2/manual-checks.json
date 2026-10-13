@@ -1,0 +1,15 @@
+{
+  "case_id": "seed-process",
+  "model_approved": true,
+  "human_accepted": false,
+  "reviewer": "Codex independently reads source and visible edges",
+  "issues": [
+    {"relation_id":"r10","finding":"可选方法—没有规定必须→未规定必须采用哪种方法，源/线标/目标重复且组合语句不自然，应保留非强制限制而非造重复边。"},
+    {"relation_id":"r11","finding":"观察阶段—每天需要记录→每天记录湿度，组织分支充当原文没有的主体并重复动作；每天记录湿度作为完整节点足够。"},
+    {"relation_id":"r12","finding":"观察阶段—出苗后再记录→出苗后记录株高，源不是原文时间起点；应由出苗事件连到记录株高。"},
+    {"relation_id":"r14","finding":"株高记录用于比较变化—不能仅凭一天株高判定→不能仅凭一天株高判定种子品质，实际受限主体是仅凭一天株高，并非比较记录这个完整动作。"}
+  ],
+  "retained_strengths": ["三阶段语义包含已画出","浇水共同条件未拆开","慢出苗可选方法保留","首先建议排除且保留","基质/表层变干/管理员/株高均关联实际完整节点"],
+  "other_cases": "五篇仅网络DNS失败，未获得模型输出，不计作语义错误或通过",
+  "remediation": "v3加强实际主体、时间起点与避免组织分支/重复整句伪关系的约束；不改已冻结材料或核查点。"
+}

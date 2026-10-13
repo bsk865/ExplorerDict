@@ -1,0 +1,24 @@
+[
+  {
+    "stage": "read",
+    "seconds": 89.02
+  },
+  {
+    "stage": "generate",
+    "seconds": 79.36
+  },
+  {
+    "stage": "review",
+    "seconds": 229.61,
+    "error": "生成未通过检查：模型没有返回完整的 JSON 对象"
+  },
+  {
+    "stage": "generate",
+    "seconds": 130.3
+  },
+  {
+    "stage": "review",
+    "seconds": 2.18,
+    "error": "未知错误 (HTTP 402)：HTTP 402：{\"error\":{\"message\":\"Insufficient Balance (request_id: 0bf473ad-bc92-452b-aaa6-a59d8dbcbb80)\",\"type\":\"unknown_error\",\"param\":null,\"code\":\"invalid_request_error\""
+  }
+]

@@ -1,0 +1,66 @@
+{
+  "fixtures_sha256": "fcfbf1c89ba49c7222f13679e7b986e1f768b6456e0d91dd61d0eaa79f36dd8e",
+  "cases": [
+    {
+      "id": "feedback-loop",
+      "title": "自编05-迭代反馈与分支.txt",
+      "expected": [
+        {
+          "id": "order",
+          "quote": "先整理需求，再制作原型，然后邀请三位用户试用。",
+          "criterion": "需求→原型→三人试用先后",
+          "relation_required": true
+        },
+        {
+          "id": "feedback",
+          "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。",
+          "criterion": "困难→清单→修订需求→下一轮原型完整循环",
+          "relation_required": true
+        },
+        {
+          "id": "steps",
+          "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。",
+          "criterion": "操作问题简化步骤、仅文字问题可改提示两条件分开",
+          "relation_required": true
+        },
+        {
+          "id": "branches",
+          "quote": "两种处理针对不同问题，不要求先改步骤再改提示语。",
+          "criterion": "无强制两处理先后关系",
+          "relation_required": true
+        },
+        {
+          "id": "retest",
+          "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。",
+          "criterion": "修改→再试用，修改不足以证明解决",
+          "relation_required": true
+        },
+        {
+          "id": "and",
+          "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。",
+          "criterion": "未发现同问题且所有三人确认共同条件",
+          "relation_required": true
+        },
+        {
+          "id": "optional",
+          "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计，",
+          "criterion": "可暂缓无关装饰，非所有设计都禁止",
+          "relation_required": true
+        },
+        {
+          "id": "records",
+          "quote": "但不能删掉尚未解决的问题记录。",
+          "criterion": "不能删除未解决问题记录",
+          "relation_required": true
+        }
+      ]
+    }
+  ],
+  "generation_source_sha256": {
+    "app/article_map.py": "6655f4669bb5bb100f27ea13ab410d039c6b3712ab55da4bc31044c25fc67c0f",
+    "app/api_client.py": "849c5a5432ab8f9d158758ab89eafe3448338a1d3b6d4d91a73341f010a65543",
+    "app/config.py": "02965bbcc5c9de44f0ce1cdb1474df8f970548d6bac2fa92b4d9e7d8ad394c4b"
+  },
+  "checks_frozen_before_generation": true,
+  "expected_sent_to_model": false
+}

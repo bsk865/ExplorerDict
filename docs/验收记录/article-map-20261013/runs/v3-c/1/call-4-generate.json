@@ -1,0 +1,395 @@
+{
+  "root": "n0",
+  "nodes": [
+    {
+      "id": "n0",
+      "parent": null,
+      "label": "小林为项目资料建立备份",
+      "kind": "branch",
+      "quote": "小林为项目资料建立备份。"
+    },
+    {
+      "id": "n1",
+      "parent": "n0",
+      "label": "复制源文件与核对数量",
+      "kind": "branch",
+      "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。"
+    },
+    {
+      "id": "n2",
+      "parent": "n1",
+      "label": "先把源文件复制到本地备份盘",
+      "kind": "concept",
+      "quote": "她先把源文件复制到本地备份盘"
+    },
+    {
+      "id": "n3",
+      "parent": "n1",
+      "label": "复制完成后核对文件数量",
+      "kind": "concept",
+      "quote": "复制完成后核对文件数量"
+    },
+    {
+      "id": "n4",
+      "parent": "n0",
+      "label": "本地备份盘错误处理",
+      "kind": "branch",
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。"
+    },
+    {
+      "id": "n5",
+      "parent": "n4",
+      "label": "如果它出现读写错误",
+      "kind": "concept",
+      "quote": "如果它出现读写错误"
+    },
+    {
+      "id": "n6",
+      "parent": "n4",
+      "label": "她会更换备份盘",
+      "kind": "concept",
+      "quote": "她会更换备份盘"
+    },
+    {
+      "id": "n7",
+      "parent": "n4",
+      "label": "删除源文件",
+      "kind": "concept",
+      "quote": "而不会删除源文件"
+    },
+    {
+      "id": "n8",
+      "parent": "n4",
+      "label": "它",
+      "kind": "concept",
+      "quote": "这里的“它”指本地备份盘"
+    },
+    {
+      "id": "n9",
+      "parent": "n4",
+      "label": "本地备份盘",
+      "kind": "concept",
+      "quote": "本地备份盘"
+    },
+    {
+      "id": "n10",
+      "parent": "n0",
+      "label": "备份形式选择",
+      "kind": "branch",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。"
+    },
+    {
+      "id": "n11",
+      "parent": "n10",
+      "label": "备份",
+      "kind": "concept",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹"
+    },
+    {
+      "id": "n12",
+      "parent": "n10",
+      "label": "加密压缩包",
+      "kind": "concept",
+      "quote": "加密压缩包"
+    },
+    {
+      "id": "n13",
+      "parent": "n10",
+      "label": "普通文件夹",
+      "kind": "concept",
+      "quote": "普通文件夹"
+    },
+    {
+      "id": "n14",
+      "parent": "n10",
+      "label": "两种形式不要求同时采用",
+      "kind": "concept",
+      "quote": "两种形式不要求同时采用"
+    },
+    {
+      "id": "n15",
+      "parent": "n0",
+      "label": "发给外部协作者时才去掉联系方式",
+      "kind": "branch",
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。"
+    },
+    {
+      "id": "n16",
+      "parent": "n15",
+      "label": "计划把备份发给外部协作者",
+      "kind": "concept",
+      "quote": "只有计划把备份发给外部协作者时"
+    },
+    {
+      "id": "n17",
+      "parent": "n15",
+      "label": "去掉个人联系方式",
+      "kind": "concept",
+      "quote": "才需要去掉个人联系方式"
+    },
+    {
+      "id": "n18",
+      "parent": "n15",
+      "label": "仅保存在自己电脑上的备份",
+      "kind": "concept",
+      "quote": "仅保存在自己电脑上的备份"
+    },
+    {
+      "id": "n19",
+      "parent": "n15",
+      "label": "不受这条规则约束",
+      "kind": "concept",
+      "quote": "不受这条规则约束"
+    },
+    {
+      "id": "n20",
+      "parent": "n0",
+      "label": "去掉联系方式后的核对与上传",
+      "kind": "branch",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。核对通过后可以上传共享区，但不要求立刻上传。上传成功不代表协作者已经读过文件。"
+    },
+    {
+      "id": "n21",
+      "parent": "n20",
+      "label": "核对技术内容是否完整",
+      "kind": "concept",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。"
+    },
+    {
+      "id": "n22",
+      "parent": "n20",
+      "label": "核对通过",
+      "kind": "concept",
+      "quote": "核对通过后"
+    },
+    {
+      "id": "n23",
+      "parent": "n20",
+      "label": "上传共享区",
+      "kind": "concept",
+      "quote": "可以上传共享区"
+    },
+    {
+      "id": "n24",
+      "parent": "n20",
+      "label": "立刻上传",
+      "kind": "concept",
+      "quote": "但不要求立刻上传"
+    },
+    {
+      "id": "n25",
+      "parent": "n20",
+      "label": "上传成功",
+      "kind": "concept",
+      "quote": "上传成功"
+    },
+    {
+      "id": "n26",
+      "parent": "n20",
+      "label": "协作者已经读过文件",
+      "kind": "concept",
+      "quote": "协作者已经读过文件"
+    },
+    {
+      "id": "n27",
+      "parent": "n0",
+      "label": "与备份检查无关的会议室座位安排",
+      "kind": "branch",
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。"
+    },
+    {
+      "id": "n28",
+      "parent": "n27",
+      "label": "讨论会议室座位安排",
+      "kind": "concept",
+      "quote": "项目当天还讨论了会议室座位安排"
+    },
+    {
+      "id": "n29",
+      "parent": "n27",
+      "label": "备份检查",
+      "kind": "concept",
+      "quote": "这与备份检查没有直接关系"
+    }
+  ],
+  "relations": [
+    {
+      "id": "r0",
+      "src": "n2",
+      "dst": "n3",
+      "label": "复制完成后",
+      "quote": "复制完成后核对文件数量"
+    },
+    {
+      "id": "r1",
+      "src": "n5",
+      "dst": "n6",
+      "label": "会更换",
+      "quote": "如果它出现读写错误，她会更换备份盘"
+    },
+    {
+      "id": "r2",
+      "src": "n6",
+      "dst": "n7",
+      "label": "而不会",
+      "quote": "她会更换备份盘，而不会删除源文件"
+    },
+    {
+      "id": "r3",
+      "src": "n8",
+      "dst": "n9",
+      "label": "指",
+      "quote": "这里的“它”指本地备份盘"
+    },
+    {
+      "id": "r4",
+      "src": "n11",
+      "dst": "n12",
+      "label": "可以选择",
+      "quote": "备份可以选择加密压缩包"
+    },
+    {
+      "id": "r5",
+      "src": "n11",
+      "dst": "n13",
+      "label": "也可以选择",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹"
+    },
+    {
+      "id": "r6",
+      "src": "n16",
+      "dst": "n17",
+      "label": "才需要",
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式"
+    },
+    {
+      "id": "r7",
+      "src": "n18",
+      "dst": "n19",
+      "label": "不受约束",
+      "quote": "仅保存在自己电脑上的备份不受这条规则约束"
+    },
+    {
+      "id": "r8",
+      "src": "n17",
+      "dst": "n21",
+      "label": "之后仍要",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。"
+    },
+    {
+      "id": "r9",
+      "src": "n22",
+      "dst": "n23",
+      "label": "可以上传",
+      "quote": "核对通过后可以上传共享区"
+    },
+    {
+      "id": "r10",
+      "src": "n23",
+      "dst": "n24",
+      "label": "不要求立刻",
+      "quote": "但不要求立刻上传"
+    },
+    {
+      "id": "r11",
+      "src": "n25",
+      "dst": "n26",
+      "label": "不代表",
+      "quote": "上传成功不代表协作者已经读过文件"
+    },
+    {
+      "id": "r12",
+      "src": "n28",
+      "dst": "n29",
+      "label": "没有直接关系",
+      "quote": "这与备份检查没有直接关系"
+    }
+  ],
+  "bindings": [
+    {
+      "selection_index": 0,
+      "node_ids": [
+        "n8",
+        "n5"
+      ],
+      "suggest_exclude": false,
+      "note": "“它”是原文专门解释的指代词，绑定到指代概念节点，并关联其出现的条件“如果它出现读写错误”；不建议排除。",
+      "candidates": [
+        {
+          "node_id": "n8",
+          "quote": "这里的“它”指本地备份盘"
+        },
+        {
+          "node_id": "n5",
+          "quote": "如果它出现读写错误"
+        }
+      ]
+    },
+    {
+      "selection_index": 1,
+      "node_ids": [
+        "n17"
+      ],
+      "suggest_exclude": false,
+      "note": "“联系方式”补全为原文动作“去掉个人联系方式”。",
+      "candidates": [
+        {
+          "node_id": "n17",
+          "quote": "才需要去掉个人联系方式"
+        }
+      ]
+    },
+    {
+      "selection_index": 2,
+      "node_ids": [
+        "n12"
+      ],
+      "suggest_exclude": false,
+      "note": "“加密”补全为原文可选形式“加密压缩包”。",
+      "candidates": [
+        {
+          "node_id": "n12",
+          "quote": "加密压缩包"
+        }
+      ]
+    },
+    {
+      "selection_index": 3,
+      "node_ids": [
+        "n23",
+        "n24",
+        "n25"
+      ],
+      "suggest_exclude": false,
+      "note": "“上传”分别关联“上传共享区”“立刻上传”“上传成功”等原文完整表达。",
+      "candidates": [
+        {
+          "node_id": "n23",
+          "quote": "可以上传共享区"
+        },
+        {
+          "node_id": "n24",
+          "quote": "但不要求立刻上传"
+        },
+        {
+          "node_id": "n25",
+          "quote": "上传成功"
+        }
+      ]
+    },
+    {
+      "selection_index": 4,
+      "node_ids": [
+        "n28"
+      ],
+      "suggest_exclude": false,
+      "note": "“座位”补全为原文动作“讨论会议室座位安排”。",
+      "candidates": [
+        {
+          "node_id": "n28",
+          "quote": "项目当天还讨论了会议室座位安排"
+        }
+      ]
+    }
+  ]
+}

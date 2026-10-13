@@ -1,0 +1,450 @@
+{
+  "node_verdicts": [
+    {
+      "id": "n0",
+      "verdict": "supported",
+      "note": "原文首句直接给出育苗记录包含准备容器、播种和观察三个阶段。"
+    },
+    {
+      "id": "n1",
+      "verdict": "supported",
+      "note": "原文直接列举准备容器、播种和观察三个阶段。"
+    },
+    {
+      "id": "n2",
+      "verdict": "supported",
+      "note": "原文将准备容器列为阶段之一。"
+    },
+    {
+      "id": "n3",
+      "verdict": "supported",
+      "note": "原文将播种列为阶段之一。"
+    },
+    {
+      "id": "n4",
+      "verdict": "supported",
+      "note": "原文将观察列为阶段之一。"
+    },
+    {
+      "id": "n5",
+      "verdict": "supported",
+      "note": "原文有“首先清洗育苗盘”。"
+    },
+    {
+      "id": "n6",
+      "verdict": "supported",
+      "note": "原文有“首先”；作为顺序selection，草稿建议排除并保留，符合单独划选顺序词处理。"
+    },
+    {
+      "id": "n7",
+      "verdict": "supported",
+      "note": "从“首先清洗育苗盘”拆出动作“清洗”，有原文依据。"
+    },
+    {
+      "id": "n8",
+      "verdict": "supported",
+      "note": "原文“育苗盘”是清洗对象。"
+    },
+    {
+      "id": "n9",
+      "verdict": "supported",
+      "note": "原文“清洗完成后可以装入基质”，含完成后可选动作。"
+    },
+    {
+      "id": "n10",
+      "verdict": "supported",
+      "note": "原文“装好基质后，把种子放进浅孔并覆上一层薄土”，概括为播种覆薄土。"
+    },
+    {
+      "id": "n11",
+      "verdict": "supported",
+      "note": "原文“播种后需要保持基质湿润”。"
+    },
+    {
+      "id": "n12",
+      "verdict": "supported",
+      "note": "原文“但湿润不等于积水”中的湿润。"
+    },
+    {
+      "id": "n13",
+      "verdict": "supported",
+      "note": "原文“但湿润不等于积水”中的积水。"
+    },
+    {
+      "id": "n14",
+      "verdict": "supported",
+      "note": "原文“如果盘底持续积水”条件。"
+    },
+    {
+      "id": "n15",
+      "verdict": "supported",
+      "note": "原文“先排水，再暂停当天的浇水”，顺序和动作完整。"
+    },
+    {
+      "id": "n16",
+      "verdict": "supported",
+      "note": "原文合取条件“基质表层变干且盘底没有积水”，未拆开。"
+    },
+    {
+      "id": "n17",
+      "verdict": "supported",
+      "note": "原文“才需要再次浇水”。"
+    },
+    {
+      "id": "n18",
+      "verdict": "supported",
+      "note": "原文“若出苗速度较慢”条件。"
+    },
+    {
+      "id": "n19",
+      "verdict": "supported",
+      "note": "原文“可以继续观察两天”可选动作。"
+    },
+    {
+      "id": "n20",
+      "verdict": "supported",
+      "note": "原文“也可以请管理员检查种子”可选动作。"
+    },
+    {
+      "id": "n21",
+      "verdict": "supported",
+      "note": "原文直接陈述记录没有规定必须采用哪一种方法。"
+    },
+    {
+      "id": "n22",
+      "verdict": "supported",
+      "note": "在原文该句中作“记录（要求）”主语。"
+    },
+    {
+      "id": "n23",
+      "verdict": "supported",
+      "note": "指前文两种可选方法，原文有“哪一种方法”。"
+    },
+    {
+      "id": "n24",
+      "verdict": "supported",
+      "note": "原文“每天需要记录湿度”中的频率。"
+    },
+    {
+      "id": "n25",
+      "verdict": "supported",
+      "note": "原文“每天需要记录湿度”中的湿度。"
+    },
+    {
+      "id": "n26",
+      "verdict": "supported",
+      "note": "原文“出苗后再记录株高”中的时间条件。"
+    },
+    {
+      "id": "n27",
+      "verdict": "supported",
+      "note": "原文“出苗后再记录株高”中的株高。"
+    },
+    {
+      "id": "n28",
+      "verdict": "supported",
+      "note": "原文“株高记录可用于……”。"
+    },
+    {
+      "id": "n29",
+      "verdict": "supported",
+      "note": "原文“比较同一批幼苗的变化”。"
+    },
+    {
+      "id": "n30",
+      "verdict": "supported",
+      "note": "原文“不能仅凭一天的株高……”，节点保留“仅凭一天”限制。"
+    },
+    {
+      "id": "n31",
+      "verdict": "supported",
+      "note": "原文“判定种子品质”。"
+    },
+    {
+      "id": "n32",
+      "verdict": "supported",
+      "note": "原文“每天需要记录湿度”完整动作。"
+    },
+    {
+      "id": "n33",
+      "verdict": "supported",
+      "note": "原文“出苗后再记录株高”完整动作。"
+    }
+  ],
+  "relation_verdicts": [
+    {
+      "id": "r0",
+      "verdict": "supported",
+      "note": "n0育苗记录三阶段包含n1列出的三阶段，原文明确“包含”。"
+    },
+    {
+      "id": "r1",
+      "verdict": "supported",
+      "note": "原文明确三阶段包含准备容器。"
+    },
+    {
+      "id": "r2",
+      "verdict": "supported",
+      "note": "原文明确三阶段包含播种。"
+    },
+    {
+      "id": "r3",
+      "verdict": "supported",
+      "note": "原文明确三阶段包含观察。"
+    },
+    {
+      "id": "r4",
+      "verdict": "supported",
+      "note": "方向为动作“清洗”到对象“育苗盘”，原文“首先清洗育苗盘”；关系实质成立，但label“首先执行于”不够自然，见issues。"
+    },
+    {
+      "id": "r5",
+      "verdict": "supported",
+      "note": "清洗完成后可装入基质，方向由完成动作到后续可选动作。"
+    },
+    {
+      "id": "r6",
+      "verdict": "supported",
+      "note": "装好基质后播种覆土，顺序由前到后。"
+    },
+    {
+      "id": "r7",
+      "verdict": "supported",
+      "note": "播种后需要保持基质湿润，方向为播种后到保持湿润。"
+    },
+    {
+      "id": "r8",
+      "verdict": "supported",
+      "note": "湿润不等于积水，方向正确。"
+    },
+    {
+      "id": "r9",
+      "verdict": "supported",
+      "note": "盘底持续积水为条件，记录要求先排水再暂停当天浇水，顺序保持。"
+    },
+    {
+      "id": "r10",
+      "verdict": "supported",
+      "note": "合取条件完整指向再次浇水，方向条件到需要动作。"
+    },
+    {
+      "id": "r11",
+      "verdict": "supported",
+      "note": "出苗慢时可以选择继续观察两天，可选性保持。"
+    },
+    {
+      "id": "r12",
+      "verdict": "supported",
+      "note": "出苗慢时也可以请管理员检查种子，与r11并列可选。"
+    },
+    {
+      "id": "r13",
+      "verdict": "supported",
+      "note": "记录没有规定必须采用哪一种方法，否定与“必须”保持。"
+    },
+    {
+      "id": "r14",
+      "verdict": "supported",
+      "note": "每天需要记录湿度，频率到记录对象。"
+    },
+    {
+      "id": "r15",
+      "verdict": "supported",
+      "note": "出苗后再记录株高，时间顺序保持。"
+    },
+    {
+      "id": "r16",
+      "verdict": "supported",
+      "note": "株高记录可用于比较同一批幼苗变化。"
+    },
+    {
+      "id": "r17",
+      "verdict": "supported",
+      "note": "源端已限定仅凭一天，不能用于判定种子品质，否定程度保持。"
+    }
+  ],
+  "binding_verdicts": [
+    {
+      "selection_index": 0,
+      "verdict": "supported",
+      "note": "“基质”在节点文字n9/n11/n16中实际出现，分别补全为装入基质、保持基质湿润、基质表层变干；未删除用户词。"
+    },
+    {
+      "selection_index": 1,
+      "verdict": "supported",
+      "note": "“首先”为顺序词，草稿保留selection节点并建议排除，符合要求。"
+    },
+    {
+      "selection_index": 2,
+      "verdict": "supported",
+      "note": "“表层变干”补全为完整合取条件n16，补全实际出现在节点文字，未拆成分别足够条件。"
+    },
+    {
+      "selection_index": 3,
+      "verdict": "supported",
+      "note": "“管理员”关联到可选动作节点n20“请管理员检查种子”，可选性保留。"
+    },
+    {
+      "selection_index": 4,
+      "verdict": "supported",
+      "note": "“株高”关联节点文字含株高的n27/n28/n30/n33，覆盖记录、用途和限制。"
+    }
+  ],
+  "claim_coverage": [
+    {
+      "claim_index": 0,
+      "node_ids": [
+        "n0",
+        "n1"
+      ],
+      "relation_ids": [
+        "r0"
+      ]
+    },
+    {
+      "claim_index": 1,
+      "node_ids": [
+        "n5",
+        "n7",
+        "n8"
+      ],
+      "relation_ids": [
+        "r4"
+      ]
+    },
+    {
+      "claim_index": 2,
+      "node_ids": [
+        "n5",
+        "n9"
+      ],
+      "relation_ids": [
+        "r5"
+      ]
+    },
+    {
+      "claim_index": 3,
+      "node_ids": [
+        "n9",
+        "n10"
+      ],
+      "relation_ids": [
+        "r6"
+      ]
+    },
+    {
+      "claim_index": 4,
+      "node_ids": [
+        "n10",
+        "n11"
+      ],
+      "relation_ids": [
+        "r7"
+      ]
+    },
+    {
+      "claim_index": 5,
+      "node_ids": [
+        "n12",
+        "n13"
+      ],
+      "relation_ids": [
+        "r8"
+      ]
+    },
+    {
+      "claim_index": 6,
+      "node_ids": [
+        "n14",
+        "n15"
+      ],
+      "relation_ids": [
+        "r9"
+      ]
+    },
+    {
+      "claim_index": 7,
+      "node_ids": [
+        "n16",
+        "n17"
+      ],
+      "relation_ids": [
+        "r10"
+      ]
+    },
+    {
+      "claim_index": 8,
+      "node_ids": [
+        "n18",
+        "n19",
+        "n20"
+      ],
+      "relation_ids": [
+        "r11",
+        "r12"
+      ]
+    },
+    {
+      "claim_index": 9,
+      "node_ids": [
+        "n21",
+        "n22",
+        "n23"
+      ],
+      "relation_ids": [
+        "r13"
+      ]
+    },
+    {
+      "claim_index": 10,
+      "node_ids": [
+        "n24",
+        "n25",
+        "n32"
+      ],
+      "relation_ids": [
+        "r14"
+      ]
+    },
+    {
+      "claim_index": 11,
+      "node_ids": [
+        "n26",
+        "n27",
+        "n33"
+      ],
+      "relation_ids": [
+        "r15"
+      ]
+    },
+    {
+      "claim_index": 12,
+      "node_ids": [
+        "n28",
+        "n29"
+      ],
+      "relation_ids": [
+        "r16"
+      ]
+    },
+    {
+      "claim_index": 13,
+      "node_ids": [
+        "n30",
+        "n31"
+      ],
+      "relation_ids": [
+        "r17"
+      ]
+    }
+  ],
+  "coverage_ok": true,
+  "issues": [
+    {
+      "id": "r4",
+      "type": "relation_label",
+      "note": "r4方向为动作“清洗”到对象“育苗盘”，实质成立；但label“首先执行于”不够自然，建议改为“清洗对象”或“首先清洗”，以读成自然短句。"
+    }
+  ],
+  "reader_issues": []
+}

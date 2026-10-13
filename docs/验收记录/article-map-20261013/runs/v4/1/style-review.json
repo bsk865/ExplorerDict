@@ -1,0 +1,32 @@
+{
+  "scope": "geometry_and_style_only",
+  "semantic_verdict": null,
+  "code_changed": false,
+  "real_window_created": false,
+  "nodes": 32,
+  "relations": 16,
+  "image_dimensions": [
+    1456,
+    2841
+  ],
+  "initial_geometry_passed": true,
+  "representative_drag_checks_passed": 3,
+  "minimum_text_box_to_line_gap_px": 8.0,
+  "model_metadata": {
+    "model": "deepseek-chat",
+    "thinking": "enabled",
+    "reasoning_effort": ""
+  },
+  "observations": [
+    "已查看完整PNG及右侧可选处理分支的原尺寸局部。",
+    "未见关系文字压线、压节点、互相遮挡或截断；右侧外绕关系标签完整可见。",
+    "整图高2841像素；适应普通窗口时文字明显缩小，需要定位或100%查看。"
+  ],
+  "evidence": [
+    "layout-audit.json",
+    "layout-audit-history.jsonl",
+    "full-map.svg",
+    "rendered-full-map.png",
+    "style-detail.png"
+  ]
+}

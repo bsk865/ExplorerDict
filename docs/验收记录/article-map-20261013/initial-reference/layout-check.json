@@ -1,0 +1,26 @@
+[
+  {
+    "article": 1,
+    "full_nodes": 20,
+    "full_relations": 16,
+    "unrouted": 0,
+    "unlabelled": 0,
+    "non_orthogonal": 0
+  },
+  {
+    "article": 2,
+    "full_nodes": 29,
+    "full_relations": 17,
+    "unrouted": 0,
+    "unlabelled": 0,
+    "non_orthogonal": 0
+  },
+  {
+    "article": 3,
+    "full_nodes": 19,
+    "full_relations": 8,
+    "unrouted": 0,
+    "unlabelled": 0,
+    "non_orthogonal": 0
+  }
+]

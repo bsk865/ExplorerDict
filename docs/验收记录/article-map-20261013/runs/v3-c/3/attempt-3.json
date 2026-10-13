@@ -1,0 +1,2105 @@
+{
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "社区阅读室试行图书流转办法",
+        "kind": "branch",
+        "quote": "社区阅读室试行一套图书流转办法"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "适用范围限制",
+        "kind": "branch",
+        "quote": "下面的规定只适用于这次试行，不表示其它机构也采用相同规则"
+      },
+      {
+        "id": "n2",
+        "parent": "n0",
+        "label": "入库流程",
+        "kind": "branch",
+        "quote": "入库时"
+      },
+      {
+        "id": "n3",
+        "parent": "n0",
+        "label": "分类流程",
+        "kind": "branch",
+        "quote": "分类时"
+      },
+      {
+        "id": "n4",
+        "parent": "n0",
+        "label": "借阅流程",
+        "kind": "branch",
+        "quote": "借阅时"
+      },
+      {
+        "id": "n5",
+        "parent": "n0",
+        "label": "归还流程",
+        "kind": "branch",
+        "quote": "归还时"
+      },
+      {
+        "id": "n6",
+        "parent": "n0",
+        "label": "后续调整与海报",
+        "kind": "branch",
+        "quote": "一个月后，阅读室比较流转记录并调整架位；比较记录有助于发现拥挤位置，但不能仅凭借阅次数判断图书质量。活动海报由另一个小组制作，海报设计与续借审查没有直接关系。"
+      },
+      {
+        "id": "n7",
+        "parent": "n1",
+        "label": "下面的规定",
+        "kind": "concept",
+        "quote": "下面的规定"
+      },
+      {
+        "id": "n8",
+        "parent": "n1",
+        "label": "这次试行",
+        "kind": "concept",
+        "quote": "这次试行"
+      },
+      {
+        "id": "n9",
+        "parent": "n1",
+        "label": "其它机构也采用相同规则",
+        "kind": "concept",
+        "quote": "其它机构也采用相同规则"
+      },
+      {
+        "id": "n10",
+        "parent": "n2",
+        "label": "志愿者先登记书名、捐赠日期和捐赠者代号",
+        "kind": "concept",
+        "quote": "志愿者先登记书名、捐赠日期和捐赠者代号"
+      },
+      {
+        "id": "n11",
+        "parent": "n2",
+        "label": "然后检查书页是否完整",
+        "kind": "concept",
+        "quote": "然后检查书页是否完整"
+      },
+      {
+        "id": "n12",
+        "parent": "n2",
+        "label": "书页完整且封面没有霉斑",
+        "kind": "concept",
+        "quote": "书页完整且封面没有霉斑"
+      },
+      {
+        "id": "n13",
+        "parent": "n2",
+        "label": "待分类区",
+        "kind": "concept",
+        "quote": "待分类区"
+      },
+      {
+        "id": "n14",
+        "parent": "n2",
+        "label": "只满足其中一项",
+        "kind": "concept",
+        "quote": "只满足其中一项"
+      },
+      {
+        "id": "n15",
+        "parent": "n2",
+        "label": "入区",
+        "kind": "concept",
+        "quote": "入区"
+      },
+      {
+        "id": "n16",
+        "parent": "n2",
+        "label": "书页缺失的图书",
+        "kind": "concept",
+        "quote": "书页缺失的图书"
+      },
+      {
+        "id": "n17",
+        "parent": "n2",
+        "label": "修补区",
+        "kind": "concept",
+        "quote": "修补区"
+      },
+      {
+        "id": "n18",
+        "parent": "n2",
+        "label": "出现霉斑的图书",
+        "kind": "concept",
+        "quote": "出现霉斑的图书"
+      },
+      {
+        "id": "n19",
+        "parent": "n2",
+        "label": "暂不入库",
+        "kind": "concept",
+        "quote": "暂不入库"
+      },
+      {
+        "id": "n20",
+        "parent": "n2",
+        "label": "同一本书同时存在两种问题",
+        "kind": "concept",
+        "quote": "同一本书同时存在两种问题"
+      },
+      {
+        "id": "n21",
+        "parent": "n2",
+        "label": "暂不入库处理",
+        "kind": "concept",
+        "quote": "暂不入库处理"
+      },
+      {
+        "id": "n22",
+        "parent": "n2",
+        "label": "送去修补",
+        "kind": "concept",
+        "quote": "送去修补"
+      },
+      {
+        "id": "n23",
+        "parent": "n2",
+        "label": "修补完成并通过再次检查后",
+        "kind": "concept",
+        "quote": "修补完成并通过再次检查后"
+      },
+      {
+        "id": "n24",
+        "parent": "n2",
+        "label": "这里的检查",
+        "kind": "concept",
+        "quote": "这里的检查"
+      },
+      {
+        "id": "n25",
+        "parent": "n2",
+        "label": "对捐赠者身份的审查",
+        "kind": "concept",
+        "quote": "对捐赠者身份的审查"
+      },
+      {
+        "id": "n26",
+        "parent": "n3",
+        "label": "管理员按内容选择一个主要类别",
+        "kind": "concept",
+        "quote": "管理员按内容选择一个主要类别"
+      },
+      {
+        "id": "n27",
+        "parent": "n3",
+        "label": "一本书",
+        "kind": "concept",
+        "quote": "一本书"
+      },
+      {
+        "id": "n28",
+        "parent": "n3",
+        "label": "多个检索标签",
+        "kind": "concept",
+        "quote": "多个检索标签"
+      },
+      {
+        "id": "n29",
+        "parent": "n3",
+        "label": "检索标签",
+        "kind": "concept",
+        "quote": "检索标签"
+      },
+      {
+        "id": "n30",
+        "parent": "n3",
+        "label": "主要类别",
+        "kind": "concept",
+        "quote": "主要类别"
+      },
+      {
+        "id": "n31",
+        "parent": "n3",
+        "label": "贴标签",
+        "kind": "concept",
+        "quote": "贴标签"
+      },
+      {
+        "id": "n32",
+        "parent": "n3",
+        "label": "更换主要类别",
+        "kind": "concept",
+        "quote": "更换主要类别"
+      },
+      {
+        "id": "n33",
+        "parent": "n3",
+        "label": "类别选择不清楚时",
+        "kind": "concept",
+        "quote": "类别选择不清楚时"
+      },
+      {
+        "id": "n34",
+        "parent": "n3",
+        "label": "可以查目录",
+        "kind": "concept",
+        "quote": "可以查目录"
+      },
+      {
+        "id": "n35",
+        "parent": "n3",
+        "label": "也可以请另一位管理员协助",
+        "kind": "concept",
+        "quote": "也可以请另一位管理员协助"
+      },
+      {
+        "id": "n36",
+        "parent": "n3",
+        "label": "两种办法",
+        "kind": "concept",
+        "quote": "两种办法"
+      },
+      {
+        "id": "n37",
+        "parent": "n3",
+        "label": "都做",
+        "kind": "concept",
+        "quote": "都做"
+      },
+      {
+        "id": "n38",
+        "parent": "n3",
+        "label": "完成分类之后",
+        "kind": "concept",
+        "quote": "完成分类之后"
+      },
+      {
+        "id": "n39",
+        "parent": "n3",
+        "label": "管理员记录架位",
+        "kind": "concept",
+        "quote": "管理员记录架位"
+      },
+      {
+        "id": "n40",
+        "parent": "n3",
+        "label": "志愿者把书放到对应书架",
+        "kind": "concept",
+        "quote": "志愿者再把书放到对应书架"
+      },
+      {
+        "id": "n41",
+        "parent": "n3",
+        "label": "自然、历史和文学三类书架",
+        "kind": "concept",
+        "quote": "自然、历史和文学三类书架"
+      },
+      {
+        "id": "n42",
+        "parent": "n3",
+        "label": "本室的分类方式",
+        "kind": "concept",
+        "quote": "本室的分类方式"
+      },
+      {
+        "id": "n43",
+        "parent": "n4",
+        "label": "读者先登记借阅证号",
+        "kind": "concept",
+        "quote": "读者先登记借阅证号"
+      },
+      {
+        "id": "n44",
+        "parent": "n4",
+        "label": "没有超期未还的图书且本次借阅数量不超过三本",
+        "kind": "concept",
+        "quote": "没有超期未还的图书且本次借阅数量不超过三本"
+      },
+      {
+        "id": "n45",
+        "parent": "n4",
+        "label": "本次借阅数量不超过三本",
+        "kind": "concept",
+        "quote": "本次借阅数量不超过三本"
+      },
+      {
+        "id": "n46",
+        "parent": "n4",
+        "label": "办理借阅",
+        "kind": "concept",
+        "quote": "办理借阅"
+      },
+      {
+        "id": "n47",
+        "parent": "n4",
+        "label": "借阅成功",
+        "kind": "concept",
+        "quote": "借阅成功"
+      },
+      {
+        "id": "n48",
+        "parent": "n4",
+        "label": "办理完成后",
+        "kind": "concept",
+        "quote": "办理完成后"
+      },
+      {
+        "id": "n49",
+        "parent": "n4",
+        "label": "系统生成到期日期并提醒读者",
+        "kind": "concept",
+        "quote": "系统生成到期日期并提醒读者"
+      },
+      {
+        "id": "n50",
+        "parent": "n4",
+        "label": "提前归还",
+        "kind": "concept",
+        "quote": "提前归还"
+      },
+      {
+        "id": "n51",
+        "parent": "n4",
+        "label": "直接登记",
+        "kind": "concept",
+        "quote": "直接登记"
+      },
+      {
+        "id": "n52",
+        "parent": "n4",
+        "label": "到期日期",
+        "kind": "concept",
+        "quote": "到期日期"
+      },
+      {
+        "id": "n53",
+        "parent": "n4",
+        "label": "需要延长借阅时间的读者",
+        "kind": "concept",
+        "quote": "需要延长借阅时间的读者"
+      },
+      {
+        "id": "n54",
+        "parent": "n4",
+        "label": "申请一次续借",
+        "kind": "concept",
+        "quote": "申请一次续借"
+      },
+      {
+        "id": "n55",
+        "parent": "n4",
+        "label": "已有其他读者预约该书",
+        "kind": "concept",
+        "quote": "已有其他读者预约该书"
+      },
+      {
+        "id": "n56",
+        "parent": "n4",
+        "label": "续借",
+        "kind": "concept",
+        "quote": "续借"
+      },
+      {
+        "id": "n57",
+        "parent": "n4",
+        "label": "没有预约",
+        "kind": "concept",
+        "quote": "没有预约"
+      },
+      {
+        "id": "n58",
+        "parent": "n4",
+        "label": "可以继续审查申请",
+        "kind": "concept",
+        "quote": "可以继续审查申请"
+      },
+      {
+        "id": "n59",
+        "parent": "n4",
+        "label": "续借一定获批",
+        "kind": "concept",
+        "quote": "续借一定获批"
+      },
+      {
+        "id": "n60",
+        "parent": "n5",
+        "label": "志愿者先检查图书状态",
+        "kind": "concept",
+        "quote": "志愿者先检查图书状态"
+      },
+      {
+        "id": "n61",
+        "parent": "n5",
+        "label": "记录归还日期",
+        "kind": "concept",
+        "quote": "记录归还日期"
+      },
+      {
+        "id": "n62",
+        "parent": "n5",
+        "label": "发现新损坏时",
+        "kind": "concept",
+        "quote": "发现新损坏时"
+      },
+      {
+        "id": "n63",
+        "parent": "n5",
+        "label": "保留损坏记录并告知管理员",
+        "kind": "concept",
+        "quote": "保留损坏记录并告知管理员"
+      },
+      {
+        "id": "n64",
+        "parent": "n5",
+        "label": "这份记录",
+        "kind": "concept",
+        "quote": "这份记录"
+      },
+      {
+        "id": "n65",
+        "parent": "n5",
+        "label": "读者一定故意损坏",
+        "kind": "concept",
+        "quote": "读者一定故意损坏"
+      },
+      {
+        "id": "n66",
+        "parent": "n5",
+        "label": "管理员",
+        "kind": "concept",
+        "quote": "管理员"
+      },
+      {
+        "id": "n67",
+        "parent": "n5",
+        "label": "受损图书",
+        "kind": "concept",
+        "quote": "受损图书"
+      },
+      {
+        "id": "n68",
+        "parent": "n5",
+        "label": "修补区",
+        "kind": "concept",
+        "quote": "修补区"
+      },
+      {
+        "id": "n69",
+        "parent": "n5",
+        "label": "修补和再次检查沿用入库阶段的办法",
+        "kind": "concept",
+        "quote": "修补和再次检查沿用入库阶段的办法"
+      },
+      {
+        "id": "n70",
+        "parent": "n5",
+        "label": "图书可能多次返回待分类区",
+        "kind": "concept",
+        "quote": "图书可能多次返回待分类区"
+      },
+      {
+        "id": "n71",
+        "parent": "n5",
+        "label": "没有损坏的图书",
+        "kind": "concept",
+        "quote": "没有损坏的图书"
+      },
+      {
+        "id": "n72",
+        "parent": "n5",
+        "label": "重新上架",
+        "kind": "concept",
+        "quote": "重新上架"
+      },
+      {
+        "id": "n73",
+        "parent": "n6",
+        "label": "一个月后",
+        "kind": "concept",
+        "quote": "一个月后"
+      },
+      {
+        "id": "n74",
+        "parent": "n6",
+        "label": "阅读室比较流转记录并调整架位",
+        "kind": "concept",
+        "quote": "阅读室比较流转记录并调整架位"
+      },
+      {
+        "id": "n75",
+        "parent": "n6",
+        "label": "比较记录",
+        "kind": "concept",
+        "quote": "比较记录"
+      },
+      {
+        "id": "n76",
+        "parent": "n6",
+        "label": "拥挤位置",
+        "kind": "concept",
+        "quote": "拥挤位置"
+      },
+      {
+        "id": "n77",
+        "parent": "n6",
+        "label": "仅凭借阅次数",
+        "kind": "concept",
+        "quote": "仅凭借阅次数"
+      },
+      {
+        "id": "n78",
+        "parent": "n6",
+        "label": "图书质量",
+        "kind": "concept",
+        "quote": "图书质量"
+      },
+      {
+        "id": "n79",
+        "parent": "n6",
+        "label": "活动海报",
+        "kind": "concept",
+        "quote": "活动海报"
+      },
+      {
+        "id": "n80",
+        "parent": "n6",
+        "label": "另一个小组",
+        "kind": "concept",
+        "quote": "另一个小组"
+      },
+      {
+        "id": "n81",
+        "parent": "n6",
+        "label": "海报设计",
+        "kind": "concept",
+        "quote": "海报设计"
+      },
+      {
+        "id": "n82",
+        "parent": "n6",
+        "label": "续借审查",
+        "kind": "concept",
+        "quote": "续借审查"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n7",
+        "dst": "n8",
+        "label": "只适用于",
+        "quote": "下面的规定只适用于这次试行"
+      },
+      {
+        "id": "r1",
+        "src": "n7",
+        "dst": "n9",
+        "label": "不表示",
+        "quote": "不表示其它机构也采用相同规则"
+      },
+      {
+        "id": "r2",
+        "src": "n10",
+        "dst": "n11",
+        "label": "然后",
+        "quote": "先登记书名、捐赠日期和捐赠者代号，然后检查书页是否完整"
+      },
+      {
+        "id": "r3",
+        "src": "n12",
+        "dst": "n13",
+        "label": "可以进入",
+        "quote": "书页完整且封面没有霉斑的图书可以进入待分类区"
+      },
+      {
+        "id": "r4",
+        "src": "n14",
+        "dst": "n15",
+        "label": "仍不能",
+        "quote": "只满足其中一项仍不能入区"
+      },
+      {
+        "id": "r5",
+        "src": "n16",
+        "dst": "n17",
+        "label": "送到",
+        "quote": "书页缺失的图书送到修补区"
+      },
+      {
+        "id": "r6",
+        "src": "n18",
+        "dst": "n19",
+        "label": "被处理为",
+        "quote": "出现霉斑的图书暂不入库"
+      },
+      {
+        "id": "r7",
+        "src": "n20",
+        "dst": "n21",
+        "label": "先按",
+        "quote": "先按暂不入库处理"
+      },
+      {
+        "id": "r8",
+        "src": "n20",
+        "dst": "n22",
+        "label": "不必先",
+        "quote": "不必先送去修补"
+      },
+      {
+        "id": "r9",
+        "src": "n23",
+        "dst": "n13",
+        "label": "才可以回到",
+        "quote": "修补完成并通过再次检查后，图书才可以回到待分类区"
+      },
+      {
+        "id": "r10",
+        "src": "n24",
+        "dst": "n25",
+        "label": "不是",
+        "quote": "这里的检查不是对捐赠者身份的审查"
+      },
+      {
+        "id": "r11",
+        "src": "n27",
+        "dst": "n28",
+        "label": "也可以贴",
+        "quote": "一本书也可以贴多个检索标签"
+      },
+      {
+        "id": "r12",
+        "src": "n29",
+        "dst": "n30",
+        "label": "不等于",
+        "quote": "检索标签不等于主要类别"
+      },
+      {
+        "id": "r13",
+        "src": "n31",
+        "dst": "n32",
+        "label": "不要画成",
+        "quote": "不要把贴标签画成更换主要类别"
+      },
+      {
+        "id": "r14",
+        "src": "n33",
+        "dst": "n34",
+        "label": "可以",
+        "quote": "类别选择不清楚时，可以查目录"
+      },
+      {
+        "id": "r15",
+        "src": "n33",
+        "dst": "n35",
+        "label": "也可以",
+        "quote": "也可以请另一位管理员协助"
+      },
+      {
+        "id": "r16",
+        "src": "n36",
+        "dst": "n37",
+        "label": "不要求",
+        "quote": "两种办法不要求都做"
+      },
+      {
+        "id": "r17",
+        "src": "n38",
+        "dst": "n39",
+        "label": "之后",
+        "quote": "完成分类之后，管理员记录架位"
+      },
+      {
+        "id": "r18",
+        "src": "n39",
+        "dst": "n40",
+        "label": "再",
+        "quote": "管理员记录架位，志愿者再把书放到对应书架"
+      },
+      {
+        "id": "r19",
+        "src": "n41",
+        "dst": "n42",
+        "label": "只是",
+        "quote": "这只是本室的分类方式"
+      },
+      {
+        "id": "r20",
+        "src": "n43",
+        "dst": "n47",
+        "label": "并不保证",
+        "quote": "登记借阅证号本身并不保证借阅成功"
+      },
+      {
+        "id": "r21",
+        "src": "n44",
+        "dst": "n46",
+        "label": "才允许",
+        "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅"
+      },
+      {
+        "id": "r22",
+        "src": "n48",
+        "dst": "n49",
+        "label": "之后",
+        "quote": "办理完成后，系统生成到期日期并提醒读者"
+      },
+      {
+        "id": "r23",
+        "src": "n50",
+        "dst": "n51",
+        "label": "可以",
+        "quote": "提前归还可以直接登记"
+      },
+      {
+        "id": "r24",
+        "src": "n50",
+        "dst": "n52",
+        "label": "不需要等到",
+        "quote": "不需要等到期日期"
+      },
+      {
+        "id": "r25",
+        "src": "n53",
+        "dst": "n54",
+        "label": "可以",
+        "quote": "需要延长借阅时间的读者可以申请一次续借"
+      },
+      {
+        "id": "r26",
+        "src": "n55",
+        "dst": "n56",
+        "label": "则拒绝",
+        "quote": "如果已有其他读者预约该书，则拒绝续借"
+      },
+      {
+        "id": "r27",
+        "src": "n57",
+        "dst": "n58",
+        "label": "只表示",
+        "quote": "没有预约只表示可以继续审查申请"
+      },
+      {
+        "id": "r28",
+        "src": "n57",
+        "dst": "n59",
+        "label": "不表示",
+        "quote": "不表示续借一定获批"
+      },
+      {
+        "id": "r29",
+        "src": "n60",
+        "dst": "n61",
+        "label": "再",
+        "quote": "志愿者先检查图书状态，再记录归还日期"
+      },
+      {
+        "id": "r30",
+        "src": "n62",
+        "dst": "n63",
+        "label": "需要",
+        "quote": "发现新损坏时，需要保留损坏记录并告知管理员"
+      },
+      {
+        "id": "r31",
+        "src": "n64",
+        "dst": "n65",
+        "label": "不能用来认定",
+        "quote": "这份记录不能用来认定读者一定故意损坏"
+      },
+      {
+        "id": "r32",
+        "src": "n67",
+        "dst": "n68",
+        "label": "送到",
+        "quote": "管理员可以把受损图书送到修补区"
+      },
+      {
+        "id": "r33",
+        "src": "n69",
+        "dst": "n70",
+        "label": "因此",
+        "quote": "修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区"
+      },
+      {
+        "id": "r34",
+        "src": "n71",
+        "dst": "n72",
+        "label": "可以",
+        "quote": "没有损坏的图书可以重新上架"
+      },
+      {
+        "id": "r35",
+        "src": "n73",
+        "dst": "n74",
+        "label": "之后",
+        "quote": "一个月后，阅读室比较流转记录并调整架位"
+      },
+      {
+        "id": "r36",
+        "src": "n75",
+        "dst": "n76",
+        "label": "有助于发现",
+        "quote": "比较记录有助于发现拥挤位置"
+      },
+      {
+        "id": "r37",
+        "src": "n77",
+        "dst": "n78",
+        "label": "不能用于判断",
+        "quote": "不能仅凭借阅次数判断图书质量"
+      },
+      {
+        "id": "r38",
+        "src": "n80",
+        "dst": "n79",
+        "label": "制作",
+        "quote": "活动海报由另一个小组制作"
+      },
+      {
+        "id": "r39",
+        "src": "n81",
+        "dst": "n82",
+        "label": "没有直接关系",
+        "quote": "海报设计与续借审查没有直接关系"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n12",
+          "n18"
+        ],
+        "suggest_exclude": false,
+        "note": "“霉斑”补全为：书页完整且封面没有霉斑才可进入待分类区；出现霉斑的图书被处理为暂不入库。",
+        "candidates": [
+          {
+            "node_id": "n12",
+            "quote": "书页完整且封面没有霉斑"
+          },
+          {
+            "node_id": "n18",
+            "quote": "出现霉斑的图书"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n28",
+          "n29",
+          "n31"
+        ],
+        "suggest_exclude": false,
+        "note": "“标签”补全为：一本书也可以贴多个检索标签，检索标签不等于主要类别，不要画成更换主要类别。",
+        "candidates": [
+          {
+            "node_id": "n28",
+            "quote": "多个检索标签"
+          },
+          {
+            "node_id": "n29",
+            "quote": "检索标签"
+          },
+          {
+            "node_id": "n31",
+            "quote": "贴标签"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n44",
+          "n45"
+        ],
+        "suggest_exclude": false,
+        "note": "“三本”补全为借阅数量限制：没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。",
+        "candidates": [
+          {
+            "node_id": "n44",
+            "quote": "没有超期未还的图书且本次借阅数量不超过三本"
+          },
+          {
+            "node_id": "n45",
+            "quote": "本次借阅数量不超过三本"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n55",
+          "n57"
+        ],
+        "suggest_exclude": false,
+        "note": "“预约”关联到：已有其他读者预约该书则拒绝续借；没有预约只表示可以继续审查申请，不表示续借一定获批。",
+        "candidates": [
+          {
+            "node_id": "n55",
+            "quote": "已有其他读者预约该书"
+          },
+          {
+            "node_id": "n57",
+            "quote": "没有预约"
+          }
+        ]
+      },
+      {
+        "selection_index": 4,
+        "node_ids": [
+          "n65"
+        ],
+        "suggest_exclude": false,
+        "note": "“故意”补全为：这份记录不能用来认定读者一定故意损坏。",
+        "candidates": [
+          {
+            "node_id": "n65",
+            "quote": "读者一定故意损坏"
+          }
+        ]
+      },
+      {
+        "selection_index": 5,
+        "node_ids": [
+          "n79",
+          "n81"
+        ],
+        "suggest_exclude": false,
+        "note": "“海报”关联到：活动海报由另一个小组制作；海报设计与续借审查没有直接关系。",
+        "candidates": [
+          {
+            "node_id": "n79",
+            "quote": "活动海报"
+          },
+          {
+            "node_id": "n81",
+            "quote": "海报设计"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "d612d998bfbfe372d8633616575d91626c0d1290b9f952f229b2ca158291e0d5"
+  },
+  "issues": [
+    "r32尚未明确被原文支持：方向是受损图书送到修补区，但未连接动作发起者管理员；原文为管理员可以把受损图书送到修补区，端点不完整。",
+    "独立清单第13项的真实关系未画出：管理员 — 按内容选择 → 一个主要类别；原句：分类时，管理员按内容选择一个主要类别。请补上真实语义边；组织父子线不能代替它。",
+    "独立清单第39项的真实关系未画出：管理员 — 可以把受损图书送到 → 修补区；原句：管理员可以把受损图书送到修补区。请补上真实语义边；组织父子线不能代替它。",
+    "r32 不完整：当前“受损图书 送到 修补区”未连接动作发起者“管理员”；应补或改为 n66→n68 标签“可以把受损图书送到”，或 n66→n67 标签“可以把送到”，使 claim38 落到完整关系上。",
+    "claim 12 将“管理员按内容选择一个主要类别”标为 relation_required=true，属于把完整动作节点 n26 再拆成“管理员→主要类别”的句法边；应改为 relation_required=false。",
+    "全文重要信息覆盖未通过"
+  ],
+  "review": {
+    "node_verdicts": [
+      {
+        "id": "n0",
+        "verdict": "supported",
+        "note": "原文首句，根节点。"
+      },
+      {
+        "id": "n1",
+        "verdict": "supported",
+        "note": "原文有该适用范围限制，归属根节点下。"
+      },
+      {
+        "id": "n2",
+        "verdict": "supported",
+        "note": "入库时段落总起，归属根节点。"
+      },
+      {
+        "id": "n3",
+        "verdict": "supported",
+        "note": "分类时段落总起，归属根节点。"
+      },
+      {
+        "id": "n4",
+        "verdict": "supported",
+        "note": "借阅时段落总起，归属根节点。"
+      },
+      {
+        "id": "n5",
+        "verdict": "supported",
+        "note": "归还时段落总起，归属根节点。"
+      },
+      {
+        "id": "n6",
+        "verdict": "supported",
+        "note": "涵盖一个月后调整与海报说明，原文均在结尾段。"
+      },
+      {
+        "id": "n7",
+        "verdict": "supported",
+        "note": "原文有“下面的规定”。"
+      },
+      {
+        "id": "n8",
+        "verdict": "supported",
+        "note": "原文有“这次试行”。"
+      },
+      {
+        "id": "n9",
+        "verdict": "supported",
+        "note": "原文在“不表示”后出现“其它机构也采用相同规则”。"
+      },
+      {
+        "id": "n10",
+        "verdict": "supported",
+        "note": "原文有先登记书名、捐赠日期和捐赠者代号。"
+      },
+      {
+        "id": "n11",
+        "verdict": "supported",
+        "note": "原文有然后检查书页是否完整。"
+      },
+      {
+        "id": "n12",
+        "verdict": "supported",
+        "note": "原文有书页完整且封面没有霉斑的条件。"
+      },
+      {
+        "id": "n13",
+        "verdict": "supported",
+        "note": "原文有待分类区。"
+      },
+      {
+        "id": "n14",
+        "verdict": "supported",
+        "note": "原文有只满足其中一项。"
+      },
+      {
+        "id": "n15",
+        "verdict": "supported",
+        "note": "原文有仍不能入区。"
+      },
+      {
+        "id": "n16",
+        "verdict": "supported",
+        "note": "原文有书页缺失的图书。"
+      },
+      {
+        "id": "n17",
+        "verdict": "supported",
+        "note": "原文有修补区。"
+      },
+      {
+        "id": "n18",
+        "verdict": "supported",
+        "note": "原文有出现霉斑的图书。"
+      },
+      {
+        "id": "n19",
+        "verdict": "supported",
+        "note": "原文有暂不入库。"
+      },
+      {
+        "id": "n20",
+        "verdict": "supported",
+        "note": "原文有同一本书同时存在两种问题。"
+      },
+      {
+        "id": "n21",
+        "verdict": "supported",
+        "note": "原文有先按暂不入库处理。"
+      },
+      {
+        "id": "n22",
+        "verdict": "supported",
+        "note": "原文有不必先送去修补。"
+      },
+      {
+        "id": "n23",
+        "verdict": "supported",
+        "note": "原文有修补完成并通过再次检查后。"
+      },
+      {
+        "id": "n24",
+        "verdict": "supported",
+        "note": "原文有这里的检查。"
+      },
+      {
+        "id": "n25",
+        "verdict": "supported",
+        "note": "原文有对捐赠者身份的审查。"
+      },
+      {
+        "id": "n26",
+        "verdict": "supported",
+        "note": "原文有管理员按内容选择一个主要类别。"
+      },
+      {
+        "id": "n27",
+        "verdict": "supported",
+        "note": "原文有一本书。"
+      },
+      {
+        "id": "n28",
+        "verdict": "supported",
+        "note": "原文有多个检索标签。"
+      },
+      {
+        "id": "n29",
+        "verdict": "supported",
+        "note": "原文有检索标签。"
+      },
+      {
+        "id": "n30",
+        "verdict": "supported",
+        "note": "原文有主要类别。"
+      },
+      {
+        "id": "n31",
+        "verdict": "supported",
+        "note": "原文有贴标签。"
+      },
+      {
+        "id": "n32",
+        "verdict": "supported",
+        "note": "原文有更换主要类别。"
+      },
+      {
+        "id": "n33",
+        "verdict": "supported",
+        "note": "原文有类别选择不清楚时。"
+      },
+      {
+        "id": "n34",
+        "verdict": "supported",
+        "note": "原文有可以查目录。"
+      },
+      {
+        "id": "n35",
+        "verdict": "supported",
+        "note": "原文有也可以请另一位管理员协助。"
+      },
+      {
+        "id": "n36",
+        "verdict": "supported",
+        "note": "原文有两种办法。"
+      },
+      {
+        "id": "n37",
+        "verdict": "supported",
+        "note": "原文有“都做”，处于“不要求”否定下。"
+      },
+      {
+        "id": "n38",
+        "verdict": "supported",
+        "note": "原文有完成分类之后。"
+      },
+      {
+        "id": "n39",
+        "verdict": "supported",
+        "note": "原文有管理员记录架位。"
+      },
+      {
+        "id": "n40",
+        "verdict": "supported",
+        "note": "原文有志愿者再把书放到对应书架。"
+      },
+      {
+        "id": "n41",
+        "verdict": "supported",
+        "note": "原文有自然、历史和文学三类书架。"
+      },
+      {
+        "id": "n42",
+        "verdict": "supported",
+        "note": "原文有这只是本室的分类方式。"
+      },
+      {
+        "id": "n43",
+        "verdict": "supported",
+        "note": "原文有读者先登记借阅证号。"
+      },
+      {
+        "id": "n44",
+        "verdict": "supported",
+        "note": "原文有该合取借阅条件。"
+      },
+      {
+        "id": "n45",
+        "verdict": "supported",
+        "note": "原文有本次借阅数量不超过三本，作为合取条件组成部分。"
+      },
+      {
+        "id": "n46",
+        "verdict": "supported",
+        "note": "原文有才允许办理借阅。"
+      },
+      {
+        "id": "n47",
+        "verdict": "supported",
+        "note": "原文有借阅成功。"
+      },
+      {
+        "id": "n48",
+        "verdict": "supported",
+        "note": "原文有办理完成后。"
+      },
+      {
+        "id": "n49",
+        "verdict": "supported",
+        "note": "原文有系统生成到期日期并提醒读者。"
+      },
+      {
+        "id": "n50",
+        "verdict": "supported",
+        "note": "原文有提前归还。"
+      },
+      {
+        "id": "n51",
+        "verdict": "supported",
+        "note": "原文有可以直接登记。"
+      },
+      {
+        "id": "n52",
+        "verdict": "supported",
+        "note": "原文有到期日期。"
+      },
+      {
+        "id": "n53",
+        "verdict": "supported",
+        "note": "原文有需要延长借阅时间的读者。"
+      },
+      {
+        "id": "n54",
+        "verdict": "supported",
+        "note": "原文有申请一次续借。"
+      },
+      {
+        "id": "n55",
+        "verdict": "supported",
+        "note": "原文有已有其他读者预约该书。"
+      },
+      {
+        "id": "n56",
+        "verdict": "supported",
+        "note": "原文有拒绝续借。"
+      },
+      {
+        "id": "n57",
+        "verdict": "supported",
+        "note": "原文有没有预约。"
+      },
+      {
+        "id": "n58",
+        "verdict": "supported",
+        "note": "原文有只表示可以继续审查申请。"
+      },
+      {
+        "id": "n59",
+        "verdict": "supported",
+        "note": "原文有不表示续借一定获批。"
+      },
+      {
+        "id": "n60",
+        "verdict": "supported",
+        "note": "原文有志愿者先检查图书状态。"
+      },
+      {
+        "id": "n61",
+        "verdict": "supported",
+        "note": "原文有记录归还日期。"
+      },
+      {
+        "id": "n62",
+        "verdict": "supported",
+        "note": "原文有发现新损坏时。"
+      },
+      {
+        "id": "n63",
+        "verdict": "supported",
+        "note": "原文有需要保留损坏记录并告知管理员。"
+      },
+      {
+        "id": "n64",
+        "verdict": "supported",
+        "note": "原文有这份记录。"
+      },
+      {
+        "id": "n65",
+        "verdict": "supported",
+        "note": "原文有读者一定故意损坏，处于不能用来认定下。"
+      },
+      {
+        "id": "n66",
+        "verdict": "supported",
+        "note": "原文出现管理员；作为归还阶段动作主体，当前关系未连接。"
+      },
+      {
+        "id": "n67",
+        "verdict": "supported",
+        "note": "原文有受损图书。"
+      },
+      {
+        "id": "n68",
+        "verdict": "supported",
+        "note": "原文有修补区。"
+      },
+      {
+        "id": "n69",
+        "verdict": "supported",
+        "note": "原文有修补和再次检查沿用入库阶段的办法。"
+      },
+      {
+        "id": "n70",
+        "verdict": "supported",
+        "note": "原文有因此图书可能多次返回待分类区。"
+      },
+      {
+        "id": "n71",
+        "verdict": "supported",
+        "note": "原文有没有损坏的图书。"
+      },
+      {
+        "id": "n72",
+        "verdict": "supported",
+        "note": "原文有可以重新上架。"
+      },
+      {
+        "id": "n73",
+        "verdict": "supported",
+        "note": "原文有一个月后。"
+      },
+      {
+        "id": "n74",
+        "verdict": "supported",
+        "note": "原文有阅读室比较流转记录并调整架位。"
+      },
+      {
+        "id": "n75",
+        "verdict": "supported",
+        "note": "原文有比较记录。"
+      },
+      {
+        "id": "n76",
+        "verdict": "supported",
+        "note": "原文有拥挤位置。"
+      },
+      {
+        "id": "n77",
+        "verdict": "supported",
+        "note": "原文有仅凭借阅次数。"
+      },
+      {
+        "id": "n78",
+        "verdict": "supported",
+        "note": "原文有图书质量。"
+      },
+      {
+        "id": "n79",
+        "verdict": "supported",
+        "note": "原文有活动海报。"
+      },
+      {
+        "id": "n80",
+        "verdict": "supported",
+        "note": "原文有另一个小组。"
+      },
+      {
+        "id": "n81",
+        "verdict": "supported",
+        "note": "原文有海报设计。"
+      },
+      {
+        "id": "n82",
+        "verdict": "supported",
+        "note": "原文有续借审查。"
+      }
+    ],
+    "relation_verdicts": [
+      {
+        "id": "r0",
+        "verdict": "supported",
+        "note": "方向正确：下面的规定只适用于这次试行。"
+      },
+      {
+        "id": "r1",
+        "verdict": "supported",
+        "note": "方向正确：下面的规定不表示其它机构也采用相同规则。"
+      },
+      {
+        "id": "r2",
+        "verdict": "supported",
+        "note": "先登记后检查，顺序正确。"
+      },
+      {
+        "id": "r3",
+        "verdict": "supported",
+        "note": "书页完整且无霉斑可进入待分类区，条件方向正确。"
+      },
+      {
+        "id": "r4",
+        "verdict": "supported",
+        "note": "只满足一项仍不能入区，否定方向正确。"
+      },
+      {
+        "id": "r5",
+        "verdict": "supported",
+        "note": "书页缺失的图书送到修补区。"
+      },
+      {
+        "id": "r6",
+        "verdict": "supported",
+        "note": "出现霉斑的图书被处理为暂不入库。"
+      },
+      {
+        "id": "r7",
+        "verdict": "supported",
+        "note": "同时两问题的先按暂不入库处理。"
+      },
+      {
+        "id": "r8",
+        "verdict": "supported",
+        "note": "同时两问题不必先送去修补，否定方向正确。"
+      },
+      {
+        "id": "r9",
+        "verdict": "supported",
+        "note": "修补并再检后才可以回到待分类区。"
+      },
+      {
+        "id": "r10",
+        "verdict": "supported",
+        "note": "检查不是对捐赠者身份审查，否定方向正确。"
+      },
+      {
+        "id": "r11",
+        "verdict": "supported",
+        "note": "一本书也可以贴多个检索标签。"
+      },
+      {
+        "id": "r12",
+        "verdict": "supported",
+        "note": "检索标签不等于主要类别。"
+      },
+      {
+        "id": "r13",
+        "verdict": "supported",
+        "note": "贴标签不要画成更换主要类别。"
+      },
+      {
+        "id": "r14",
+        "verdict": "supported",
+        "note": "类别不清楚时可以查目录。"
+      },
+      {
+        "id": "r15",
+        "verdict": "supported",
+        "note": "类别不清楚时也可以请另一位管理员协助。"
+      },
+      {
+        "id": "r16",
+        "verdict": "supported",
+        "note": "两种办法不要求都做。"
+      },
+      {
+        "id": "r17",
+        "verdict": "supported",
+        "note": "完成分类之后管理员记录架位；关系词与节点有重复但顺序正确。"
+      },
+      {
+        "id": "r18",
+        "verdict": "supported",
+        "note": "管理员记录架位后志愿者再放书，顺序正确。"
+      },
+      {
+        "id": "r19",
+        "verdict": "supported",
+        "note": "三类书架只是本室分类方式。"
+      },
+      {
+        "id": "r20",
+        "verdict": "supported",
+        "note": "登记借阅证号本身不保证借阅成功；方向正确。"
+      },
+      {
+        "id": "r21",
+        "verdict": "supported",
+        "note": "合取条件才允许办理借阅，条件保留完整。"
+      },
+      {
+        "id": "r22",
+        "verdict": "supported",
+        "note": "办理完成后系统生成到期日期并提醒读者；时间关系正确。"
+      },
+      {
+        "id": "r23",
+        "verdict": "supported",
+        "note": "提前归还可以直接登记。"
+      },
+      {
+        "id": "r24",
+        "verdict": "supported",
+        "note": "提前归还不需要等到期日期，否定方向正确。"
+      },
+      {
+        "id": "r25",
+        "verdict": "supported",
+        "note": "需要延长者可申请一次续借。"
+      },
+      {
+        "id": "r26",
+        "verdict": "supported",
+        "note": "已有预约则拒绝续借，条件方向正确。"
+      },
+      {
+        "id": "r27",
+        "verdict": "supported",
+        "note": "没有预约只表示可继续审查申请。"
+      },
+      {
+        "id": "r28",
+        "verdict": "supported",
+        "note": "没有预约不表示续借一定获批，否定方向正确。"
+      },
+      {
+        "id": "r29",
+        "verdict": "supported",
+        "note": "先检查状态再记录归还日期，顺序正确。"
+      },
+      {
+        "id": "r30",
+        "verdict": "supported",
+        "note": "发现新损坏时需要保留记录并告知管理员。"
+      },
+      {
+        "id": "r31",
+        "verdict": "supported",
+        "note": "记录不能用来认定读者一定故意损坏，否定方向正确。"
+      },
+      {
+        "id": "r32",
+        "verdict": "uncertain",
+        "note": "方向是受损图书送到修补区，但未连接动作发起者管理员；原文为管理员可以把受损图书送到修补区，端点不完整。"
+      },
+      {
+        "id": "r33",
+        "verdict": "supported",
+        "note": "沿用入库办法因此可能多次返回待分类区，因果方向正确。"
+      },
+      {
+        "id": "r34",
+        "verdict": "supported",
+        "note": "没有损坏的图书可以重新上架。"
+      },
+      {
+        "id": "r35",
+        "verdict": "supported",
+        "note": "一个月后比较并调整架位，时间关系正确；关系词与节点有重复。"
+      },
+      {
+        "id": "r36",
+        "verdict": "supported",
+        "note": "比较记录有助于发现拥挤位置。"
+      },
+      {
+        "id": "r37",
+        "verdict": "supported",
+        "note": "仅凭借阅次数不能用于判断图书质量，否定方向正确。"
+      },
+      {
+        "id": "r38",
+        "verdict": "supported",
+        "note": "原文为活动海报由另一小组制作；主动化后方向正确。"
+      },
+      {
+        "id": "r39",
+        "verdict": "supported",
+        "note": "海报设计与续借审查没有直接关系。"
+      }
+    ],
+    "binding_verdicts": [
+      {
+        "selection_index": 0,
+        "verdict": "supported",
+        "note": "霉斑出现在 n12/n18，补全条件与入库限制正确。"
+      },
+      {
+        "selection_index": 1,
+        "verdict": "supported",
+        "note": "标签出现在 n28/n29/n31，关联检索标签和贴标签正确。"
+      },
+      {
+        "selection_index": 2,
+        "verdict": "supported",
+        "note": "三本出现在 n44/n45，借阅数量限制及合取条件正确。"
+      },
+      {
+        "selection_index": 3,
+        "verdict": "supported",
+        "note": "预约出现在 n55/n57，有预约拒绝续借、无预约不保证获批正确。"
+      },
+      {
+        "selection_index": 4,
+        "verdict": "supported",
+        "note": "故意出现在 n65，处于不能用来认定读者一定故意损坏下。"
+      },
+      {
+        "selection_index": 5,
+        "verdict": "supported",
+        "note": "海报出现在 n79/n81，活动海报制作与海报设计无关续借审查正确。"
+      }
+    ],
+    "claim_coverage": [
+      {
+        "claim_index": 0,
+        "node_ids": [
+          "n0"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 1,
+        "node_ids": [
+          "n7",
+          "n8"
+        ],
+        "relation_ids": [
+          "r0"
+        ]
+      },
+      {
+        "claim_index": 2,
+        "node_ids": [
+          "n7",
+          "n9"
+        ],
+        "relation_ids": [
+          "r1"
+        ]
+      },
+      {
+        "claim_index": 3,
+        "node_ids": [
+          "n10",
+          "n11"
+        ],
+        "relation_ids": [
+          "r2"
+        ]
+      },
+      {
+        "claim_index": 4,
+        "node_ids": [
+          "n12",
+          "n13"
+        ],
+        "relation_ids": [
+          "r3"
+        ]
+      },
+      {
+        "claim_index": 5,
+        "node_ids": [
+          "n14",
+          "n15"
+        ],
+        "relation_ids": [
+          "r4"
+        ]
+      },
+      {
+        "claim_index": 6,
+        "node_ids": [
+          "n16",
+          "n17"
+        ],
+        "relation_ids": [
+          "r5"
+        ]
+      },
+      {
+        "claim_index": 7,
+        "node_ids": [
+          "n18",
+          "n19"
+        ],
+        "relation_ids": [
+          "r6"
+        ]
+      },
+      {
+        "claim_index": 8,
+        "node_ids": [
+          "n20",
+          "n21"
+        ],
+        "relation_ids": [
+          "r7"
+        ]
+      },
+      {
+        "claim_index": 9,
+        "node_ids": [
+          "n20",
+          "n22"
+        ],
+        "relation_ids": [
+          "r8"
+        ]
+      },
+      {
+        "claim_index": 10,
+        "node_ids": [
+          "n23",
+          "n13"
+        ],
+        "relation_ids": [
+          "r9"
+        ]
+      },
+      {
+        "claim_index": 11,
+        "node_ids": [
+          "n24",
+          "n25"
+        ],
+        "relation_ids": [
+          "r10"
+        ]
+      },
+      {
+        "claim_index": 12,
+        "node_ids": [
+          "n26"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 13,
+        "node_ids": [
+          "n27",
+          "n28"
+        ],
+        "relation_ids": [
+          "r11"
+        ]
+      },
+      {
+        "claim_index": 14,
+        "node_ids": [
+          "n29",
+          "n30"
+        ],
+        "relation_ids": [
+          "r12"
+        ]
+      },
+      {
+        "claim_index": 15,
+        "node_ids": [
+          "n31",
+          "n32"
+        ],
+        "relation_ids": [
+          "r13"
+        ]
+      },
+      {
+        "claim_index": 16,
+        "node_ids": [
+          "n33",
+          "n34"
+        ],
+        "relation_ids": [
+          "r14"
+        ]
+      },
+      {
+        "claim_index": 17,
+        "node_ids": [
+          "n33",
+          "n35"
+        ],
+        "relation_ids": [
+          "r15"
+        ]
+      },
+      {
+        "claim_index": 18,
+        "node_ids": [
+          "n36",
+          "n37"
+        ],
+        "relation_ids": [
+          "r16"
+        ]
+      },
+      {
+        "claim_index": 19,
+        "node_ids": [
+          "n38",
+          "n39"
+        ],
+        "relation_ids": [
+          "r17"
+        ]
+      },
+      {
+        "claim_index": 20,
+        "node_ids": [
+          "n39",
+          "n40"
+        ],
+        "relation_ids": [
+          "r18"
+        ]
+      },
+      {
+        "claim_index": 21,
+        "node_ids": [
+          "n41"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 22,
+        "node_ids": [
+          "n41",
+          "n42"
+        ],
+        "relation_ids": [
+          "r19"
+        ]
+      },
+      {
+        "claim_index": 23,
+        "node_ids": [
+          "n43"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 24,
+        "node_ids": [
+          "n44",
+          "n46"
+        ],
+        "relation_ids": [
+          "r21"
+        ]
+      },
+      {
+        "claim_index": 25,
+        "node_ids": [
+          "n43",
+          "n47"
+        ],
+        "relation_ids": [
+          "r20"
+        ]
+      },
+      {
+        "claim_index": 26,
+        "node_ids": [
+          "n48",
+          "n49"
+        ],
+        "relation_ids": [
+          "r22"
+        ]
+      },
+      {
+        "claim_index": 27,
+        "node_ids": [
+          "n48",
+          "n49"
+        ],
+        "relation_ids": [
+          "r22"
+        ]
+      },
+      {
+        "claim_index": 28,
+        "node_ids": [
+          "n50",
+          "n51"
+        ],
+        "relation_ids": [
+          "r23"
+        ]
+      },
+      {
+        "claim_index": 29,
+        "node_ids": [
+          "n50",
+          "n52"
+        ],
+        "relation_ids": [
+          "r24"
+        ]
+      },
+      {
+        "claim_index": 30,
+        "node_ids": [
+          "n53",
+          "n54"
+        ],
+        "relation_ids": [
+          "r25"
+        ]
+      },
+      {
+        "claim_index": 31,
+        "node_ids": [
+          "n55",
+          "n56"
+        ],
+        "relation_ids": [
+          "r26"
+        ]
+      },
+      {
+        "claim_index": 32,
+        "node_ids": [
+          "n57",
+          "n58"
+        ],
+        "relation_ids": [
+          "r27"
+        ]
+      },
+      {
+        "claim_index": 33,
+        "node_ids": [
+          "n57",
+          "n59"
+        ],
+        "relation_ids": [
+          "r28"
+        ]
+      },
+      {
+        "claim_index": 34,
+        "node_ids": [
+          "n60",
+          "n61"
+        ],
+        "relation_ids": [
+          "r29"
+        ]
+      },
+      {
+        "claim_index": 35,
+        "node_ids": [
+          "n62",
+          "n63"
+        ],
+        "relation_ids": [
+          "r30"
+        ]
+      },
+      {
+        "claim_index": 36,
+        "node_ids": [
+          "n62",
+          "n63"
+        ],
+        "relation_ids": [
+          "r30"
+        ]
+      },
+      {
+        "claim_index": 37,
+        "node_ids": [
+          "n64",
+          "n65"
+        ],
+        "relation_ids": [
+          "r31"
+        ]
+      },
+      {
+        "claim_index": 38,
+        "node_ids": [
+          "n66",
+          "n67",
+          "n68"
+        ],
+        "relation_ids": []
+      },
+      {
+        "claim_index": 39,
+        "node_ids": [
+          "n69",
+          "n70"
+        ],
+        "relation_ids": [
+          "r33"
+        ]
+      },
+      {
+        "claim_index": 40,
+        "node_ids": [
+          "n71",
+          "n72"
+        ],
+        "relation_ids": [
+          "r34"
+        ]
+      },
+      {
+        "claim_index": 41,
+        "node_ids": [
+          "n73",
+          "n74"
+        ],
+        "relation_ids": [
+          "r35"
+        ]
+      },
+      {
+        "claim_index": 42,
+        "node_ids": [
+          "n75",
+          "n76"
+        ],
+        "relation_ids": [
+          "r36"
+        ]
+      },
+      {
+        "claim_index": 43,
+        "node_ids": [
+          "n77",
+          "n78"
+        ],
+        "relation_ids": [
+          "r37"
+        ]
+      },
+      {
+        "claim_index": 44,
+        "node_ids": [
+          "n79",
+          "n80"
+        ],
+        "relation_ids": [
+          "r38"
+        ]
+      },
+      {
+        "claim_index": 45,
+        "node_ids": [
+          "n81",
+          "n82"
+        ],
+        "relation_ids": [
+          "r39"
+        ]
+      }
+    ],
+    "coverage_ok": false,
+    "issues": [
+      "r32 不完整：当前“受损图书 送到 修补区”未连接动作发起者“管理员”；应补或改为 n66→n68 标签“可以把受损图书送到”，或 n66→n67 标签“可以把送到”，使 claim38 落到完整关系上。"
+    ],
+    "reader_issues": [
+      "claim 12 将“管理员按内容选择一个主要类别”标为 relation_required=true，属于把完整动作节点 n26 再拆成“管理员→主要类别”的句法边；应改为 relation_required=false。"
+    ]
+  }
+}

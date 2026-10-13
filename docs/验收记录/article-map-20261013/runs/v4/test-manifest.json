@@ -1,0 +1,120 @@
+{
+  "fixtures_sha256": "fcfbf1c89ba49c7222f13679e7b986e1f768b6456e0d91dd61d0eaa79f36dd8e",
+  "cases": [
+    {
+      "id": "seed-process",
+      "title": "自编01-育苗步骤与可选处理.txt",
+      "expected": [
+        {
+          "id": "stages",
+          "quote": "育苗记录包含准备容器、播种和观察三个阶段。",
+          "criterion": "明确三个阶段且语义包含关系可见",
+          "relation_required": true
+        },
+        {
+          "id": "clean",
+          "quote": "清洗完成后可以装入基质。",
+          "criterion": "清洗完成→可装基质，不能升级成唯一必需前提",
+          "relation_required": true
+        },
+        {
+          "id": "sow",
+          "quote": "装好基质后，把种子放进浅孔并覆上一层薄土。",
+          "criterion": "装基质之后播种覆土，动作完整",
+          "relation_required": true
+        },
+        {
+          "id": "flood",
+          "quote": "如果盘底持续积水，记录要求先排水，再暂停当天的浇水。",
+          "criterion": "持续积水条件→先排水→暂停当天浇水，条件保留",
+          "relation_required": true
+        },
+        {
+          "id": "and",
+          "quote": "只有基质表层变干且盘底没有积水时，才需要再次浇水。",
+          "criterion": "表层变干与无积水是共同必要条件，不能任一单独触发",
+          "relation_required": true
+        },
+        {
+          "id": "options",
+          "quote": "若出苗速度较慢，可以继续观察两天，也可以请管理员检查种子；",
+          "criterion": "慢出苗下两种可选处理，不画成强制连续步骤",
+          "relation_required": true
+        },
+        {
+          "id": "record",
+          "quote": "每天需要记录湿度，出苗后再记录株高。",
+          "criterion": "每天湿度记录，出苗后株高记录，时间限定",
+          "relation_required": true
+        },
+        {
+          "id": "limits",
+          "quote": "株高记录可用于比较同一批幼苗的变化，不能仅凭一天的株高判定种子品质。",
+          "criterion": "比较变化作用及不能凭一天株高判定品质都可见",
+          "relation_required": true
+        }
+      ]
+    },
+    {
+      "id": "backup-alternatives",
+      "title": "自编04-指代与备份方案.txt",
+      "expected": [
+        {
+          "id": "copy",
+          "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+          "criterion": "复制→完成后核对数量",
+          "relation_required": true
+        },
+        {
+          "id": "reference",
+          "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+          "criterion": "它指备份盘，读写错误→更换，不删除源文件",
+          "relation_required": true
+        },
+        {
+          "id": "options",
+          "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+          "criterion": "两形式可替选，不要求两者或强制链",
+          "relation_required": true
+        },
+        {
+          "id": "scope",
+          "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+          "criterion": "去掉联系方式条件限定外发，本地不适用",
+          "relation_required": true
+        },
+        {
+          "id": "integrity",
+          "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。",
+          "criterion": "删联系方式之后核对技术完整",
+          "relation_required": true
+        },
+        {
+          "id": "upload",
+          "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+          "criterion": "核对通过→可以上传，非立即强制",
+          "relation_required": true
+        },
+        {
+          "id": "not-read",
+          "quote": "上传成功不代表协作者已经读过文件。",
+          "criterion": "上传成功不推出已阅读",
+          "relation_required": true
+        },
+        {
+          "id": "separate",
+          "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+          "criterion": "座位有合理独立分支，不为避免孤立强造备份边",
+          "relation_required": false
+        }
+      ]
+    }
+  ],
+  "generation_source_sha256": {
+    "app/article_map.py": "63a1470d65a9aca64c8dc23974584520a4a24487798227563af6a167c56b59f9",
+    "app/api_client.py": "849c5a5432ab8f9d158758ab89eafe3448338a1d3b6d4d91a73341f010a65543",
+    "app/config.py": "02965bbcc5c9de44f0ce1cdb1474df8f970548d6bac2fa92b4d9e7d8ad394c4b"
+  },
+  "checks_frozen_before_generation": true,
+  "expected_sent_to_model": false
+}

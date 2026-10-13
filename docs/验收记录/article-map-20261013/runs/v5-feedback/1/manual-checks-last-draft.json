@@ -1,0 +1,85 @@
+{
+  "case_id": "feedback-loop",
+  "model_approved": false,
+  "codex_independent_accepted": false,
+  "reviewer": "Codex independently compares final unapproved draft; not a human review",
+  "reviewed_file": "attempt-3.json",
+  "checks": [
+    {
+      "id": "order",
+      "quote": "先整理需求，再制作原型，然后邀请三位用户试用。",
+      "criterion": "需求→原型→三人试用先后",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r0/r1 requirements -> prototype -> three-user trial."
+    },
+    {
+      "id": "feedback",
+      "quote": "试用中出现的困难会形成问题清单，问题清单用于修订需求，修订后的需求再进入下一轮原型制作。",
+      "criterion": "困难→清单→修订需求→下一轮原型完整循环",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r16/r2/r3/r4 show trial -> difficulties -> list -> revision -> revised requirements -> next round prototype; r5/r6 explicitly describe repetition. No geometric return loop is drawn."
+    },
+    {
+      "id": "steps",
+      "quote": "若问题涉及操作步骤，小组优先简化步骤；若问题仅涉及文字看不懂，可以先修改提示语。",
+      "criterion": "操作问题简化步骤、仅文字问题可改提示两条件分开",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r7/r8 preserve operational issues vs text-only issues, priority and optionality."
+    },
+    {
+      "id": "branches",
+      "quote": "两种处理针对不同问题，不要求先改步骤再改提示语。",
+      "criterion": "无强制两处理先后关系",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r9 describes different issues; r10 explicitly does not require step-then-text order."
+    },
+    {
+      "id": "retest",
+      "quote": "修改完成后需要再次试用；仅完成修改不能证明问题已经解决。",
+      "criterion": "修改→再试用，修改不足以证明解决",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r11 modification -> repeat trial; r12 cannot prove resolution by modification alone."
+    },
+    {
+      "id": "and",
+      "quote": "只有再次试用未发现同一问题且三位用户都确认理解时，小组才把该问题标记为已解决。",
+      "criterion": "未发现同问题且所有三人确认共同条件",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "n23/r13 preserve no recurrence AND all three users confirming together."
+    },
+    {
+      "id": "optional",
+      "quote": "原型制作中可以暂缓与本轮问题无关的装饰设计，",
+      "criterion": "可暂缓无关装饰，非所有设计都禁止",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r14 allows deferring unrelated decorative design only."
+    },
+    {
+      "id": "records",
+      "quote": "但不能删掉尚未解决的问题记录。",
+      "criterion": "不能删除未解决问题记录",
+      "relation_required": true,
+      "passed": true,
+      "evidence": "r15 forbids deleting unresolved issue records."
+    }
+  ],
+  "issues": [
+    {
+      "selection_index": 4,
+      "node_id": "n22",
+      "finding": "已解决 is bound to 问题已经解决, but node quote is only 问题已经解决 and contains no literal 已解决. Local quote validation correctly blocked final approval; repeated correction did not repair it."
+    }
+  ],
+  "process_issues": [
+    "词义补全 selection_index=4 的词“已解决”关联节点 n22“问题已经解决”的引用缺少原划选词：问题已经解决。请扩展该节点引用为包含“已解决”的完整原句，不能改写引用或删除划选词。"
+  ],
+  "published_as_approved": false,
+  "scope": "A draft may cover frozen checks and still fail extra-edge, quote, binding or final-review checks. No model-review completion inferred after HTTP 402."
+}

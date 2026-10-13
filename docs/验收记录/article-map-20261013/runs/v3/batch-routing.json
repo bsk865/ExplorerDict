@@ -1,0 +1,6 @@
+{
+  "complete_case": "seed-process",
+  "case_2": "独立读请求途中取消；设备与证据限制材料在v3-b独立进行，避免重复运行。",
+  "remaining_cases": "分别由v3-b和v3-c进行",
+  "cancelled_call_not_quality_failure": true
+}

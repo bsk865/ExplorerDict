@@ -1,0 +1,157 @@
+{
+  "claims": [
+    {
+      "subject": "小林为项目资料建立备份",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "小林为项目资料建立备份。",
+      "relation_required": false
+    },
+    {
+      "subject": "她先把源文件复制到本地备份盘",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+      "relation_required": false
+    },
+    {
+      "subject": "复制完成后核对文件数量",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "复制完成后核对文件数量。",
+      "relation_required": false
+    },
+    {
+      "subject": "把源文件复制到本地备份盘（先做）",
+      "predicate": "复制完成后接着",
+      "object": "核对文件数量（复制完成后）",
+      "quote": "她先把源文件复制到本地备份盘，复制完成后核对文件数量。",
+      "relation_required": true
+    },
+    {
+      "subject": "这里的“它”指本地备份盘",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "relation_required": false
+    },
+    {
+      "subject": "本地备份盘出现读写错误（如果）",
+      "predicate": "如果出现则",
+      "object": "她更换备份盘",
+      "quote": "如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "她不会删除源文件",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "而不会删除源文件。",
+      "relation_required": false
+    },
+    {
+      "subject": "备份",
+      "predicate": "可以选择",
+      "object": "加密压缩包",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "relation_required": true
+    },
+    {
+      "subject": "备份",
+      "predicate": "也可以选择",
+      "object": "普通文件夹",
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "relation_required": true
+    },
+    {
+      "subject": "两种形式不要求同时采用",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "两种形式不要求同时采用。",
+      "relation_required": false
+    },
+    {
+      "subject": "计划把备份发给外部协作者",
+      "predicate": "只有此时才需要",
+      "object": "去掉个人联系方式",
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+      "relation_required": true
+    },
+    {
+      "subject": "仅保存在自己电脑上的备份不受这条规则约束",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "仅保存在自己电脑上的备份不受这条规则约束。",
+      "relation_required": false
+    },
+    {
+      "subject": "去掉联系方式",
+      "predicate": "之后仍要",
+      "object": "核对技术内容是否完整",
+      "quote": "去掉联系方式之后，她仍要核对技术内容是否完整。",
+      "relation_required": true
+    },
+    {
+      "subject": "核对通过",
+      "predicate": "后可以（但不要求立刻）",
+      "object": "上传共享区",
+      "quote": "核对通过后可以上传共享区，但不要求立刻上传。",
+      "relation_required": true
+    },
+    {
+      "subject": "上传共享区不要求立刻上传",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "但不要求立刻上传。",
+      "relation_required": false
+    },
+    {
+      "subject": "上传成功",
+      "predicate": "不代表",
+      "object": "协作者已经读过文件",
+      "quote": "上传成功不代表协作者已经读过文件。",
+      "relation_required": true
+    },
+    {
+      "subject": "项目当天还讨论了会议室座位安排",
+      "predicate": "记录信息",
+      "object": "",
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+      "relation_required": false
+    },
+    {
+      "subject": "会议室座位安排（原文用“这”指代）",
+      "predicate": "与...没有直接关系",
+      "object": "备份检查",
+      "quote": "这与备份检查没有直接关系。",
+      "relation_required": true
+    }
+  ],
+  "selections": [
+    {
+      "selection_index": 0,
+      "quote": "这里的“它”指本地备份盘；如果它出现读写错误，她会更换备份盘，而不会删除源文件。",
+      "note": "“它”在原文中明确指本地备份盘；后文读写错误和更换备份盘的对象也是本地备份盘。"
+    },
+    {
+      "selection_index": 1,
+      "quote": "只有计划把备份发给外部协作者时，才需要去掉个人联系方式；仅保存在自己电脑上的备份不受这条规则约束。",
+      "note": "“联系方式”指个人联系方式；只在计划把备份发给外部协作者时需要去掉，仅保存在自己电脑上的备份不受这条规则约束。"
+    },
+    {
+      "selection_index": 2,
+      "quote": "备份可以选择加密压缩包，也可以选择普通文件夹，两种形式不要求同时采用。",
+      "note": "“加密”修饰压缩包，是一种可选备份形式；与普通文件夹并列，不要求同时采用。"
+    },
+    {
+      "selection_index": 3,
+      "quote": "核对通过后可以上传共享区，但不要求立刻上传。上传成功不代表协作者已经读过文件。",
+      "note": "“上传”指把备份上传到共享区；条件是核对通过，允许但不要求立刻；上传成功不等于协作者已读。"
+    },
+    {
+      "selection_index": 4,
+      "quote": "项目当天还讨论了会议室座位安排，这与备份检查没有直接关系。",
+      "note": "“座位”出现在会议室座位安排中；原文说明该讨论与备份检查没有直接关系，其中“这”指代会议室座位安排。"
+    }
+  ]
+}

@@ -1,0 +1,1356 @@
+{
+  "stage": "review",
+  "text": "社区阅读室试行一套图书流转办法，下面的规定只适用于这次试行，不表示其它机构也采用相同规则。\n\n入库时，志愿者先登记书名、捐赠日期和捐赠者代号，然后检查书页是否完整。书页完整且封面没有霉斑的图书可以进入待分类区；只满足其中一项仍不能入区。书页缺失的图书送到修补区，出现霉斑的图书暂不入库。如果同一本书同时存在两种问题，先按暂不入库处理，不必先送去修补。修补完成并通过再次检查后，图书才可以回到待分类区。这里的检查不是对捐赠者身份的审查。\n\n分类时，管理员按内容选择一个主要类别。一本书也可以贴多个检索标签，但检索标签不等于主要类别，不要把贴标签画成更换主要类别。类别选择不清楚时，可以查目录，也可以请另一位管理员协助；两种办法不要求都做。完成分类之后，管理员记录架位，志愿者再把书放到对应书架。阅读室设有自然、历史和文学三类书架，这只是本室的分类方式。\n\n借阅时，读者先登记借阅证号。只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。登记借阅证号本身并不保证借阅成功。办理完成后，系统生成到期日期并提醒读者。提前归还可以直接登记，不需要等到期日期。需要延长借阅时间的读者可以申请一次续借；如果已有其他读者预约该书，则拒绝续借。没有预约只表示可以继续审查申请，不表示续借一定获批。\n\n归还时，志愿者先检查图书状态，再记录归还日期。发现新损坏时，需要保留损坏记录并告知管理员；这份记录不能用来认定读者一定故意损坏。管理员可以把受损图书送到修补区，修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区。没有损坏的图书可以重新上架。一个月后，阅读室比较流转记录并调整架位；比较记录有助于发现拥挤位置，但不能仅凭借阅次数判断图书质量。活动海报由另一个小组制作，海报设计与续借审查没有直接关系。",
+  "selected_words": [
+    "霉斑",
+    "标签",
+    "三本",
+    "预约",
+    "故意",
+    "海报"
+  ],
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "社区阅读室试行图书流转办法",
+        "kind": "branch",
+        "quote": "社区阅读室试行一套图书流转办法"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "适用范围限制",
+        "kind": "branch",
+        "quote": "下面的规定只适用于这次试行，不表示其它机构也采用相同规则"
+      },
+      {
+        "id": "n2",
+        "parent": "n0",
+        "label": "入库流程",
+        "kind": "branch",
+        "quote": "入库时"
+      },
+      {
+        "id": "n3",
+        "parent": "n0",
+        "label": "分类流程",
+        "kind": "branch",
+        "quote": "分类时"
+      },
+      {
+        "id": "n4",
+        "parent": "n0",
+        "label": "借阅流程",
+        "kind": "branch",
+        "quote": "借阅时"
+      },
+      {
+        "id": "n5",
+        "parent": "n0",
+        "label": "归还流程",
+        "kind": "branch",
+        "quote": "归还时"
+      },
+      {
+        "id": "n6",
+        "parent": "n0",
+        "label": "后续调整与海报",
+        "kind": "branch",
+        "quote": "一个月后，阅读室比较流转记录并调整架位；比较记录有助于发现拥挤位置，但不能仅凭借阅次数判断图书质量。活动海报由另一个小组制作，海报设计与续借审查没有直接关系。"
+      },
+      {
+        "id": "n7",
+        "parent": "n1",
+        "label": "下面的规定",
+        "kind": "concept",
+        "quote": "下面的规定"
+      },
+      {
+        "id": "n8",
+        "parent": "n1",
+        "label": "这次试行",
+        "kind": "concept",
+        "quote": "这次试行"
+      },
+      {
+        "id": "n9",
+        "parent": "n1",
+        "label": "其它机构也采用相同规则",
+        "kind": "concept",
+        "quote": "其它机构也采用相同规则"
+      },
+      {
+        "id": "n10",
+        "parent": "n2",
+        "label": "志愿者先登记书名、捐赠日期和捐赠者代号",
+        "kind": "concept",
+        "quote": "志愿者先登记书名、捐赠日期和捐赠者代号"
+      },
+      {
+        "id": "n11",
+        "parent": "n2",
+        "label": "然后检查书页是否完整",
+        "kind": "concept",
+        "quote": "然后检查书页是否完整"
+      },
+      {
+        "id": "n12",
+        "parent": "n2",
+        "label": "书页完整且封面没有霉斑",
+        "kind": "concept",
+        "quote": "书页完整且封面没有霉斑"
+      },
+      {
+        "id": "n13",
+        "parent": "n2",
+        "label": "待分类区",
+        "kind": "concept",
+        "quote": "待分类区"
+      },
+      {
+        "id": "n14",
+        "parent": "n2",
+        "label": "只满足其中一项",
+        "kind": "concept",
+        "quote": "只满足其中一项"
+      },
+      {
+        "id": "n15",
+        "parent": "n2",
+        "label": "入区",
+        "kind": "concept",
+        "quote": "入区"
+      },
+      {
+        "id": "n16",
+        "parent": "n2",
+        "label": "书页缺失的图书",
+        "kind": "concept",
+        "quote": "书页缺失的图书"
+      },
+      {
+        "id": "n17",
+        "parent": "n2",
+        "label": "修补区",
+        "kind": "concept",
+        "quote": "修补区"
+      },
+      {
+        "id": "n18",
+        "parent": "n2",
+        "label": "出现霉斑的图书",
+        "kind": "concept",
+        "quote": "出现霉斑的图书"
+      },
+      {
+        "id": "n19",
+        "parent": "n2",
+        "label": "暂不入库",
+        "kind": "concept",
+        "quote": "暂不入库"
+      },
+      {
+        "id": "n20",
+        "parent": "n2",
+        "label": "同一本书同时存在两种问题",
+        "kind": "concept",
+        "quote": "同一本书同时存在两种问题"
+      },
+      {
+        "id": "n21",
+        "parent": "n2",
+        "label": "暂不入库处理",
+        "kind": "concept",
+        "quote": "暂不入库处理"
+      },
+      {
+        "id": "n22",
+        "parent": "n2",
+        "label": "送去修补",
+        "kind": "concept",
+        "quote": "送去修补"
+      },
+      {
+        "id": "n23",
+        "parent": "n2",
+        "label": "修补完成并通过再次检查后",
+        "kind": "concept",
+        "quote": "修补完成并通过再次检查后"
+      },
+      {
+        "id": "n24",
+        "parent": "n2",
+        "label": "这里的检查",
+        "kind": "concept",
+        "quote": "这里的检查"
+      },
+      {
+        "id": "n25",
+        "parent": "n2",
+        "label": "对捐赠者身份的审查",
+        "kind": "concept",
+        "quote": "对捐赠者身份的审查"
+      },
+      {
+        "id": "n26",
+        "parent": "n3",
+        "label": "管理员按内容选择一个主要类别",
+        "kind": "concept",
+        "quote": "管理员按内容选择一个主要类别"
+      },
+      {
+        "id": "n27",
+        "parent": "n3",
+        "label": "一本书",
+        "kind": "concept",
+        "quote": "一本书"
+      },
+      {
+        "id": "n28",
+        "parent": "n3",
+        "label": "多个检索标签",
+        "kind": "concept",
+        "quote": "多个检索标签"
+      },
+      {
+        "id": "n29",
+        "parent": "n3",
+        "label": "检索标签",
+        "kind": "concept",
+        "quote": "检索标签"
+      },
+      {
+        "id": "n30",
+        "parent": "n3",
+        "label": "主要类别",
+        "kind": "concept",
+        "quote": "主要类别"
+      },
+      {
+        "id": "n31",
+        "parent": "n3",
+        "label": "贴标签",
+        "kind": "concept",
+        "quote": "贴标签"
+      },
+      {
+        "id": "n32",
+        "parent": "n3",
+        "label": "更换主要类别",
+        "kind": "concept",
+        "quote": "更换主要类别"
+      },
+      {
+        "id": "n33",
+        "parent": "n3",
+        "label": "类别选择不清楚时",
+        "kind": "concept",
+        "quote": "类别选择不清楚时"
+      },
+      {
+        "id": "n34",
+        "parent": "n3",
+        "label": "可以查目录",
+        "kind": "concept",
+        "quote": "可以查目录"
+      },
+      {
+        "id": "n35",
+        "parent": "n3",
+        "label": "也可以请另一位管理员协助",
+        "kind": "concept",
+        "quote": "也可以请另一位管理员协助"
+      },
+      {
+        "id": "n36",
+        "parent": "n3",
+        "label": "两种办法",
+        "kind": "concept",
+        "quote": "两种办法"
+      },
+      {
+        "id": "n37",
+        "parent": "n3",
+        "label": "都做",
+        "kind": "concept",
+        "quote": "都做"
+      },
+      {
+        "id": "n38",
+        "parent": "n3",
+        "label": "完成分类之后",
+        "kind": "concept",
+        "quote": "完成分类之后"
+      },
+      {
+        "id": "n39",
+        "parent": "n3",
+        "label": "管理员记录架位",
+        "kind": "concept",
+        "quote": "管理员记录架位"
+      },
+      {
+        "id": "n40",
+        "parent": "n3",
+        "label": "志愿者把书放到对应书架",
+        "kind": "concept",
+        "quote": "志愿者再把书放到对应书架"
+      },
+      {
+        "id": "n41",
+        "parent": "n3",
+        "label": "自然、历史和文学三类书架",
+        "kind": "concept",
+        "quote": "自然、历史和文学三类书架"
+      },
+      {
+        "id": "n42",
+        "parent": "n3",
+        "label": "本室的分类方式",
+        "kind": "concept",
+        "quote": "本室的分类方式"
+      },
+      {
+        "id": "n43",
+        "parent": "n4",
+        "label": "读者先登记借阅证号",
+        "kind": "concept",
+        "quote": "读者先登记借阅证号"
+      },
+      {
+        "id": "n44",
+        "parent": "n4",
+        "label": "没有超期未还的图书且本次借阅数量不超过三本",
+        "kind": "concept",
+        "quote": "没有超期未还的图书且本次借阅数量不超过三本"
+      },
+      {
+        "id": "n45",
+        "parent": "n4",
+        "label": "本次借阅数量不超过三本",
+        "kind": "concept",
+        "quote": "本次借阅数量不超过三本"
+      },
+      {
+        "id": "n46",
+        "parent": "n4",
+        "label": "办理借阅",
+        "kind": "concept",
+        "quote": "办理借阅"
+      },
+      {
+        "id": "n47",
+        "parent": "n4",
+        "label": "借阅成功",
+        "kind": "concept",
+        "quote": "借阅成功"
+      },
+      {
+        "id": "n48",
+        "parent": "n4",
+        "label": "办理完成后",
+        "kind": "concept",
+        "quote": "办理完成后"
+      },
+      {
+        "id": "n49",
+        "parent": "n4",
+        "label": "系统生成到期日期并提醒读者",
+        "kind": "concept",
+        "quote": "系统生成到期日期并提醒读者"
+      },
+      {
+        "id": "n50",
+        "parent": "n4",
+        "label": "提前归还",
+        "kind": "concept",
+        "quote": "提前归还"
+      },
+      {
+        "id": "n51",
+        "parent": "n4",
+        "label": "直接登记",
+        "kind": "concept",
+        "quote": "直接登记"
+      },
+      {
+        "id": "n52",
+        "parent": "n4",
+        "label": "到期日期",
+        "kind": "concept",
+        "quote": "到期日期"
+      },
+      {
+        "id": "n53",
+        "parent": "n4",
+        "label": "需要延长借阅时间的读者",
+        "kind": "concept",
+        "quote": "需要延长借阅时间的读者"
+      },
+      {
+        "id": "n54",
+        "parent": "n4",
+        "label": "申请一次续借",
+        "kind": "concept",
+        "quote": "申请一次续借"
+      },
+      {
+        "id": "n55",
+        "parent": "n4",
+        "label": "已有其他读者预约该书",
+        "kind": "concept",
+        "quote": "已有其他读者预约该书"
+      },
+      {
+        "id": "n56",
+        "parent": "n4",
+        "label": "续借",
+        "kind": "concept",
+        "quote": "续借"
+      },
+      {
+        "id": "n57",
+        "parent": "n4",
+        "label": "没有预约",
+        "kind": "concept",
+        "quote": "没有预约"
+      },
+      {
+        "id": "n58",
+        "parent": "n4",
+        "label": "可以继续审查申请",
+        "kind": "concept",
+        "quote": "可以继续审查申请"
+      },
+      {
+        "id": "n59",
+        "parent": "n4",
+        "label": "续借一定获批",
+        "kind": "concept",
+        "quote": "续借一定获批"
+      },
+      {
+        "id": "n60",
+        "parent": "n5",
+        "label": "志愿者先检查图书状态",
+        "kind": "concept",
+        "quote": "志愿者先检查图书状态"
+      },
+      {
+        "id": "n61",
+        "parent": "n5",
+        "label": "记录归还日期",
+        "kind": "concept",
+        "quote": "记录归还日期"
+      },
+      {
+        "id": "n62",
+        "parent": "n5",
+        "label": "发现新损坏时",
+        "kind": "concept",
+        "quote": "发现新损坏时"
+      },
+      {
+        "id": "n63",
+        "parent": "n5",
+        "label": "保留损坏记录并告知管理员",
+        "kind": "concept",
+        "quote": "保留损坏记录并告知管理员"
+      },
+      {
+        "id": "n64",
+        "parent": "n5",
+        "label": "这份记录",
+        "kind": "concept",
+        "quote": "这份记录"
+      },
+      {
+        "id": "n65",
+        "parent": "n5",
+        "label": "读者一定故意损坏",
+        "kind": "concept",
+        "quote": "读者一定故意损坏"
+      },
+      {
+        "id": "n66",
+        "parent": "n5",
+        "label": "管理员",
+        "kind": "concept",
+        "quote": "管理员"
+      },
+      {
+        "id": "n67",
+        "parent": "n5",
+        "label": "受损图书",
+        "kind": "concept",
+        "quote": "受损图书"
+      },
+      {
+        "id": "n68",
+        "parent": "n5",
+        "label": "修补区",
+        "kind": "concept",
+        "quote": "修补区"
+      },
+      {
+        "id": "n69",
+        "parent": "n5",
+        "label": "修补和再次检查沿用入库阶段的办法",
+        "kind": "concept",
+        "quote": "修补和再次检查沿用入库阶段的办法"
+      },
+      {
+        "id": "n70",
+        "parent": "n5",
+        "label": "图书可能多次返回待分类区",
+        "kind": "concept",
+        "quote": "图书可能多次返回待分类区"
+      },
+      {
+        "id": "n71",
+        "parent": "n5",
+        "label": "没有损坏的图书",
+        "kind": "concept",
+        "quote": "没有损坏的图书"
+      },
+      {
+        "id": "n72",
+        "parent": "n5",
+        "label": "重新上架",
+        "kind": "concept",
+        "quote": "重新上架"
+      },
+      {
+        "id": "n73",
+        "parent": "n6",
+        "label": "一个月后",
+        "kind": "concept",
+        "quote": "一个月后"
+      },
+      {
+        "id": "n74",
+        "parent": "n6",
+        "label": "阅读室比较流转记录并调整架位",
+        "kind": "concept",
+        "quote": "阅读室比较流转记录并调整架位"
+      },
+      {
+        "id": "n75",
+        "parent": "n6",
+        "label": "比较记录",
+        "kind": "concept",
+        "quote": "比较记录"
+      },
+      {
+        "id": "n76",
+        "parent": "n6",
+        "label": "拥挤位置",
+        "kind": "concept",
+        "quote": "拥挤位置"
+      },
+      {
+        "id": "n77",
+        "parent": "n6",
+        "label": "仅凭借阅次数",
+        "kind": "concept",
+        "quote": "仅凭借阅次数"
+      },
+      {
+        "id": "n78",
+        "parent": "n6",
+        "label": "图书质量",
+        "kind": "concept",
+        "quote": "图书质量"
+      },
+      {
+        "id": "n79",
+        "parent": "n6",
+        "label": "活动海报",
+        "kind": "concept",
+        "quote": "活动海报"
+      },
+      {
+        "id": "n80",
+        "parent": "n6",
+        "label": "另一个小组",
+        "kind": "concept",
+        "quote": "另一个小组"
+      },
+      {
+        "id": "n81",
+        "parent": "n6",
+        "label": "海报设计",
+        "kind": "concept",
+        "quote": "海报设计"
+      },
+      {
+        "id": "n82",
+        "parent": "n6",
+        "label": "续借审查",
+        "kind": "concept",
+        "quote": "续借审查"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n7",
+        "dst": "n8",
+        "label": "只适用于",
+        "quote": "下面的规定只适用于这次试行"
+      },
+      {
+        "id": "r1",
+        "src": "n7",
+        "dst": "n9",
+        "label": "不表示",
+        "quote": "不表示其它机构也采用相同规则"
+      },
+      {
+        "id": "r2",
+        "src": "n10",
+        "dst": "n11",
+        "label": "然后",
+        "quote": "先登记书名、捐赠日期和捐赠者代号，然后检查书页是否完整"
+      },
+      {
+        "id": "r3",
+        "src": "n12",
+        "dst": "n13",
+        "label": "可以进入",
+        "quote": "书页完整且封面没有霉斑的图书可以进入待分类区"
+      },
+      {
+        "id": "r4",
+        "src": "n14",
+        "dst": "n15",
+        "label": "仍不能",
+        "quote": "只满足其中一项仍不能入区"
+      },
+      {
+        "id": "r5",
+        "src": "n16",
+        "dst": "n17",
+        "label": "送到",
+        "quote": "书页缺失的图书送到修补区"
+      },
+      {
+        "id": "r6",
+        "src": "n18",
+        "dst": "n19",
+        "label": "被处理为",
+        "quote": "出现霉斑的图书暂不入库"
+      },
+      {
+        "id": "r7",
+        "src": "n20",
+        "dst": "n21",
+        "label": "先按",
+        "quote": "先按暂不入库处理"
+      },
+      {
+        "id": "r8",
+        "src": "n20",
+        "dst": "n22",
+        "label": "不必先",
+        "quote": "不必先送去修补"
+      },
+      {
+        "id": "r9",
+        "src": "n23",
+        "dst": "n13",
+        "label": "才可以回到",
+        "quote": "修补完成并通过再次检查后，图书才可以回到待分类区"
+      },
+      {
+        "id": "r10",
+        "src": "n24",
+        "dst": "n25",
+        "label": "不是",
+        "quote": "这里的检查不是对捐赠者身份的审查"
+      },
+      {
+        "id": "r11",
+        "src": "n27",
+        "dst": "n28",
+        "label": "也可以贴",
+        "quote": "一本书也可以贴多个检索标签"
+      },
+      {
+        "id": "r12",
+        "src": "n29",
+        "dst": "n30",
+        "label": "不等于",
+        "quote": "检索标签不等于主要类别"
+      },
+      {
+        "id": "r13",
+        "src": "n31",
+        "dst": "n32",
+        "label": "不要画成",
+        "quote": "不要把贴标签画成更换主要类别"
+      },
+      {
+        "id": "r14",
+        "src": "n33",
+        "dst": "n34",
+        "label": "可以",
+        "quote": "类别选择不清楚时，可以查目录"
+      },
+      {
+        "id": "r15",
+        "src": "n33",
+        "dst": "n35",
+        "label": "也可以",
+        "quote": "也可以请另一位管理员协助"
+      },
+      {
+        "id": "r16",
+        "src": "n36",
+        "dst": "n37",
+        "label": "不要求",
+        "quote": "两种办法不要求都做"
+      },
+      {
+        "id": "r17",
+        "src": "n38",
+        "dst": "n39",
+        "label": "之后",
+        "quote": "完成分类之后，管理员记录架位"
+      },
+      {
+        "id": "r18",
+        "src": "n39",
+        "dst": "n40",
+        "label": "再",
+        "quote": "管理员记录架位，志愿者再把书放到对应书架"
+      },
+      {
+        "id": "r19",
+        "src": "n41",
+        "dst": "n42",
+        "label": "只是",
+        "quote": "这只是本室的分类方式"
+      },
+      {
+        "id": "r20",
+        "src": "n43",
+        "dst": "n47",
+        "label": "并不保证",
+        "quote": "登记借阅证号本身并不保证借阅成功"
+      },
+      {
+        "id": "r21",
+        "src": "n44",
+        "dst": "n46",
+        "label": "才允许",
+        "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅"
+      },
+      {
+        "id": "r22",
+        "src": "n48",
+        "dst": "n49",
+        "label": "之后",
+        "quote": "办理完成后，系统生成到期日期并提醒读者"
+      },
+      {
+        "id": "r23",
+        "src": "n50",
+        "dst": "n51",
+        "label": "可以",
+        "quote": "提前归还可以直接登记"
+      },
+      {
+        "id": "r24",
+        "src": "n50",
+        "dst": "n52",
+        "label": "不需要等到",
+        "quote": "不需要等到期日期"
+      },
+      {
+        "id": "r25",
+        "src": "n53",
+        "dst": "n54",
+        "label": "可以",
+        "quote": "需要延长借阅时间的读者可以申请一次续借"
+      },
+      {
+        "id": "r26",
+        "src": "n55",
+        "dst": "n56",
+        "label": "则拒绝",
+        "quote": "如果已有其他读者预约该书，则拒绝续借"
+      },
+      {
+        "id": "r27",
+        "src": "n57",
+        "dst": "n58",
+        "label": "只表示",
+        "quote": "没有预约只表示可以继续审查申请"
+      },
+      {
+        "id": "r28",
+        "src": "n57",
+        "dst": "n59",
+        "label": "不表示",
+        "quote": "不表示续借一定获批"
+      },
+      {
+        "id": "r29",
+        "src": "n60",
+        "dst": "n61",
+        "label": "再",
+        "quote": "志愿者先检查图书状态，再记录归还日期"
+      },
+      {
+        "id": "r30",
+        "src": "n62",
+        "dst": "n63",
+        "label": "需要",
+        "quote": "发现新损坏时，需要保留损坏记录并告知管理员"
+      },
+      {
+        "id": "r31",
+        "src": "n64",
+        "dst": "n65",
+        "label": "不能用来认定",
+        "quote": "这份记录不能用来认定读者一定故意损坏"
+      },
+      {
+        "id": "r32",
+        "src": "n67",
+        "dst": "n68",
+        "label": "送到",
+        "quote": "管理员可以把受损图书送到修补区"
+      },
+      {
+        "id": "r33",
+        "src": "n69",
+        "dst": "n70",
+        "label": "因此",
+        "quote": "修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区"
+      },
+      {
+        "id": "r34",
+        "src": "n71",
+        "dst": "n72",
+        "label": "可以",
+        "quote": "没有损坏的图书可以重新上架"
+      },
+      {
+        "id": "r35",
+        "src": "n73",
+        "dst": "n74",
+        "label": "之后",
+        "quote": "一个月后，阅读室比较流转记录并调整架位"
+      },
+      {
+        "id": "r36",
+        "src": "n75",
+        "dst": "n76",
+        "label": "有助于发现",
+        "quote": "比较记录有助于发现拥挤位置"
+      },
+      {
+        "id": "r37",
+        "src": "n77",
+        "dst": "n78",
+        "label": "不能用于判断",
+        "quote": "不能仅凭借阅次数判断图书质量"
+      },
+      {
+        "id": "r38",
+        "src": "n80",
+        "dst": "n79",
+        "label": "制作",
+        "quote": "活动海报由另一个小组制作"
+      },
+      {
+        "id": "r39",
+        "src": "n81",
+        "dst": "n82",
+        "label": "没有直接关系",
+        "quote": "海报设计与续借审查没有直接关系"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n12",
+          "n18"
+        ],
+        "suggest_exclude": false,
+        "note": "“霉斑”补全为：书页完整且封面没有霉斑才可进入待分类区；出现霉斑的图书被处理为暂不入库。",
+        "candidates": [
+          {
+            "node_id": "n12",
+            "quote": "书页完整且封面没有霉斑"
+          },
+          {
+            "node_id": "n18",
+            "quote": "出现霉斑的图书"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n28",
+          "n29",
+          "n31"
+        ],
+        "suggest_exclude": false,
+        "note": "“标签”补全为：一本书也可以贴多个检索标签，检索标签不等于主要类别，不要画成更换主要类别。",
+        "candidates": [
+          {
+            "node_id": "n28",
+            "quote": "多个检索标签"
+          },
+          {
+            "node_id": "n29",
+            "quote": "检索标签"
+          },
+          {
+            "node_id": "n31",
+            "quote": "贴标签"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n44",
+          "n45"
+        ],
+        "suggest_exclude": false,
+        "note": "“三本”补全为借阅数量限制：没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。",
+        "candidates": [
+          {
+            "node_id": "n44",
+            "quote": "没有超期未还的图书且本次借阅数量不超过三本"
+          },
+          {
+            "node_id": "n45",
+            "quote": "本次借阅数量不超过三本"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n55",
+          "n57"
+        ],
+        "suggest_exclude": false,
+        "note": "“预约”关联到：已有其他读者预约该书则拒绝续借；没有预约只表示可以继续审查申请，不表示续借一定获批。",
+        "candidates": [
+          {
+            "node_id": "n55",
+            "quote": "已有其他读者预约该书"
+          },
+          {
+            "node_id": "n57",
+            "quote": "没有预约"
+          }
+        ]
+      },
+      {
+        "selection_index": 4,
+        "node_ids": [
+          "n65"
+        ],
+        "suggest_exclude": false,
+        "note": "“故意”补全为：这份记录不能用来认定读者一定故意损坏。",
+        "candidates": [
+          {
+            "node_id": "n65",
+            "quote": "读者一定故意损坏"
+          }
+        ]
+      },
+      {
+        "selection_index": 5,
+        "node_ids": [
+          "n79",
+          "n81"
+        ],
+        "suggest_exclude": false,
+        "note": "“海报”关联到：活动海报由另一个小组制作；海报设计与续借审查没有直接关系。",
+        "candidates": [
+          {
+            "node_id": "n79",
+            "quote": "活动海报"
+          },
+          {
+            "node_id": "n81",
+            "quote": "海报设计"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "d612d998bfbfe372d8633616575d91626c0d1290b9f952f229b2ca158291e0d5"
+  },
+  "reading": {
+    "claims": [
+      {
+        "subject": "社区阅读室",
+        "predicate": "试行",
+        "object": "一套图书流转办法",
+        "quote": "社区阅读室试行一套图书流转办法",
+        "relation_required": false
+      },
+      {
+        "subject": "下面的规定",
+        "predicate": "只适用于",
+        "object": "这次试行",
+        "quote": "下面的规定只适用于这次试行",
+        "relation_required": true
+      },
+      {
+        "subject": "下面的规定",
+        "predicate": "不表示",
+        "object": "其它机构也采用相同规则",
+        "quote": "不表示其它机构也采用相同规则",
+        "relation_required": true
+      },
+      {
+        "subject": "入库时志愿者先登记书名、捐赠日期和捐赠者代号",
+        "predicate": "然后",
+        "object": "检查书页是否完整",
+        "quote": "入库时，志愿者先登记书名、捐赠日期和捐赠者代号，然后检查书页是否完整。",
+        "relation_required": true
+      },
+      {
+        "subject": "书页完整且封面没有霉斑的图书",
+        "predicate": "可以进入",
+        "object": "待分类区",
+        "quote": "书页完整且封面没有霉斑的图书可以进入待分类区",
+        "relation_required": true
+      },
+      {
+        "subject": "只满足其中一项",
+        "predicate": "仍不能",
+        "object": "入区",
+        "quote": "只满足其中一项仍不能入区",
+        "relation_required": true
+      },
+      {
+        "subject": "书页缺失的图书",
+        "predicate": "送到",
+        "object": "修补区",
+        "quote": "书页缺失的图书送到修补区",
+        "relation_required": true
+      },
+      {
+        "subject": "出现霉斑的图书",
+        "predicate": "暂不入库",
+        "object": "入库",
+        "quote": "出现霉斑的图书暂不入库",
+        "relation_required": true
+      },
+      {
+        "subject": "同一本书同时存在两种问题",
+        "predicate": "先按暂不入库处理",
+        "object": "暂不入库",
+        "quote": "如果同一本书同时存在两种问题，先按暂不入库处理",
+        "relation_required": true
+      },
+      {
+        "subject": "同一本书同时存在两种问题",
+        "predicate": "不必先送去",
+        "object": "修补",
+        "quote": "不必先送去修补",
+        "relation_required": true
+      },
+      {
+        "subject": "修补完成并通过再次检查",
+        "predicate": "之后图书才可以回到",
+        "object": "待分类区",
+        "quote": "修补完成并通过再次检查后，图书才可以回到待分类区",
+        "relation_required": true
+      },
+      {
+        "subject": "这里的检查",
+        "predicate": "不是",
+        "object": "对捐赠者身份的审查",
+        "quote": "这里的检查不是对捐赠者身份的审查",
+        "relation_required": true
+      },
+      {
+        "subject": "管理员",
+        "predicate": "按内容选择",
+        "object": "一个主要类别",
+        "quote": "分类时，管理员按内容选择一个主要类别",
+        "relation_required": true
+      },
+      {
+        "subject": "一本书",
+        "predicate": "也可以贴",
+        "object": "多个检索标签",
+        "quote": "一本书也可以贴多个检索标签",
+        "relation_required": true
+      },
+      {
+        "subject": "检索标签",
+        "predicate": "不等于",
+        "object": "主要类别",
+        "quote": "检索标签不等于主要类别",
+        "relation_required": true
+      },
+      {
+        "subject": "贴标签",
+        "predicate": "不要画成",
+        "object": "更换主要类别",
+        "quote": "不要把贴标签画成更换主要类别",
+        "relation_required": true
+      },
+      {
+        "subject": "类别选择不清楚时",
+        "predicate": "可以",
+        "object": "查目录",
+        "quote": "类别选择不清楚时，可以查目录，也可以请另一位管理员协助",
+        "relation_required": true
+      },
+      {
+        "subject": "类别选择不清楚时",
+        "predicate": "也可以",
+        "object": "请另一位管理员协助",
+        "quote": "类别选择不清楚时，可以查目录，也可以请另一位管理员协助",
+        "relation_required": true
+      },
+      {
+        "subject": "两种办法",
+        "predicate": "不要求都做",
+        "object": "查目录和请另一位管理员协助都做",
+        "quote": "两种办法不要求都做",
+        "relation_required": false
+      },
+      {
+        "subject": "完成分类之后",
+        "predicate": "管理员记录",
+        "object": "架位",
+        "quote": "完成分类之后，管理员记录架位，志愿者再把书放到对应书架",
+        "relation_required": true
+      },
+      {
+        "subject": "管理员记录架位",
+        "predicate": "之后志愿者再把书放到",
+        "object": "对应书架",
+        "quote": "完成分类之后，管理员记录架位，志愿者再把书放到对应书架",
+        "relation_required": true
+      },
+      {
+        "subject": "阅读室",
+        "predicate": "设有",
+        "object": "自然、历史和文学三类书架",
+        "quote": "阅读室设有自然、历史和文学三类书架",
+        "relation_required": false
+      },
+      {
+        "subject": "自然、历史和文学三类书架",
+        "predicate": "只是",
+        "object": "本室的分类方式",
+        "quote": "这只是本室的分类方式",
+        "relation_required": true
+      },
+      {
+        "subject": "借阅时",
+        "predicate": "读者先登记",
+        "object": "借阅证号",
+        "quote": "借阅时，读者先登记借阅证号",
+        "relation_required": false
+      },
+      {
+        "subject": "没有超期未还的图书且本次借阅数量不超过三本",
+        "predicate": "才允许",
+        "object": "办理借阅",
+        "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅",
+        "relation_required": true
+      },
+      {
+        "subject": "登记借阅证号本身",
+        "predicate": "并不保证",
+        "object": "借阅成功",
+        "quote": "登记借阅证号本身并不保证借阅成功",
+        "relation_required": true
+      },
+      {
+        "subject": "办理完成后",
+        "predicate": "系统生成",
+        "object": "到期日期",
+        "quote": "办理完成后，系统生成到期日期并提醒读者",
+        "relation_required": true
+      },
+      {
+        "subject": "办理完成后",
+        "predicate": "系统提醒",
+        "object": "读者",
+        "quote": "办理完成后，系统生成到期日期并提醒读者",
+        "relation_required": true
+      },
+      {
+        "subject": "提前归还",
+        "predicate": "可以直接登记",
+        "object": "登记",
+        "quote": "提前归还可以直接登记，不需要等到期日期",
+        "relation_required": true
+      },
+      {
+        "subject": "提前归还",
+        "predicate": "不需要等到",
+        "object": "到期日期",
+        "quote": "提前归还可以直接登记，不需要等到期日期",
+        "relation_required": true
+      },
+      {
+        "subject": "需要延长借阅时间的读者",
+        "predicate": "可以申请",
+        "object": "一次续借",
+        "quote": "需要延长借阅时间的读者可以申请一次续借",
+        "relation_required": true
+      },
+      {
+        "subject": "已有其他读者预约该书",
+        "predicate": "则拒绝",
+        "object": "续借",
+        "quote": "如果已有其他读者预约该书，则拒绝续借",
+        "relation_required": true
+      },
+      {
+        "subject": "没有预约",
+        "predicate": "只表示可以继续审查",
+        "object": "申请",
+        "quote": "没有预约只表示可以继续审查申请，不表示续借一定获批",
+        "relation_required": true
+      },
+      {
+        "subject": "没有预约",
+        "predicate": "不表示",
+        "object": "续借一定获批",
+        "quote": "没有预约只表示可以继续审查申请，不表示续借一定获批",
+        "relation_required": true
+      },
+      {
+        "subject": "归还时志愿者先检查图书状态",
+        "predicate": "再",
+        "object": "记录归还日期",
+        "quote": "归还时，志愿者先检查图书状态，再记录归还日期。",
+        "relation_required": true
+      },
+      {
+        "subject": "发现新损坏时",
+        "predicate": "需要保留",
+        "object": "损坏记录",
+        "quote": "发现新损坏时，需要保留损坏记录并告知管理员",
+        "relation_required": true
+      },
+      {
+        "subject": "发现新损坏时",
+        "predicate": "需要告知",
+        "object": "管理员",
+        "quote": "发现新损坏时，需要保留损坏记录并告知管理员",
+        "relation_required": true
+      },
+      {
+        "subject": "这份记录",
+        "predicate": "不能用来认定",
+        "object": "读者一定故意损坏",
+        "quote": "这份记录不能用来认定读者一定故意损坏",
+        "relation_required": true
+      },
+      {
+        "subject": "管理员",
+        "predicate": "可以把受损图书送到",
+        "object": "修补区",
+        "quote": "管理员可以把受损图书送到修补区",
+        "relation_required": true
+      },
+      {
+        "subject": "修补和再次检查沿用入库阶段的办法",
+        "predicate": "因此",
+        "object": "图书可能多次返回待分类区",
+        "quote": "修补和再次检查沿用入库阶段的办法，因此图书可能多次返回待分类区",
+        "relation_required": true
+      },
+      {
+        "subject": "没有损坏的图书",
+        "predicate": "可以重新上架",
+        "object": "重新上架",
+        "quote": "没有损坏的图书可以重新上架",
+        "relation_required": true
+      },
+      {
+        "subject": "一个月后",
+        "predicate": "阅读室比较流转记录并调整",
+        "object": "架位",
+        "quote": "一个月后，阅读室比较流转记录并调整架位",
+        "relation_required": true
+      },
+      {
+        "subject": "比较记录",
+        "predicate": "有助于发现",
+        "object": "拥挤位置",
+        "quote": "比较记录有助于发现拥挤位置",
+        "relation_required": true
+      },
+      {
+        "subject": "仅凭借阅次数",
+        "predicate": "不能判断",
+        "object": "图书质量",
+        "quote": "但不能仅凭借阅次数判断图书质量",
+        "relation_required": true
+      },
+      {
+        "subject": "活动海报",
+        "predicate": "由另一个小组制作",
+        "object": "另一个小组",
+        "quote": "活动海报由另一个小组制作",
+        "relation_required": false
+      },
+      {
+        "subject": "海报设计",
+        "predicate": "与续借审查没有直接关系",
+        "object": "续借审查",
+        "quote": "海报设计与续借审查没有直接关系",
+        "relation_required": true
+      }
+    ],
+    "selections": [
+      {
+        "selection_index": 0,
+        "quote": "书页完整且封面没有霉斑的图书可以进入待分类区；只满足其中一项仍不能入区。书页缺失的图书送到修补区，出现霉斑的图书暂不入库。",
+        "note": "“霉斑”出现时图书暂不入库；封面没有霉斑是入待分类区的条件之一，只书页完整或只无霉斑一项仍不能入区。"
+      },
+      {
+        "selection_index": 1,
+        "quote": "一本书也可以贴多个检索标签，但检索标签不等于主要类别，不要把贴标签画成更换主要类别。",
+        "note": "检索标签是可多个的检索标记，不等同主要类别；贴标签不等于更换主要类别。"
+      },
+      {
+        "selection_index": 2,
+        "quote": "只有没有超期未还的图书且本次借阅数量不超过三本时，才允许办理借阅。",
+        "note": "“三本”是本次借阅数量上限，并和“没有超期未还的图书”共同构成允许办理借阅的条件。"
+      },
+      {
+        "selection_index": 3,
+        "quote": "如果已有其他读者预约该书，则拒绝续借。没有预约只表示可以继续审查申请，不表示续借一定获批。",
+        "note": "“预约”是其他读者对该书的预约；有预约则拒绝续借，没有预约也不保证续借获批。"
+      },
+      {
+        "selection_index": 4,
+        "quote": "这份记录不能用来认定读者一定故意损坏。",
+        "note": "损坏记录不能用来认定读者一定故意损坏；原文否定的是“一定故意”的认定，不是直接认定损坏事实。"
+      },
+      {
+        "selection_index": 5,
+        "quote": "活动海报由另一个小组制作，海报设计与续借审查没有直接关系。",
+        "note": "原文只说活动海报由另一个小组制作；没有直接说海报设计由另一个小组制作。海报设计与续借审查没有直接关系。"
+      }
+    ]
+  }
+}

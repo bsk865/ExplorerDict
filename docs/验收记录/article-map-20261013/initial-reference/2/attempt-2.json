@@ -1,0 +1,837 @@
+{
+  "draft": {
+    "format": "full_article_map_v1",
+    "root": "n0",
+    "nodes": [
+      {
+        "id": "n0",
+        "parent": null,
+        "label": "短途徒步筹备与全部流程",
+        "kind": "branch",
+        "quote": "准备一次短途徒步，需要按步骤做好筹备。"
+      },
+      {
+        "id": "n1",
+        "parent": "n0",
+        "label": "按步骤做好筹备",
+        "kind": "branch",
+        "quote": "需要按步骤做好筹备"
+      },
+      {
+        "id": "n2",
+        "parent": "n1",
+        "label": "查看天气并确认风险",
+        "kind": "branch",
+        "quote": "首先查看天气预报，确认不会遇到暴雨或强风"
+      },
+      {
+        "id": "n3",
+        "parent": "n2",
+        "label": "查看天气预报",
+        "kind": "concept",
+        "quote": "首先查看天气预报"
+      },
+      {
+        "id": "n4",
+        "parent": "n2",
+        "label": "不会遇到暴雨或强风",
+        "kind": "concept",
+        "quote": "确认不会遇到暴雨或强风"
+      },
+      {
+        "id": "n5",
+        "parent": "n1",
+        "label": "整理背包",
+        "kind": "concept",
+        "quote": "其次整理背包"
+      },
+      {
+        "id": "n6",
+        "parent": "n5",
+        "label": "饮用水、少量零食、急救创可贴与充电宝",
+        "kind": "concept",
+        "quote": "装入饮用水、少量零食、急救创可贴与充电宝"
+      },
+      {
+        "id": "n7",
+        "parent": "n1",
+        "label": "整理背包，装入饮用水、少量零食、急救创可贴与充电宝",
+        "kind": "concept",
+        "quote": "整理背包，装入饮用水、少量零食、急救创可贴与充电宝"
+      },
+      {
+        "id": "n8",
+        "parent": "n1",
+        "label": "规划徒步路线",
+        "kind": "concept",
+        "quote": "接着规划徒步路线"
+      },
+      {
+        "id": "n9",
+        "parent": "n8",
+        "label": "沿途休息点与岔路口",
+        "kind": "concept",
+        "quote": "标记沿途休息点与岔路口"
+      },
+      {
+        "id": "n10",
+        "parent": "n1",
+        "label": "规划徒步路线，标记沿途休息点与岔路口",
+        "kind": "concept",
+        "quote": "规划徒步路线，标记沿途休息点与岔路口"
+      },
+      {
+        "id": "n11",
+        "parent": "n1",
+        "label": "出发前告知家人",
+        "kind": "concept",
+        "quote": "出发前告知家人"
+      },
+      {
+        "id": "n12",
+        "parent": "n11",
+        "label": "出行路线与预计返程时间",
+        "kind": "concept",
+        "quote": "出行路线与预计返程时间"
+      },
+      {
+        "id": "n13",
+        "parent": "n1",
+        "label": "出发前告知家人出行路线与预计返程时间",
+        "kind": "concept",
+        "quote": "出发前告知家人出行路线与预计返程时间"
+      },
+      {
+        "id": "n14",
+        "parent": "n0",
+        "label": "徒步途中注意事项",
+        "kind": "branch",
+        "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。"
+      },
+      {
+        "id": "n15",
+        "parent": "n14",
+        "label": "徒步途中",
+        "kind": "concept",
+        "quote": "徒步途中"
+      },
+      {
+        "id": "n16",
+        "parent": "n14",
+        "label": "沿着成熟步道行走",
+        "kind": "concept",
+        "quote": "优先沿着成熟步道行走"
+      },
+      {
+        "id": "n17",
+        "parent": "n14",
+        "label": "不要随意进入偏僻野路",
+        "kind": "concept",
+        "quote": "不要随意进入偏僻野路"
+      },
+      {
+        "id": "n18",
+        "parent": "n17",
+        "label": "偏僻野路",
+        "kind": "concept",
+        "quote": "偏僻野路"
+      },
+      {
+        "id": "n19",
+        "parent": "n0",
+        "label": "终点与回家后收尾",
+        "kind": "branch",
+        "quote": "抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。"
+      },
+      {
+        "id": "n20",
+        "parent": "n19",
+        "label": "抵达终点后",
+        "kind": "concept",
+        "quote": "抵达终点后"
+      },
+      {
+        "id": "n21",
+        "parent": "n19",
+        "label": "沿途见闻",
+        "kind": "concept",
+        "quote": "沿途见闻"
+      },
+      {
+        "id": "n22",
+        "parent": "n19",
+        "label": "抵达终点后简单记录沿途见闻",
+        "kind": "concept",
+        "quote": "抵达终点后简单记录沿途见闻"
+      },
+      {
+        "id": "n23",
+        "parent": "n19",
+        "label": "回家后",
+        "kind": "concept",
+        "quote": "回家后"
+      },
+      {
+        "id": "n24",
+        "parent": "n19",
+        "label": "装备",
+        "kind": "concept",
+        "quote": "装备"
+      },
+      {
+        "id": "n25",
+        "parent": "n19",
+        "label": "回家后整理装备",
+        "kind": "concept",
+        "quote": "回家后整理装备"
+      },
+      {
+        "id": "n26",
+        "parent": "n19",
+        "label": "检查有无物品遗失",
+        "kind": "concept",
+        "quote": "检查有无物品遗失"
+      },
+      {
+        "id": "n27",
+        "parent": "n19",
+        "label": "完成本次徒步的全部流程",
+        "kind": "concept",
+        "quote": "完成本次徒步的全部流程"
+      },
+      {
+        "id": "n28",
+        "parent": "n2",
+        "label": "首先",
+        "kind": "selection",
+        "quote": "首先"
+      }
+    ],
+    "relations": [
+      {
+        "id": "r0",
+        "src": "n0",
+        "dst": "n1",
+        "label": "需要按步骤",
+        "quote": "准备一次短途徒步，需要按步骤做好筹备。"
+      },
+      {
+        "id": "r1",
+        "src": "n3",
+        "dst": "n4",
+        "label": "用于确认",
+        "quote": "首先查看天气预报，确认不会遇到暴雨或强风"
+      },
+      {
+        "id": "r2",
+        "src": "n5",
+        "dst": "n6",
+        "label": "装入",
+        "quote": "其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝"
+      },
+      {
+        "id": "r3",
+        "src": "n8",
+        "dst": "n9",
+        "label": "标记",
+        "quote": "接着规划徒步路线，标记沿途休息点与岔路口"
+      },
+      {
+        "id": "r4",
+        "src": "n11",
+        "dst": "n12",
+        "label": "告知内容为",
+        "quote": "出发前告知家人出行路线与预计返程时间"
+      },
+      {
+        "id": "r5",
+        "src": "n15",
+        "dst": "n16",
+        "label": "优先选择",
+        "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。"
+      },
+      {
+        "id": "r6",
+        "src": "n15",
+        "dst": "n18",
+        "label": "不要随意进入",
+        "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。"
+      },
+      {
+        "id": "r7",
+        "src": "n20",
+        "dst": "n21",
+        "label": "简单记录",
+        "quote": "抵达终点后简单记录沿途见闻"
+      },
+      {
+        "id": "r8",
+        "src": "n23",
+        "dst": "n24",
+        "label": "整理",
+        "quote": "回家后整理装备"
+      },
+      {
+        "id": "r9",
+        "src": "n2",
+        "dst": "n7",
+        "label": "先于",
+        "quote": "首先查看天气预报，确认不会遇到暴雨或强风；其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；"
+      },
+      {
+        "id": "r10",
+        "src": "n7",
+        "dst": "n10",
+        "label": "先于",
+        "quote": "其次整理背包，装入饮用水、少量零食、急救创可贴与充电宝；接着规划徒步路线，标记沿途休息点与岔路口；"
+      },
+      {
+        "id": "r11",
+        "src": "n10",
+        "dst": "n13",
+        "label": "先于",
+        "quote": "接着规划徒步路线，标记沿途休息点与岔路口；出发前告知家人出行路线与预计返程时间。"
+      },
+      {
+        "id": "r12",
+        "src": "n13",
+        "dst": "n14",
+        "label": "先于",
+        "quote": "出发前告知家人出行路线与预计返程时间。徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。"
+      },
+      {
+        "id": "r13",
+        "src": "n14",
+        "dst": "n22",
+        "label": "先于",
+        "quote": "徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路。抵达终点后简单记录沿途见闻，回家后整理装备，检查有无物品遗失，完成本次徒步的全部流程。"
+      },
+      {
+        "id": "r14",
+        "src": "n22",
+        "dst": "n25",
+        "label": "先于",
+        "quote": "抵达终点后简单记录沿途见闻，回家后整理装备"
+      },
+      {
+        "id": "r15",
+        "src": "n25",
+        "dst": "n26",
+        "label": "随后",
+        "quote": "回家后整理装备，检查有无物品遗失"
+      },
+      {
+        "id": "r16",
+        "src": "n26",
+        "dst": "n27",
+        "label": "之后",
+        "quote": "检查有无物品遗失，完成本次徒步的全部流程"
+      }
+    ],
+    "bindings": [
+      {
+        "selection_index": 0,
+        "node_ids": [
+          "n5"
+        ],
+        "suggest_exclude": false,
+        "note": "“背包”补全为原文动作“整理背包”，直接关联动作节点；完整整理动作另见 n7。",
+        "candidates": [
+          {
+            "node_id": "n5",
+            "quote": "其次整理背包"
+          },
+          {
+            "node_id": "n7",
+            "quote": "整理背包，装入饮用水、少量零食、急救创可贴与充电宝"
+          }
+        ]
+      },
+      {
+        "selection_index": 1,
+        "node_ids": [
+          "n13"
+        ],
+        "suggest_exclude": false,
+        "note": "“家人”补全为原文完整动作“出发前告知家人出行路线与预计返程时间”。",
+        "candidates": [
+          {
+            "node_id": "n13",
+            "quote": "出发前告知家人出行路线与预计返程时间"
+          }
+        ]
+      },
+      {
+        "selection_index": 2,
+        "node_ids": [
+          "n17"
+        ],
+        "suggest_exclude": false,
+        "note": "“偏僻野路”补全为带否定和程度限定的完整动作“不要随意进入偏僻野路”；关系边另用 n18 作“不要随意进入”的终点。",
+        "candidates": [
+          {
+            "node_id": "n17",
+            "quote": "不要随意进入偏僻野路"
+          },
+          {
+            "node_id": "n18",
+            "quote": "偏僻野路"
+          }
+        ]
+      },
+      {
+        "selection_index": 3,
+        "node_ids": [
+          "n28"
+        ],
+        "suggest_exclude": true,
+        "note": "“首先”只是顺序词，不是概念，保留 selection 节点并建议排除。",
+        "candidates": [
+          {
+            "node_id": "n28",
+            "quote": "首先"
+          }
+        ]
+      }
+    ],
+    "source_sha256": "7eb60ba195167d70ba069d8b54d0d643541bd15933a55a9e75b47cde14b3f577"
+  },
+  "issues": [],
+  "review": {
+    "node_verdicts": [
+      {
+        "id": "n0",
+        "verdict": "supported",
+        "note": "原文首句总起短途徒步筹备与全部流程。"
+      },
+      {
+        "id": "n1",
+        "verdict": "supported",
+        "note": "原文有“需要按步骤做好筹备”。"
+      },
+      {
+        "id": "n2",
+        "verdict": "supported",
+        "note": "原文有“首先查看天气预报，确认不会遇到暴雨或强风”。"
+      },
+      {
+        "id": "n3",
+        "verdict": "supported",
+        "note": "原文有“查看天气预报”。"
+      },
+      {
+        "id": "n4",
+        "verdict": "supported",
+        "note": "原文有“确认不会遇到暴雨或强风”。"
+      },
+      {
+        "id": "n5",
+        "verdict": "supported",
+        "note": "原文有“其次整理背包”。"
+      },
+      {
+        "id": "n6",
+        "verdict": "supported",
+        "note": "原文列出装入饮用水、少量零食、急救创可贴与充电宝。"
+      },
+      {
+        "id": "n7",
+        "verdict": "supported",
+        "note": "原文完整句“整理背包，装入饮用水、少量零食、急救创可贴与充电宝”。"
+      },
+      {
+        "id": "n8",
+        "verdict": "supported",
+        "note": "原文有“接着规划徒步路线”。"
+      },
+      {
+        "id": "n9",
+        "verdict": "supported",
+        "note": "原文有“标记沿途休息点与岔路口”。"
+      },
+      {
+        "id": "n10",
+        "verdict": "supported",
+        "note": "原文完整句“规划徒步路线，标记沿途休息点与岔路口”。"
+      },
+      {
+        "id": "n11",
+        "verdict": "supported",
+        "note": "原文有“出发前告知家人”。"
+      },
+      {
+        "id": "n12",
+        "verdict": "supported",
+        "note": "原文有“出行路线与预计返程时间”。"
+      },
+      {
+        "id": "n13",
+        "verdict": "supported",
+        "note": "原文完整句“出发前告知家人出行路线与预计返程时间”。"
+      },
+      {
+        "id": "n14",
+        "verdict": "supported",
+        "note": "原文有“徒步途中，优先沿着成熟步道行走，不要随意进入偏僻野路”。"
+      },
+      {
+        "id": "n15",
+        "verdict": "supported",
+        "note": "原文有“徒步途中”。"
+      },
+      {
+        "id": "n16",
+        "verdict": "supported",
+        "note": "原文有“优先沿着成熟步道行走”，节点保留行走动作，优先性由关系表达。"
+      },
+      {
+        "id": "n17",
+        "verdict": "supported",
+        "note": "原文有“不要随意进入偏僻野路”。"
+      },
+      {
+        "id": "n18",
+        "verdict": "supported",
+        "note": "原文有“偏僻野路”。"
+      },
+      {
+        "id": "n19",
+        "verdict": "supported",
+        "note": "原文有抵达终点后记录与回家后整理检查的收尾流程。"
+      },
+      {
+        "id": "n20",
+        "verdict": "supported",
+        "note": "原文有“抵达终点后”。"
+      },
+      {
+        "id": "n21",
+        "verdict": "supported",
+        "note": "原文有“沿途见闻”。"
+      },
+      {
+        "id": "n22",
+        "verdict": "supported",
+        "note": "原文完整句“抵达终点后简单记录沿途见闻”。"
+      },
+      {
+        "id": "n23",
+        "verdict": "supported",
+        "note": "原文有“回家后”。"
+      },
+      {
+        "id": "n24",
+        "verdict": "supported",
+        "note": "原文有“装备”。"
+      },
+      {
+        "id": "n25",
+        "verdict": "supported",
+        "note": "原文有“回家后整理装备”。"
+      },
+      {
+        "id": "n26",
+        "verdict": "supported",
+        "note": "原文有“检查有无物品遗失”。"
+      },
+      {
+        "id": "n27",
+        "verdict": "supported",
+        "note": "原文有“完成本次徒步的全部流程”。"
+      },
+      {
+        "id": "n28",
+        "verdict": "supported",
+        "note": "原文有“首先”，作为划选顺序词；建议排除语义概念但不删除 selection。"
+      }
+    ],
+    "relation_verdicts": [
+      {
+        "id": "r0",
+        "verdict": "supported",
+        "note": "原文由准备短途徒步引出“需要按步骤做好筹备”，n0为总起，n1为筹备要求，方向成立。"
+      },
+      {
+        "id": "r1",
+        "verdict": "supported",
+        "note": "查看天气预报用于确认不会遇到暴雨或强风，方向正确。"
+      },
+      {
+        "id": "r2",
+        "verdict": "supported",
+        "note": "整理背包后接装入所列物品，动作对象未反。"
+      },
+      {
+        "id": "r3",
+        "verdict": "supported",
+        "note": "规划徒步路线时标记沿途休息点与岔路口，方向正确。"
+      },
+      {
+        "id": "r4",
+        "verdict": "supported",
+        "note": "出发前告知家人，告知内容为出行路线与预计返程时间。"
+      },
+      {
+        "id": "r5",
+        "verdict": "supported",
+        "note": "徒步途中优先沿成熟步道行走，优先性在关系词中保留。"
+      },
+      {
+        "id": "r6",
+        "verdict": "supported",
+        "note": "徒步途中不要随意进入偏僻野路，否定与“随意”程度保留。"
+      },
+      {
+        "id": "r7",
+        "verdict": "supported",
+        "note": "抵达终点后简单记录沿途见闻。"
+      },
+      {
+        "id": "r8",
+        "verdict": "supported",
+        "note": "回家后整理装备。"
+      },
+      {
+        "id": "r9",
+        "verdict": "supported",
+        "note": "首先查看天气先于其次整理背包。"
+      },
+      {
+        "id": "r10",
+        "verdict": "supported",
+        "note": "整理背包先于接着规划路线。"
+      },
+      {
+        "id": "r11",
+        "verdict": "supported",
+        "note": "规划路线先于出发前告知家人。"
+      },
+      {
+        "id": "r12",
+        "verdict": "supported",
+        "note": "出发前告知先于徒步途中。"
+      },
+      {
+        "id": "r13",
+        "verdict": "supported",
+        "note": "徒步途中先于抵达终点后。"
+      },
+      {
+        "id": "r14",
+        "verdict": "supported",
+        "note": "抵达终点后记录先于回家后整理装备。"
+      },
+      {
+        "id": "r15",
+        "verdict": "supported",
+        "note": "整理装备随后检查有无物品遗失，顺序成立。"
+      },
+      {
+        "id": "r16",
+        "verdict": "supported",
+        "note": "检查有无物品遗失之后完成本次徒步全部流程。"
+      }
+    ],
+    "binding_verdicts": [
+      {
+        "selection_index": 0,
+        "verdict": "supported",
+        "note": "“背包”出现在“整理背包”中，绑定n5成立；完整动作另见候选n7。"
+      },
+      {
+        "selection_index": 1,
+        "verdict": "supported",
+        "note": "“家人”为告知对象，绑定到完整动作n13成立，未删除用户词。"
+      },
+      {
+        "selection_index": 2,
+        "verdict": "supported",
+        "note": "“偏僻野路”在否定动作n17和对象n18中均保留，绑定与候选合理。"
+      },
+      {
+        "selection_index": 3,
+        "verdict": "supported",
+        "note": "“首先”为顺序词，保留selection并建议排除语义概念，符合规则。"
+      }
+    ],
+    "claim_coverage": [
+      {
+        "claim_index": 0,
+        "node_ids": [
+          "n0",
+          "n1"
+        ],
+        "relation_ids": [
+          "r0"
+        ]
+      },
+      {
+        "claim_index": 1,
+        "node_ids": [
+          "n3",
+          "n4"
+        ],
+        "relation_ids": [
+          "r1"
+        ]
+      },
+      {
+        "claim_index": 2,
+        "node_ids": [
+          "n5",
+          "n6"
+        ],
+        "relation_ids": [
+          "r2"
+        ]
+      },
+      {
+        "claim_index": 3,
+        "node_ids": [
+          "n8",
+          "n9"
+        ],
+        "relation_ids": [
+          "r3"
+        ]
+      },
+      {
+        "claim_index": 4,
+        "node_ids": [
+          "n11",
+          "n12"
+        ],
+        "relation_ids": [
+          "r4"
+        ]
+      },
+      {
+        "claim_index": 5,
+        "node_ids": [
+          "n15",
+          "n16"
+        ],
+        "relation_ids": [
+          "r5"
+        ]
+      },
+      {
+        "claim_index": 6,
+        "node_ids": [
+          "n15",
+          "n18"
+        ],
+        "relation_ids": [
+          "r6"
+        ]
+      },
+      {
+        "claim_index": 7,
+        "node_ids": [
+          "n20",
+          "n21"
+        ],
+        "relation_ids": [
+          "r7"
+        ]
+      },
+      {
+        "claim_index": 8,
+        "node_ids": [
+          "n23",
+          "n24"
+        ],
+        "relation_ids": [
+          "r8"
+        ]
+      },
+      {
+        "claim_index": 9,
+        "node_ids": [
+          "n25",
+          "n26"
+        ],
+        "relation_ids": [
+          "r15"
+        ]
+      },
+      {
+        "claim_index": 10,
+        "node_ids": [
+          "n2",
+          "n7"
+        ],
+        "relation_ids": [
+          "r9"
+        ]
+      },
+      {
+        "claim_index": 11,
+        "node_ids": [
+          "n7",
+          "n10"
+        ],
+        "relation_ids": [
+          "r10"
+        ]
+      },
+      {
+        "claim_index": 12,
+        "node_ids": [
+          "n10",
+          "n13"
+        ],
+        "relation_ids": [
+          "r11"
+        ]
+      },
+      {
+        "claim_index": 13,
+        "node_ids": [
+          "n13",
+          "n14"
+        ],
+        "relation_ids": [
+          "r12"
+        ]
+      },
+      {
+        "claim_index": 14,
+        "node_ids": [
+          "n14",
+          "n22"
+        ],
+        "relation_ids": [
+          "r13"
+        ]
+      },
+      {
+        "claim_index": 15,
+        "node_ids": [
+          "n22",
+          "n25",
+          "n26"
+        ],
+        "relation_ids": [
+          "r14",
+          "r15"
+        ]
+      },
+      {
+        "claim_index": 16,
+        "node_ids": [
+          "n25",
+          "n26",
+          "n27"
+        ],
+        "relation_ids": [
+          "r15",
+          "r16"
+        ]
+      }
+    ],
+    "coverage_ok": true,
+    "issues": [],
+    "reader_issues": []
+  }
+}

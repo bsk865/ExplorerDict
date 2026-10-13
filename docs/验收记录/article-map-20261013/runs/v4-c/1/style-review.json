@@ -1,0 +1,33 @@
+{
+  "scope": "geometry_and_style_only",
+  "semantic_verdict": null,
+  "code_changed": false,
+  "real_window_created": false,
+  "nodes": 30,
+  "relations": 17,
+  "image_dimensions": [
+    1004,
+    2827
+  ],
+  "initial_geometry_passed": true,
+  "representative_drag_checks_passed": 3,
+  "minimum_text_box_to_line_gap_px": 8.0,
+  "model_metadata": {
+    "model": "deepseek-chat",
+    "thinking": "enabled",
+    "reasoning_effort": ""
+  },
+  "observations": [
+    "已查看完整PNG及中部条件分支的原尺寸局部。",
+    "长标签“针对不同问题，不要求先后”完整可见，无文字碰撞。",
+    "中部多条语义路径在长竖线处汇合/共享通道，虽然文字净空通过，完整图的关系归属追踪仍较费力；逐条浏览可缓解。",
+    "整图高2827像素；适应普通窗口时文字明显缩小，需要定位或100%查看。"
+  ],
+  "evidence": [
+    "layout-audit.json",
+    "layout-audit-history.jsonl",
+    "full-map.svg",
+    "rendered-full-map.png",
+    "style-detail.png"
+  ]
+}

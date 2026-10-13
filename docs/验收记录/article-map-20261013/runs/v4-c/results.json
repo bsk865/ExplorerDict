@@ -1,0 +1,10 @@
+[
+  {
+    "case_id": "feedback-loop",
+    "file": "自编05-迭代反馈与分支.txt",
+    "approved": true,
+    "rounds": 1,
+    "nodes": 30,
+    "relations": 17
+  }
+]
