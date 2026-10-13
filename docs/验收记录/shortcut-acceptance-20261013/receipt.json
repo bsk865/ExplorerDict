@@ -1,0 +1,336 @@
+{
+  "checked_at": "2026-10-13T19:16:31.057501+08:00",
+  "shortcut": "C:\\Users\\张哲铭\\Desktop\\探索词典.exe - 快捷方式.lnk",
+  "target": "D:\\探索工具\\探索词典\\探索词典.exe",
+  "arguments": "",
+  "working_directory": "D:\\探索工具\\探索词典",
+  "source_commit": "7df9ce4945751584813dd4a62e525604ab1db337",
+  "source_already_at_shortcut_target": true,
+  "update_action": "Verified target is current repository. Current disk app loads on next launch; no file replacement or shortcut rewrite required.",
+  "processes_running_at_check": false,
+  "diagnose_exit_code": 0,
+  "diagnose_evidence": [
+    "2026-10-13 19:14:45 executable  : D:\\探索工具\\探索词典\\探索词典.exe",
+    "2026-10-13 19:14:45 frozen      : True",
+    "2026-10-13 19:14:45 project_root: D:\\探索工具\\探索词典",
+    "2026-10-13 19:14:45       paths.db_path: D:\\探索工具\\探索词典\\data\\explorer_dict.sqlite3",
+    "2026-10-13 19:14:45       paths.uia_helper_script: D:\\探索工具\\探索词典\\_runtime\\scripts\\uia_helper.ps1",
+    "2026-10-13 19:14:45       import app.map_service: ok",
+    "2026-10-13 19:14:45       import app.ui.concept_map: ok",
+    "2026-10-13 19:14:45       STATUS OK (no window created, no hook installed)",
+    "2026-10-13 19:14:45 DONE exit=0 elapsed=0.16s"
+  ],
+  "uia_source_runtime_match": true,
+  "user_database_opened": false,
+  "user_database_replaced": false,
+  "user_settings_changed": false,
+  "gui_launched": false,
+  "model_called": false,
+  "shortcut_changed": false,
+  "exe_rebuilt": false,
+  "data_path": "D:\\探索工具\\探索词典\\data\\explorer_dict.sqlite3",
+  "known_generation_blocker": "Last live requests returned DeepSeek HTTP 402 Insufficient Balance; no fresh balance check this turn.",
+  "desktop_interaction_acceptance": "Pending user acceptance",
+  "files": [
+    {
+      "path": "探索词典.exe",
+      "bytes": 6329925,
+      "sha256": "c83bb58e3d42d632f905c8f0354c48e5b0ac798b2d924c1c21486fdd7523af9d"
+    },
+    {
+      "path": "bootstrap.py",
+      "bytes": 25820,
+      "sha256": "0f14ac4c18f14a25a090d34098c9e60f74681629b1e737cbea6e03372c398a86"
+    },
+    {
+      "path": "desktop_entry.py",
+      "bytes": 6650,
+      "sha256": "c7f2f023b02cee5773d2a5360c9b0aa0953541b30843355d9833dc9cdaa40311"
+    },
+    {
+      "path": "scripts/uia_helper.ps1",
+      "bytes": 25773,
+      "sha256": "a1706ad03ebea01ef3c4791f57fcd83a0013772d45c26e9d5109c309a50e4853"
+    },
+    {
+      "path": "_runtime/scripts/uia_helper.ps1",
+      "bytes": 25773,
+      "sha256": "a1706ad03ebea01ef3c4791f57fcd83a0013772d45c26e9d5109c309a50e4853"
+    },
+    {
+      "path": "app/__init__.py",
+      "bytes": 80,
+      "sha256": "2bcd7a228f1f74208b560125e43c876d779652e0a6edbd7bcf7cc2c30ac39a9e"
+    },
+    {
+      "path": "app/activation.py",
+      "bytes": 10928,
+      "sha256": "10619ad045aed11c5e7092681cc1a3fd92bf3a456d71bb3c49ee22f09a7ba92a"
+    },
+    {
+      "path": "app/agent_api.py",
+      "bytes": 4869,
+      "sha256": "5d575c3904bf3636b99d8ea044516a099c6035c7437a40967302f8d7e8d428ce"
+    },
+    {
+      "path": "app/api_client.py",
+      "bytes": 89182,
+      "sha256": "bd462ee93b7d52234b992f0c91cb03ca15ac9cf855aabd9da7238e76dfa8441c"
+    },
+    {
+      "path": "app/article_map.py",
+      "bytes": 32450,
+      "sha256": "1840f05d1ce6ce0e1e1595fa06d14a4e4de5265f4951c33a101d7741084316bf"
+    },
+    {
+      "path": "app/article_source.py",
+      "bytes": 49576,
+      "sha256": "1cdfabd539105376e596f0a02b4f2de4f3de94046210d48d52e4ffcfd36c685f"
+    },
+    {
+      "path": "app/capture_service.py",
+      "bytes": 64964,
+      "sha256": "91cb4ecbfc50ac81c2b72aec8aebc02b7b19be9ef4518d5856c7ab3ee31b20f5"
+    },
+    {
+      "path": "app/chat_service.py",
+      "bytes": 26815,
+      "sha256": "d8d64a74fc579f462ddddc2c165d33eac29ca30a17634d039f6e02e60dd72918"
+    },
+    {
+      "path": "app/config.py",
+      "bytes": 23123,
+      "sha256": "02965bbcc5c9de44f0ce1cdb1474df8f970548d6bac2fa92b4d9e7d8ad394c4b"
+    },
+    {
+      "path": "app/crypto_dpapi.py",
+      "bytes": 3156,
+      "sha256": "bd8e9bcdd317f9695f1ebd5bc655730fb71b090669e80deb0de8806d00312924"
+    },
+    {
+      "path": "app/db.py",
+      "bytes": 72953,
+      "sha256": "1ba4bc85bd3ffed1b2b190bf9451b4c7d00ebc547a651ed32d15e96ef077b77f"
+    },
+    {
+      "path": "app/explain_service.py",
+      "bytes": 27315,
+      "sha256": "f5685cde643725487a5f6d1f15f78fb50deca2721e046e974a911c568d6d7572"
+    },
+    {
+      "path": "app/export_service.py",
+      "bytes": 29681,
+      "sha256": "796ffa62fbe49edfd1cf8bdb2097a82128bace9c9a8010a15399209f8c190cca"
+    },
+    {
+      "path": "app/gate.py",
+      "bytes": 14777,
+      "sha256": "d5383428a0fb427760c93305db1986b8e72b0c55a2582efd6f634e4ff40ad910"
+    },
+    {
+      "path": "app/gui_preflight.py",
+      "bytes": 12252,
+      "sha256": "1c8cc9678410a319ebbf48718a3cfc55687104e9e5cb8986f8e30c38496c4767"
+    },
+    {
+      "path": "app/hotkeys.py",
+      "bytes": 5161,
+      "sha256": "54a573feb97016167e5c5493b425e7f346a9783c34085c568b3bd20c1837213d"
+    },
+    {
+      "path": "app/logging_setup.py",
+      "bytes": 5264,
+      "sha256": "3923c5d8be5a0a78fdd75f8a2cf16b266af6767d9107643afda0e5862658f62a"
+    },
+    {
+      "path": "app/main.py",
+      "bytes": 128638,
+      "sha256": "bf80861910a546f038cc04373b81b61df108efc85484630eeb7314ad84207a1a"
+    },
+    {
+      "path": "app/map_export.py",
+      "bytes": 53649,
+      "sha256": "53f6bd06aeac43f71018fce23aeb447f1f4a873f5e0ed84b75e36e91b15019d1"
+    },
+    {
+      "path": "app/map_service.py",
+      "bytes": 180048,
+      "sha256": "41dfad7b0a73f08735607a494e00fcbc112ee37f3639a02b68a6c7eb97df2fcf"
+    },
+    {
+      "path": "app/models.py",
+      "bytes": 3018,
+      "sha256": "c92e51589039cfe3aa03c4ed37fee33f2cfc985b71e3161bae101030e14fd951"
+    },
+    {
+      "path": "app/mouse_hook.py",
+      "bytes": 5657,
+      "sha256": "803b654608faa6fe89b9a5a29c2ff483a8c2bc357e07fd61ca4aab0ca511dcdb"
+    },
+    {
+      "path": "app/paths.py",
+      "bytes": 4434,
+      "sha256": "45aaa6bbe3490c12d976b686c456b429cdb64af21013a3414abd58cee8b51e60"
+    },
+    {
+      "path": "app/pdf_writer.py",
+      "bytes": 37132,
+      "sha256": "642d78523189bdb43e63be810618cd6b4d5b9134cb9bcc8009268290e3efcaa1"
+    },
+    {
+      "path": "app/permissions.py",
+      "bytes": 5347,
+      "sha256": "b305e4349c7c8a46fa9af18ca907b15d25f195440da97d5dfaf0fa8cb18f5e5c"
+    },
+    {
+      "path": "app/search_service.py",
+      "bytes": 3983,
+      "sha256": "bc50a9d2b490f8318a3c059991940d3ecbefec784d34b88ae008030ebb137321"
+    },
+    {
+      "path": "app/single_instance.py",
+      "bytes": 12515,
+      "sha256": "b94a87bc06f3c7ab2a3b1e0d4a0dfa6e572d051e2b9f36abfd45e1f62a2a075e"
+    },
+    {
+      "path": "app/source_enrich.py",
+      "bytes": 6848,
+      "sha256": "df292da5e44ff90a60ec1bc4d3bc013339fe46f8ea7e65e038c45cfb01a6b317"
+    },
+    {
+      "path": "app/tray.py",
+      "bytes": 7850,
+      "sha256": "8f2f09fb07a64a076fa23a658ffb2afb6fdd2038d6771bebf429472f471db410"
+    },
+    {
+      "path": "app/ttf_subset.py",
+      "bytes": 17459,
+      "sha256": "fbbcad8021ff261e8ed3d13910dba7ae37ab13755daf3590b95448297e02e033"
+    },
+    {
+      "path": "app/ui/__init__.py",
+      "bytes": 19,
+      "sha256": "444c712fb4390f3f1e32dac11182db64a18e530e4d8d0694811bff1817a02909"
+    },
+    {
+      "path": "app/ui/app_menu.py",
+      "bytes": 3066,
+      "sha256": "6c05d4df60ecf77ff0890268e6ab66d8fb6bb7d48047fbd054c74d8195fe26bf"
+    },
+    {
+      "path": "app/ui/batch_dialogs.py",
+      "bytes": 13771,
+      "sha256": "1197eabf0b2537d6fcedf603fcf216c28686e9c05c371e5dc2150dd0893b5f16"
+    },
+    {
+      "path": "app/ui/concept_map.py",
+      "bytes": 407953,
+      "sha256": "9b85abc912009ddbba098a9d10e247b867badab2685854d6d8238f4fec647509"
+    },
+    {
+      "path": "app/ui/edge_block_dialog.py",
+      "bytes": 9440,
+      "sha256": "c0c621193acfa771352f901d6faa76463903a600bf3492e0acb24709b347cbdf"
+    },
+    {
+      "path": "app/ui/explain_window.py",
+      "bytes": 15963,
+      "sha256": "a74a800e547640933694728434185a1dad29e04172ba9d7ce74651997cb8f3f7"
+    },
+    {
+      "path": "app/ui/export_dialog.py",
+      "bytes": 9161,
+      "sha256": "ae63d8cf003159655173ea96f5e396d53cdb5bf8acb10a16d10d40392e34ab07"
+    },
+    {
+      "path": "app/ui/floating.py",
+      "bytes": 22791,
+      "sha256": "c89fb546d9c5c87571cb043f45d9bd71ab15e8a76b0e5c563dddd24637d82466"
+    },
+    {
+      "path": "app/ui/glyph_text.py",
+      "bytes": 14962,
+      "sha256": "5382f0c1eadc8b8d37656de78b5026b53c09441ec4b904dfd30379b47bc07ddb"
+    },
+    {
+      "path": "app/ui/main_window.py",
+      "bytes": 79906,
+      "sha256": "c4b362c1afa281e99ce4bd99da03220ac5604ebfaefc23b096ef6f2cd1a361b3"
+    },
+    {
+      "path": "app/ui/manual_dialog.py",
+      "bytes": 6234,
+      "sha256": "308a7382416dc32ac43a7ce9a506b77029d1736aa2fe7a3598685fa0f9336069"
+    },
+    {
+      "path": "app/ui/map_settings_dialog.py",
+      "bytes": 10866,
+      "sha256": "b05f57b9ae961d56c8cdddf2309c258ce04c5bd88fc5c4ebfa0184411605944b"
+    },
+    {
+      "path": "app/ui/map_templates.py",
+      "bytes": 46612,
+      "sha256": "b1330ac1f068350ad0f65bf1241440ed1d2511e0d55ed5356520b5be174a2570"
+    },
+    {
+      "path": "app/ui/panel_geometry.py",
+      "bytes": 22280,
+      "sha256": "3633b0bff55d6991be8e76d392eef977aa4424fd25b2cae1612d698957b2d68b"
+    },
+    {
+      "path": "app/ui/reading_panel.py",
+      "bytes": 182178,
+      "sha256": "9ed5e148a6c295d0246713bddaf9a721fa82a805ae592eabb2e37ad0368bc08c"
+    },
+    {
+      "path": "app/ui/relation_editor.py",
+      "bytes": 16646,
+      "sha256": "01a67d1166b2444832665ee0ce822f106a3f8c8329b704af1824408044e45c80"
+    },
+    {
+      "path": "app/ui/selection_bar.py",
+      "bytes": 8651,
+      "sha256": "3f93f08e753d79e6a1dabeb415b5f3c590c9d9fa268b6affa63312eb9835c917"
+    },
+    {
+      "path": "app/ui/settings_dialog.py",
+      "bytes": 34592,
+      "sha256": "df67fb41451c01530fce67ef45f8e25f755e792097fd7b029e8255e337008666"
+    },
+    {
+      "path": "app/ui/setup_wizard.py",
+      "bytes": 11327,
+      "sha256": "a5afce2c7f8e9cabf999cd51faec6c92b2ddb58b2e7ec5c6c5b1db13c78a8e8b"
+    },
+    {
+      "path": "app/ui/shortcuts_dialog.py",
+      "bytes": 5474,
+      "sha256": "13b9775d4bc9204a1a14b946797b825ea61c3f79a41168e16a2156604faa8bd8"
+    },
+    {
+      "path": "app/ui/template_dialog.py",
+      "bytes": 12955,
+      "sha256": "5a50937f8620464045d356b918c51b9a9725182ce39da51f3852a9b63474d7ea"
+    },
+    {
+      "path": "app/ui/theme.py",
+      "bytes": 8438,
+      "sha256": "b04a9bc7db8567ba26521515197fe05d10dd493d06dcf71beeafc262352fc2fc"
+    },
+    {
+      "path": "app/ui/widgets.py",
+      "bytes": 77473,
+      "sha256": "80f123c60f66cc27e0608888a90c9b152d1f37fa4e90efd9095b324357d0cd5f"
+    },
+    {
+      "path": "app/uia_bridge.py",
+      "bytes": 15993,
+      "sha256": "d07169cf6fc07e3a987e44ff2da8e3324c81833e99811d7555a790994e857784"
+    },
+    {
+      "path": "app/win32util.py",
+      "bytes": 24716,
+      "sha256": "0aa00b7f2ad95149120c721a64b65e963d3180201d51014ac9ea5145d77a40ce"
+    }
+  ]
+}
