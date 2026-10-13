@@ -1161,7 +1161,8 @@ class CaptureService:
         sel = CapturedSelection(
             term=term,
             context=normalize_context(resp.get("context", "")),
-            method="ui_textpattern",
+            method=("office_selection" if resp.get("method") == "OfficeSelection"
+                    else "ui_textpattern"),
             source=src,
             captured_at=now_iso(),
             rect=_parse_rect(resp),

@@ -169,6 +169,8 @@ DeepSeek 兼容 API 生成结构化解释、写回**同一条词条**。
    - 优先 `AutomationElement.FocusedElement`；失败则 `AutomationElement.FromPoint(屏幕坐标)`；
    - 用 `TextPattern.GetSelection()` 取选区文本；
    - 用 `TextPatternRange.Clone()` + `MoveEndpointByUnit(Character, ±N)` 取上下文。
+   - Word/WPS 正文 `_WwG` / `KxWpsView` 未提供 TextPattern 时，使用该正文 HWND 的 `AccessibleObjectFromWindow(OBJID_NATIVEOM)` 获取所属文档窗口，再读取正常连续文本选区 `Window.Selection.Range.Text`；上下文仅移动 `Range.Duplicate` 的端点。
+   - 此补充路径在绑定及读取前后核验前台、顶层 HWND/PID 与正文进程同应用身份，拒绝工具栏、插入光标和块/形状选区；不创建 Office 实例、不从全局运行对象猜测文档。来源方法记为 `office_selection`。真实实测范围为本机 WPS 12.1.0.24031 普通正文划选，Microsoft Word 尚未实测。
 5. **捕获前后必须校验前台身份**：
    - 发起前记录前台 `hwnd/pid`；UIA 返回后重新读取，若已改变（用户切窗口）→ 丢弃；
    - 核验 UIA 响应里的 `process_id` 必须等于前台 pid，`hwnd` 的顶层根必须等于前台 hwnd；

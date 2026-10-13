@@ -141,6 +141,13 @@ try {
         Add-Type -Namespace ExplorerDict -Name Native -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern System.IntPtr GetForegroundWindow();
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern System.IntPtr GetAncestor(System.IntPtr hwnd, uint flags);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint processId);
+[System.Runtime.InteropServices.DllImport("oleacc.dll")]
+public static extern int AccessibleObjectFromWindow(System.IntPtr hwnd, uint objectId,
+    ref System.Guid iid, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Interface)] out object value);
 '@
     }
 } catch {
@@ -433,6 +440,105 @@ function Get-DefaultContextChars($v) {
     return $n
 }
 
+# WPS exposes its document view without TextPattern on some versions. Bind the
+# native Office object model to THAT verified body HWND, never to a global
+# running application or a newly created COM instance. This also supports Word
+# body views. No clipboard access, keystrokes, document edits or app startup.
+function Test-OfficeHwnd($handle, $exp) {
+    if ($null -eq $exp -or $handle -le 0 -or -not (Test-ForegroundIs $exp)) { return $false }
+    try {
+        $root = [ExplorerDict.Native]::GetAncestor([IntPtr]$handle, 2).ToInt64()
+        if ($root -ne $exp.hwnd) { return $false }
+        $topProcess = [uint32]0
+        $null = [ExplorerDict.Native]::GetWindowThreadProcessId([IntPtr]$root, [ref]$topProcess)
+        if ($topProcess -ne $exp.pid) { return $false }
+        $bodyProcess = [uint32]0
+        $null = [ExplorerDict.Native]::GetWindowThreadProcessId([IntPtr]$handle, [ref]$bodyProcess)
+        if ($bodyProcess -le 0) { return $false }
+        $topName = Get-ProcessImageName $exp.pid
+        if ($topName -notin @('wps.exe', 'winword.exe')) { return $false }
+        if ((Get-ProcessImageName $bodyProcess) -ne $topName) { return $false }
+        $topPath = Get-ProcessImagePath $exp.pid
+        $bodyPath = Get-ProcessImagePath $bodyProcess
+        if ($topPath -and $bodyPath -and $topPath -ne $bodyPath) { return $false }
+        return $true
+    } catch { return $false }
+}
+
+function Get-NativeOfficeWindow($handle) {
+    $iid = [Guid]'00020400-0000-0000-C000-000000000046'
+    $window = $null
+    $hr = [ExplorerDict.Native]::AccessibleObjectFromWindow(
+        [IntPtr]$handle, [uint32]4294967280, [ref]$iid, [ref]$window)
+    if ($hr -ne 0) { return $null }
+    return $window
+}
+
+function Try-OfficeSelectionFrom($el, $exp, $chars) {
+    $result = @{ ok = $false; reason = 'office_selection_unavailable'; text = ''; context = ''
+                 context_prefix = -1; method = ''; full = '' }
+    $window = $null
+    $selection = $null
+    $range = $null
+    $clone = $null
+    try {
+        # Restrict fallback to actual document body views. Ribbon/search fields
+        # must never return an old selection left in the document.
+        if ((Test-Candidate $el $exp) -ne '' -or -not (Test-ForegroundIs $exp)) { return $result }
+        if ($el.Current.ClassName -notin @('_WwG', 'KxWpsView')) { return $result }
+        $handle = [int]$el.Current.NativeWindowHandle
+        if (-not (Test-OfficeHwnd $handle $exp)) { return $result }
+        $window = Get-NativeOfficeWindow $handle
+        if ($null -eq $window) { return $result }
+        $officeHandle = [int]$window.Hwnd
+        if (-not (Test-OfficeHwnd $officeHandle $exp)) { return $result }
+        $selection = $window.Selection
+        # Normal contiguous text only: insertion points and block/shape
+        # selections are not reliable text ranges.
+        if ([int]$selection.Type -ne 2) {
+            $result.reason = 'empty_selection'
+            return $result
+        }
+        $range = $selection.Range
+        $start = [int]$range.Start
+        $end = [int]$range.End
+        if ($end -le $start) { $result.reason = 'empty_selection'; return $result }
+        if (-not (Test-OfficeHwnd $officeHandle $exp)) { return $result }
+        $raw = [string]$range.Text
+        $text = $raw.Trim()
+        if (-not $text) { $result.reason = 'empty_text'; return $result }
+        if ($chars -gt 0) {
+            try {
+                # Duplicate range operations move clone endpoints only, not the
+                # user's selection, caret, document text or clipboard.
+                $clone = $range.Duplicate
+                $null = $clone.MoveStart(1, -1 * $chars)
+                $null = $clone.MoveEnd(1, $chars)
+                if (-not (Test-OfficeHwnd $officeHandle $exp)) { return $result }
+                $ctxRaw = [string]$clone.Text
+                $lead = $ctxRaw.Length - $ctxRaw.TrimStart().Length
+                $selLead = $raw.Length - $raw.TrimStart().Length
+                $result.context = $ctxRaw.Trim()
+                $result.context_prefix = [Math]::Max(0, $start + $selLead - [int]$clone.Start - $lead)
+            } catch { $result.context = ''; $result.context_prefix = -1 }
+        }
+        # Reject a changed native active window as well as a changed foreground.
+        if ([int]$window.Hwnd -ne $officeHandle -or -not (Test-OfficeHwnd $officeHandle $exp)) { return $result }
+        $result.ok = $true
+        $result.reason = ''
+        $result.text = $text
+        $result.method = 'OfficeSelection'
+        return $result
+    } catch { return $result }
+    finally {
+        foreach ($obj in @($clone, $range, $selection, $window)) {
+            if ($null -ne $obj -and [System.Runtime.InteropServices.Marshal]::IsComObject($obj)) {
+                try { $null = [System.Runtime.InteropServices.Marshal]::ReleaseComObject($obj) } catch { }
+            }
+        }
+    }
+}
+
 function Handle-Selection($req) {
     $exp = Get-ExpectedWindow $req
     if ($null -eq $exp) {
@@ -466,8 +572,8 @@ function Handle-Selection($req) {
         } catch { }
     }
 
-    # reads = how many times TextPattern.GetSelection() was actually attempted.
-    # It must stay 0 whenever the foreground/candidate check fails.
+    # reads = verified candidate selection attempts (including pattern probes
+    # and native Office fallback). It stays 0 when identity checks fail.
     $reads = 0
     $lastReason = 'no_candidate_element'
     $index = 0
@@ -495,6 +601,10 @@ function Handle-Selection($req) {
         } else {
             $reads = $reads + 1
             $r = Try-SelectionFrom $cand.el $chars
+            if (-not $r.ok -and $r.reason -eq 'no_textpattern') {
+                $office = Try-OfficeSelectionFrom $cand.el $exp $chars
+                if ($office.ok -or $office.reason -in @('empty_selection', 'empty_text')) { $r = $office }
+            }
             if ($r.ok) {
                 $id = Get-ElementIdentity $cand.el
                 $win = Get-TopLevelElement $cand.el

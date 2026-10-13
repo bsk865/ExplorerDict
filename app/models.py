@@ -43,7 +43,7 @@ class CapturedSelection:
 
     term: str
     context: str = ""
-    method: str = "manual_input"  # ui_textpattern | manual_input | clipboard_import
+    method: str = "manual_input"  # ui_textpattern | office_selection | manual_input | clipboard_import
     source: SourceInfo = field(default_factory=SourceInfo)
     captured_at: str = field(default_factory=now_iso)
     #: 选区矩形（屏幕坐标 ``(left, top, right, bottom)``）；UIA 未给出时为空。
