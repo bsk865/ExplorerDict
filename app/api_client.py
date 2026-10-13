@@ -25,6 +25,7 @@ KIND_LABELS = {
     "network": "网络不可达",
     "timeout": "请求超时",
     "auth": "鉴权失败",
+    "billing": "模型账户付费受限",
     "rate_limit": "请求过于频繁（限流）",
     "bad_request": "请求被拒绝",
     "server": "服务端错误",
@@ -1520,6 +1521,9 @@ class DeepSeekClient:
         if status in (401, 403):
             return ApiError("auth", "API Key 无效或没有权限，请在设置中检查 Key", status=status,
                             preview=safe)
+        if status == 402:
+            return ApiError("billing", "请检查模型账户余额或付费状态，处理后再重试",
+                            status=status, preview=safe)
         if status == 429:
             return ApiError("rate_limit", "触发限流，请稍后重试", status=status, preview=safe)
         if status == 400:

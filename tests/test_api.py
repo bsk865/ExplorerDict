@@ -128,6 +128,16 @@ class TestFailurePath(ApiTestBase):
         self.assertEqual(err.label, "鉴权失败")
         self.assertIn("API Key", err.display())
 
+    def test_402_billing_error_is_clear_without_exposing_provider_detail(self):
+        self.server.responder = lambda r: (402, {"error": {"message": "Insufficient Balance (request_id: private-request-id)"}}, 0)
+        with self.assertRaises(ApiError) as ctx:
+            self.client().explain("t", "c")
+        err = ctx.exception
+        self.assertEqual(err.kind, "billing")
+        self.assertIn("账户余额", err.display())
+        self.assertNotIn("private-request-id", err.display())
+        self.assertEqual(len(self.server.requests), 1)
+
     def test_429_rate_limit(self):
         self.server.responder = lambda r: (429, {"error": {"message": "rate limited"}}, 0)
         with self.assertRaises(ApiError) as ctx:
