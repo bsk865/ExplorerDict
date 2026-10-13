@@ -1,0 +1,77 @@
+{
+  "checked_at": "2026-10-13T19:45:44.703253+08:00",
+  "source_base": "f3cedbb",
+  "source_commit": "5b30a2a66d865eff198c197548474f6435ba03d7",
+  "shortcut": "C:\\Users\\张哲铭\\Desktop\\探索词典.exe - 快捷方式.lnk",
+  "target": "D:\\探索工具\\探索词典\\探索词典.exe",
+  "dictionary_pid": 66248,
+  "application": "WPS Office 12.1.0.24031",
+  "test_document": "自编临时 DOCX，仅普通正文",
+  "prior_result": {
+    "reads": 5,
+    "candidates": 5,
+    "method": "",
+    "ok": false,
+    "context": "",
+    "reason": "no_textpattern",
+    "text": "",
+    "top_search": true
+  },
+  "fixed_text": "原文依据",
+  "context_checked": true,
+  "native_binding": "AccessibleObjectFromWindow on focused document body, OBJID_NATIVEOM",
+  "verified_foreground_hwnd": 2887614,
+  "verified_foreground_pid": 64664,
+  "body_pid": 22740,
+  "startup_and_drag_evidence": "2026-10-13 19:40:46 INFO    [capture-worker] explorer_dict.capture: 取到选区：「原文依据」（wps.exe，4 字，drag）",
+  "actual_mouse_drag": true,
+  "visible_panel_text": "原文依据",
+  "entry_and_batch_counts_unchanged": true,
+  "automatic_copy": false,
+  "clipboard_used": false,
+  "model_called": false,
+  "exe_rebuilt": false,
+  "shortcut_rewritten": false,
+  "user_document_edited": false,
+  "uia_source_runtime_match": true,
+  "tests": {
+    "unittest": 104,
+    "result": "OK",
+    "controlled_powershell_assertions": 17,
+    "providers": "controlled; no live UIA/Office in unit tests"
+  },
+  "live_scope": "WPS normal text selection; Microsoft Word and other reading apps not tested this turn",
+  "remote_main": "6dc97c1b789d88fdd4ae51eede12baeead84660f",
+  "remote_read_succeeded": true,
+  "pushed": false,
+  "files": [
+    {
+      "path": "探索词典.exe",
+      "sha256": "c83bb58e3d42d632f905c8f0354c48e5b0ac798b2d924c1c21486fdd7523af9d"
+    },
+    {
+      "path": "app/capture_service.py",
+      "sha256": "f59b5665ebe5d663b9b8c15ae5621984fbc5bb0204eb2dcee275ba34d09329fe"
+    },
+    {
+      "path": "app/models.py",
+      "sha256": "c4b341606dca9b4f66304a28e73a8c0701894d670207a4680a5327fb8254f328"
+    },
+    {
+      "path": "scripts/uia_helper.ps1",
+      "sha256": "b88b7a371304860e4ef092620a3dda2cc0d37963340933e2bc03f1bd1c11f216"
+    },
+    {
+      "path": "_runtime/scripts/uia_helper.ps1",
+      "sha256": "b88b7a371304860e4ef092620a3dda2cc0d37963340933e2bc03f1bd1c11f216"
+    },
+    {
+      "path": "tests/office_selection_contract.ps1",
+      "sha256": "a683c17b0775a2f8e5ee69cf95abdfa15d8190485c2433501f398e47fa4a2ff6"
+    },
+    {
+      "path": "tests/test_office_selection.py",
+      "sha256": "567b36b909adab1cf06554bf865ba66a07e8775c742aea37119673193b1e3bbe"
+    }
+  ]
+}

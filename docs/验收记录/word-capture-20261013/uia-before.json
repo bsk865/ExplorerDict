@@ -1,0 +1,26 @@
+{
+  "selection": {
+    "reads": 5,
+    "candidates": 5,
+    "method": "",
+    "ok": false,
+    "context": "",
+    "reason": "no_textpattern",
+    "text": "",
+    "top_search": true
+  },
+  "check": {
+    "url": "",
+    "focused": {
+      "control_type": "ControlType.Group",
+      "element_name": "",
+      "element_class": "KxWpsView",
+      "process_id": 22740,
+      "top_title": "取词测试-仅临时材料.docx - WPS Office",
+      "hwnd": 8520720
+    },
+    "textpattern_available": false,
+    "top_title": "",
+    "ok": true
+  }
+}

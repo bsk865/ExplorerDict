@@ -1,0 +1,22 @@
+[
+  {
+    "path": "receipt.json",
+    "sha256": "43497cac2d5d3d4fa987064cc1c2ff8d3d55d4c892995a611c758bd958f31f91"
+  },
+  {
+    "path": "regression.log",
+    "sha256": "9447c65e0d5eef2a8aa7a645c74fe7f3fe73d9a43bb3a73f99d9833eb750ab77"
+  },
+  {
+    "path": "uia-before.json",
+    "sha256": "7bf741219676dd125aae3c11531234c678518d7cdbb672f5472bc1cd92a299b4"
+  },
+  {
+    "path": "Word文档划词修复.md",
+    "sha256": "dbeffda3ead0f512cb31e023197bc89883980fb0948684df02a5c1e978a1be56"
+  },
+  {
+    "path": "实际划选与浮窗.png",
+    "sha256": "3174eb344b9fa832ce770c9912dd4e5c3584a7fbb43c482a15250b87a96012ca"
+  }
+]
