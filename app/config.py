@@ -74,6 +74,8 @@ DEFAULTS: dict[str, str] = {
     # 布局骨架（G1，见 app/ui/map_templates.py）：auto = 今天这套「一层一行」；
     # 其余是思维导图 / 树状图 / 组织架构图 / 单向导图 / 鱼骨图 / 流程线。
     "map.template": "auto",
+    "map.display_depth": "2",  # 全文图只折叠显示；原始树和关系完整保存
+    "map.request_timeout": "120",  # 全文生成与逐项复核优先质量，单次请求等待上限
     # 让模型在「模板」下拉里给一条建议（G3）：默认关 —— 只发关系类型与起止词名，
     # 不发释义正文；关掉时只用本地规则（零成本）。
     "map.template_ask_model": "0",
@@ -337,6 +339,18 @@ class Config:
         if mode in ("never", "0", "false", "no", "off"):
             return ""
         return "disabled" if looks_like_deepseek(self.model, self.base_url) else ""
+
+    @property
+    def article_map_thinking(self) -> str:
+        """全文导图自动模式优先思考；显式旧配置仍按原有语义生效。"""
+        mode = str(self.get("api.map_thinking") or "auto").strip().lower()
+        if mode == "auto" and looks_like_deepseek(self.model, self.base_url):
+            return "enabled"
+        return self.map_thinking
+
+    @property
+    def article_map_timeout(self) -> float:
+        return max(self.timeout, float(self.get_int("map.request_timeout",120)), 3.0)
 
     @property
     def model_display(self) -> str:

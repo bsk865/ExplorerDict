@@ -1738,61 +1738,30 @@ class TestMapLogicChainRound(unittest.TestCase):
             self.assertEqual(dict(again.logic_chain), {"logic_type": "时序"},
                              "覆盖写必须整体替换，不许留着上一次的骨架")
 
-    def test_the_article_path_also_runs_the_chain_round_first(self):
-        """★ 按原文归纳那条路（有留档原文时）同样要走第零轮，而且骨架要落进缓存。
-
-        这条流水线自己就读了全文，但用户口径是「读懂逻辑链」必须是一个**看得见、
-        留得下**的步骤 —— 于是它也要跑第零轮，并把骨架发给归纳那一轮。
-        """
-        from app.article_source import Article
-
+    def test_article_path_independently_reads_and_persists_full_map(self):
+        """全文流程独立阅读、生成、复核，完整新概念和质量清单均可重读。"""
+        from tests.test_full_article_map import FIXTURES, FixtureClient
+        f = FIXTURES[0]
         with support.temp_db() as db:
-            bid, _ids = _map_db(db)
-            body = ("卷积神经网络由卷积层和池化层堆叠而成，池化降低分辨率、抑制过拟合。"
-                    * 15)
-            doc_key = "url:https://a.example.com/conv"
-            db.put_article(doc_key, Article(ok=True, url=doc_key, title="卷积网络入门",
-                                            text=body, status="ok", method="test"))
-            row = db.get_article(doc_key)
-            chain = {"logic_type": "层级",
-                     "hierarchy": [{"whole": "卷积网络", "parts": ["卷积", "池化"]}]}
-            reply = {"main_logic": "层级",
-                     "branches": [{"name": "组成部分", "entities": ["卷积", "池化"]},
-                                  {"name": "整体", "entities": ["过拟合"]}],
-                     # 每个划过的词都要接上（否则「连不上的词」会让它白重试一轮）
-                     "relations": [
-                         {"src": "卷积", "dst": "池化", "type": "时序",
-                          "reason": "卷积层与池化层同属网络组成"},
-                         {"src": "池化", "dst": "过拟合", "type": "因果",
-                          "reason": "池化降低分辨率后不容易记住噪声"}]}
-            client = _MapClient(logic_chain=chain, article_logic=reply)
-            service, _cfg = _map_service(db, client=client)
-            delivered: list = []
-            service.set_result_sink(lambda *a: delivered.append(a))
-            service.generate(bid, force=True, topic_name="卷积网络", article=row)
-            self.assertTrue(_wait_for(lambda: delivered), "按原文归纳必须跑完")
+            bid = db.create_batch("全文验证")
+            for word in f["selected_words"]:
+                db.add_entry(batch_id=bid, term=word, doc_key="fixture")
+            client = FixtureClient(f)
+            service, _ = _map_service(db, client=client)
+            article = dict(doc_key="fixture", title=f["file"], status="ok", text=f["text"])
+            delivered = []
+            service.set_result_sink(lambda *args: delivered.append(args))
+            service.generate(bid, force=True, article=article)
+            self.assertTrue(_wait_for(lambda: delivered))
+            self.assertEqual(delivered[0][3], "ok")
             graph = delivered[0][4]
-            self.assertEqual(str(graph.source), "article", "前提：走的是原文那条路")
-            self.assertEqual(len(client.logic_chain_calls), 1,
-                             "★ 原文那条路也必须先跑第零轮")
-            self.assertIn("卷积神经网络由卷积层", client.logic_chain_calls[0]["article"],
-                          "第零轮拿到的是留档里的整篇正文")
-            self.assertEqual(client.logic_chain_calls[0]["topic"], "卷积网络入门",
-                             "主题名给的是这篇文章的标题")
-            self.assertEqual(len(client.article_logic_calls), 1,
-                             "归纳一次就过（重试轮另有守卫）")
-            self.assertEqual(client.article_logic_calls[0]["logic_chain"], chain,
-                             "归纳那一轮必须拿着同一份骨架")
-            self.assertEqual(dict(graph.logic_chain), chain)
-            self.assertFalse(graph.logic_chain_empty)
-
-            fingerprint = delivered[0][2]
-            nodes = service.nodes_for_topic(bid)
-            cached = service.cached_graph(bid, nodes, fingerprint=fingerprint)
-            self.assertIsNotNone(cached, "这一次的缓存必须命中")
-            self.assertEqual(dict(cached.logic_chain), chain,
-                             "原文那条路的骨架同样要落库、读得回来")
-            self.assertFalse(cached.logic_chain_empty)
+            self.assertEqual(graph.source, "article")
+            self.assertEqual([c["stage"] for c in client.calls], ["read", "generate", "review"])
+            self.assertNotIn("draft", client.calls[0])
+            self.assertTrue(graph.quality["approved"])
+            cached = service.cached_graph(bid, article=article)
+            self.assertEqual(cached.article_map, graph.article_map)
+            self.assertEqual(cached.quality, graph.quality)
 
     def test_the_diagnostics_panel_says_which_chain_this_map_was_drawn_from(self):
         """诊断面板必须说清「这一次是按哪条逻辑链画的」（批次 M24）。
@@ -1863,42 +1832,28 @@ class TestMapLogicChainRound(unittest.TestCase):
         win._draw(force=True)
         return win, ids, bid
 
-    def test_the_article_path_says_so_when_the_chain_round_did_not_happen(self):
-        """原文那条路拿不到骨架时同样要如实记一笔（不许假装走过了）。"""
-        from app.article_source import Article
-
+    def test_article_path_rejects_missing_independent_reading(self):
+        """没有独立清单不能假装复核通过，错误终态允许重试。"""
+        from tests.test_full_article_map import FIXTURES
+        from app.api_client import ApiError
+        f = FIXTURES[0]
+        client = SimpleNamespace(full_article_map=lambda **kwargs: {})
         with support.temp_db() as db:
-            bid, _ids = _map_db(db)
-            body = ("卷积神经网络由卷积层和池化层堆叠而成，池化降低分辨率、抑制过拟合。"
-                    * 15)
-            doc_key = "url:https://a.example.com/conv"
-            db.put_article(doc_key, Article(ok=True, url=doc_key, title="卷积网络入门",
-                                            text=body, status="ok", method="test"))
-            row = db.get_article(doc_key)
-            reply = {"main_logic": "层级",
-                     "branches": [{"name": "组成部分", "entities": ["卷积", "池化"]},
-                                  {"name": "整体", "entities": ["过拟合"]}],
-                     "relations": [
-                         {"src": "卷积", "dst": "池化", "type": "时序",
-                          "reason": "卷积层与池化层同属网络组成"},
-                         {"src": "池化", "dst": "过拟合", "type": "因果",
-                          "reason": "池化降低分辨率后不容易记住噪声"}]}
-            # logic_chain 不配 ⇒ 替身上 map_logic_chain 这个属性就是 None（网关没有）
-            client = _MapClient(article_logic=reply)
-            service, _cfg = _map_service(db, client=client)
-            delivered: list = []
-            service.set_result_sink(lambda *a: delivered.append(a))
-            service.generate(bid, force=True, topic_name="卷积网络", article=row)
-            self.assertTrue(_wait_for(lambda: delivered), "照样要画得出图")
-            graph = delivered[0][4]
-            self.assertEqual(str(graph.source), "article")
-            self.assertEqual(dict(graph.logic_chain), {}, "拿不到就空着，不许编")
-            self.assertTrue(graph.logic_chain_empty)
-            self.assertEqual(int(graph.dropped.get("logic_chain_empty", 0)), 1,
-                             "拿不到骨架要记一笔，界面才说得出「这一次没走到逻辑链」")
-            self.assertIn("这一次没走到逻辑链", graph.summary())
-            self.assertIsNone(client.article_logic_calls[0]["logic_chain"],
-                              "没有骨架时归纳那一轮的提示词逐字等于老文本")
+            bid = db.create_batch("全文验证")
+            for word in f["selected_words"]:
+                db.add_entry(batch_id=bid, term=word, doc_key="fixture")
+            service, _ = _map_service(db, client=client)
+            delivered = []
+            service.set_result_sink(lambda *args: delivered.append(args))
+            article = dict(doc_key="fixture", title=f["file"], status="ok", text=f["text"])
+            service.generate(bid, force=True, article=article)
+            self.assertTrue(_wait_for(lambda: delivered))
+            self.assertEqual(delivered[0][3], "error")
+            self.assertIsNone(delivered[0][4])
+            self.assertIsInstance(delivered[0][5], ApiError)
+            self.assertIsNone(service.cached_graph(bid, article=article))
+            self.assertTrue(db.latest_article_map_draft(bid)["issues"])
+            self.assertTrue(_wait_for(lambda: not service.is_inflight()))
 
 
 class TestMapCandidateEndpoints(unittest.TestCase):
@@ -5943,9 +5898,7 @@ class TestConceptMapRegenerateLadder(unittest.TestCase):
                 self.assertEqual(int(seen[-1]["vary"]), got[-1],
                                  "发出去的必须是这一次算出来的档位")
                 _settle(win)
-            self.assertEqual(got[0], 1, "第一次点它就该换到第 2 档（不是原地重做）")
-            self.assertEqual(got[-1], ARTICLE_VARY_MAX, "到顶就停在顶，不许越界")
-            self.assertEqual(sorted(got), got, "档位只能往上走，不许回退")
+            self.assertEqual(set(got), {0}, "全文流程每次均重新生成并独立复核，精度不抬高采样温度")
 
     def test_the_status_line_says_which_step_this_is(self):
         from app.api_client import article_vary
@@ -5954,9 +5907,9 @@ class TestConceptMapRegenerateLadder(unittest.TestCase):
             win, _seen = self._window_with_article(db)
             win._on_generate()
             label = article_vary(1)[0]
-            self.assertIn("第 2 档", str(win.feedback.cget("text")))
-            self.assertIn(label, str(win.feedback.cget("text")),
-                          "忙态里要说清这一次换的是什么思路")
+            self.assertIn("独立读原文", str(win.feedback.cget("text")))
+            self.assertIn("最多三轮", str(win.feedback.cget("text")),
+                          "忙态里要说清真实的生成和复核流程")
 
     def test_without_an_article_the_ladder_stays_put(self):
         with support.temp_db() as db:
@@ -5980,11 +5933,11 @@ class TestConceptMapRegenerateLadder(unittest.TestCase):
             _settle(win)
             win._on_generate()
             _settle(win)
-            self.assertEqual(int(win._vary), 2, "前提：已经走到第 3 档")
+            self.assertEqual(int(win._vary), 0, "全文质量流程不递进采样档位")
             db.add_entry(batch_id=int(win._topic_id), term="新词", context="新上下文",
                          doc_key="url:https://a.example.com/p")
             win._on_generate()
-            self.assertEqual(int(seen[-1]["vary"]), 1,
+            self.assertEqual(int(seen[-1]["vary"]), 0,
                              "词条集合变了要重新从第 2 档开始想")
             self.assertLess(int(seen[-1]["vary"]), ARTICLE_VARY_MAX)
 
@@ -6041,7 +5994,7 @@ class TestConceptMapRegenerateLadder(unittest.TestCase):
             del seen[:]        # 窗口一打开就自动发过一次，不算用户点的
             win._on_generate()
             self.assertEqual(len(seen), 1, "点击要真的发出去")
-            self.assertEqual(int(seen[-1]["vary"]), 1, "本地文档同样要能换思路")
+            self.assertEqual(int(seen[-1]["vary"]), 0, "本地全文同样走独立阅读与质量复核")
 
 
 class TestConceptMapEvidenceSource(unittest.TestCase):

@@ -18,7 +18,7 @@ from . import crypto_dpapi
 from .article_source import Article
 from .models import now_iso
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 def _as_topic(topic_id: object) -> int:
@@ -84,6 +84,26 @@ CREATE TABLE IF NOT EXISTS chat_turns (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_turns_entry ON chat_turns(entry_id, id);
 CREATE INDEX IF NOT EXISTS idx_chat_turns_request ON chat_turns(request_id);
+
+CREATE TABLE IF NOT EXISTS article_map_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    round_no INTEGER NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    issues TEXT NOT NULL DEFAULT '[]',
+    review TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_article_map_drafts_topic ON article_map_drafts(topic_id, id);
+CREATE TABLE IF NOT EXISTS article_map_edits (
+    topic_id INTEGER NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    item_key TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY(topic_id,fingerprint,kind,item_key)
+);
 
 CREATE TABLE IF NOT EXISTS articles (
     doc_key TEXT PRIMARY KEY,
@@ -1356,6 +1376,36 @@ class Database:
         return int(row["c"]) if row else 0
 
     # --------------------------------------------------------- map graphs
+    def put_article_map_draft(self, topic_id: int, fingerprint: str, round_no: int,
+                              payload: dict, issues: list, review: dict) -> None:
+        """每轮草稿单独存档，绝不写进合格图缓存。"""
+        self.execute(
+            "INSERT INTO article_map_drafts(topic_id,fingerprint,round_no,payload,issues,review,created_at) VALUES(?,?,?,?,?,?,?)",
+            (int(topic_id), str(fingerprint), int(round_no), json.dumps(payload, ensure_ascii=False),
+             json.dumps(issues, ensure_ascii=False), json.dumps(review, ensure_ascii=False), now_iso()))
+
+    def latest_article_map_draft(self, topic_id: int):
+        return self.query_one("SELECT * FROM article_map_drafts WHERE topic_id=? ORDER BY id DESC LIMIT 1", (int(topic_id),))
+
+    def set_article_map_edit(self, topic_id: int, fingerprint: str, kind: str, key: str, payload) -> None:
+        if kind not in {"pin", "block"}:
+            raise ValueError("未知全文图调整项")
+        self.execute("INSERT INTO article_map_edits VALUES(?,?,?,?,?) ON CONFLICT(topic_id,fingerprint,kind,item_key) DO UPDATE SET payload=excluded.payload",
+                     (int(topic_id), str(fingerprint), kind, str(key), json.dumps(payload, ensure_ascii=False)))
+
+    def article_map_edits(self, topic_id: int, fingerprint: str, kind: str):
+        return self.query("SELECT rowid AS id,item_key,payload FROM article_map_edits WHERE topic_id=? AND fingerprint=? AND kind=?",
+                          (int(topic_id), str(fingerprint), kind))
+
+    def clear_article_map_edits(self, topic_id: int, fingerprint: str, kind: str) -> int:
+        cur = self.execute("DELETE FROM article_map_edits WHERE topic_id=? AND fingerprint=? AND kind=?",
+                           (int(topic_id), str(fingerprint), kind))
+        return cur.rowcount
+
+    def delete_article_map_edit(self, topic_id: int, fingerprint: str, kind: str, row_id: int) -> int:
+        return self.execute("DELETE FROM article_map_edits WHERE topic_id=? AND fingerprint=? AND kind=? AND rowid=?",
+                            (int(topic_id),str(fingerprint),kind,int(row_id))).rowcount
+
     def put_map_graph(self, *, topic_id: int, fingerprint: str, base_url: str = "",
                       model: str = "", relations: list | None = None,
                       raw: str = "", validation_version: int = 0,

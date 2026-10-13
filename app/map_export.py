@@ -34,6 +34,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import math
 import os
 import struct
@@ -418,6 +419,9 @@ def _footer_lines(meta, layout, st: dict) -> list[str]:
     stamp = str((meta or {}).get("exported_at") or "").strip()
     if stamp:
         second += f"　导出：{stamp}"
+    if (meta or {}).get("article_map"):
+        second = second.replace("个词", "个节点")
+        return [first, second, "细线整理文章主题；箭头表示原文关系，线上短句保留原文含义；高光为划选词"]
     return [first, second, LEGEND_LINE]
 
 
@@ -466,6 +470,8 @@ def svg_document(*, layout, style=None, box=None, meta=None) -> str:
             f"（其中人工 {manual_count} 条），矢量图可直接编辑")
     parts.append(f"  <title>{_esc(title)}</title>")
     parts.append(f"  <desc>{_esc(desc)}</desc>")
+    if meta and isinstance(meta.get("article_map"),dict):
+        parts.append("  <metadata>" + _esc(json.dumps(meta["article_map"],ensure_ascii=False)) + "</metadata>")
     if defs:
         parts.append(defs)
     parts.append(f'  <rect x="{_num(x0)}" y="{_num(y0)}" width="{_num(width)}"'
@@ -503,9 +509,10 @@ def svg_document(*, layout, style=None, box=None, meta=None) -> str:
     labels: list[str] = []
     for edge in edges:
         stroke, line_w, dash = edge_style(edge, st)
-        parts.append("  " + _svg_polyline(edge.points, stroke=stroke, width=line_w, dash=dash,
+        evidence=str(getattr(getattr(edge,"rel",None),"evidence","") or "")
+        parts.append("  <g><title>" + _esc(evidence) + "</title>" + _svg_polyline(edge.points, stroke=stroke, width=line_w, dash=dash,
                                           marker="" if getattr(edge, "symmetric", False) else "arrow",
-                                          marker_id=arrows.get(stroke, "")))
+                                          marker_id=arrows.get(stroke, "")) + "</g>")
         label = str(getattr(edge, "label", "") or "")
         pos = getattr(edge, "label_pos", None)
         if not label or not pos:
@@ -518,18 +525,21 @@ def svg_document(*, layout, style=None, box=None, meta=None) -> str:
                                        font_px=font))
     parts.extend(labels)
     # ④ 词条卡片
+    article_tree = getattr(layout,"template","") == "article-tree"
     for node in nodes:
         half_w = abs(float(getattr(node, "w", 0) or 0)) * 0.5
         half_h = abs(float(getattr(node, "h", 0) or 0)) * 0.5
-        parts.append("  " + _svg_rect(
+        root = article_tree and getattr(node,"level",-1)==0
+        quote = str(getattr(node,"source_quote", ""))
+        parts.append("  <g><title>" + _esc(quote) + "</title>" + _svg_rect(
             float(node.x) - half_w, float(node.y) - half_h,
             float(node.x) + half_w, float(node.y) + half_h,
-            fill=str(st["panel"] if getattr(node, "isolated", False) else st["card"]),
-            stroke=str(st["border_strong"]), width=float(st["line_width"]),
-            radius=float(st["node_radius"])))
+            fill=str(st["accent"] if root else st["accent_soft"] if getattr(node,"highlighted",False) else st["panel"] if getattr(node, "isolated", False) else st["card"]),
+            stroke=str(st["accent"] if root else st["border_strong"]), width=float(st["line_width"]),
+            radius=float(6 if article_tree else st["node_radius"])))
         lines = list(getattr(node, "lines", ()) or ()) or [str(getattr(node, "label", "") or "")]
-        parts.append("  " + _svg_text(node.x, node.y, lines, fill=str(st["text"]),
-                                      font_px=float(st["node_font"])))
+        parts.append("  " + _svg_text(node.x, node.y, lines, fill=str(st["bg"] if root else st["text"]),
+                                      font_px=float(st["node_font"])) + "</g>")
     # ⑤ 词条标题
     if topic is not None and float(getattr(topic, "w", 0) or 0) > 0:
         half_w = abs(float(topic.w)) * 0.5
@@ -1090,7 +1100,7 @@ def stem_label(topic_name: str) -> str:
 
 
 def export_map(*, layout, style=None, canvas=None, topic_name="", model_config="",
-               template_name="", directory=None, now=None) -> MapExportResult:
+               template_name="", directory=None, now=None, article_map=None) -> MapExportResult:
     """把一张参考关系图导出成**图片**：同名的 ``.svg``（主） + ``.png``（附赠）。
 
     * 文件名：``探索词典-关系图-<safe_stem(主题) 或 全部>-YYYYmmdd-HHMMSS``；
@@ -1123,6 +1133,8 @@ def export_map(*, layout, style=None, canvas=None, topic_name="", model_config="
             "model_config": str(model_config or "").strip(),
             "template_name": str(template_name or "").strip(),
             "exported_at": _stamp_text(now, footer=True)}
+    if article_map is not None:
+        meta["article_map"] = article_map
     write_svg(svg_path, svg_document(layout=layout, style=st, box=box, meta=meta))
 
     result_png: Path | None = None

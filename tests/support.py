@@ -2193,6 +2193,15 @@ class _FakeTkEnv:
             self._stack.enter_context(mock.patch(f"tkinter.{name}",
                                                  side_effect=self._make_toplevel_or_widget(name)))
         # ``tk.Frame`` / ``tk.Label`` 的子类（主界面 ScrollFrame、widgets.FlatButton）
+        def option_menu(master, variable, value, *values, **kwargs):
+            class FakeOptionMenu(FakeWidget):
+                def __getitem__(self, key):
+                    return self.cget(key)
+            widget = FakeOptionMenu(master, **kwargs)
+            widget.configure(menu=FakeWidget(widget), textvariable=variable)
+            return widget
+        self._stack.enter_context(mock.patch("tkinter.OptionMenu", side_effect=option_menu))
+        # 下拉选择也必须保持零真实 Tk 窗口。
         # 在导入时就绑定了基类，直接 patch 模块属性拦不住它们；这里**就地改写基类
         # 的 ``__init__``**（魔术方法不能用 mock.patch.object），退出时逐个还原。
         for base in _REAL_TK_BASES:

@@ -1,7 +1,7 @@
 """DeepSeek 兼容 chat/completions 客户端。
 
 隐私与安全红线（SPEC.md FR-9 / FR-10）：
-* 只发送「术语 + 短上下文」，不发送窗口标题、路径、整篇文档或其它词条；
+* 解释只发送术语与短上下文；用户发起全文导图时发送完整原文和划选词；
 * key 从 DPAPI 密文解出，只放进请求头，绝不进日志、绝不进异常消息（统一走 redact）；
 * 任何错误都归类成可读、可重试的类型。
 """
@@ -20,6 +20,7 @@ from .models import ExplainResult
 log = get_logger("api")
 
 KIND_LABELS = {
+    "schema": "生成未通过检查",
     "config": "配置缺失",
     "network": "网络不可达",
     "timeout": "请求超时",
@@ -1451,6 +1452,20 @@ class DeepSeekClient:
             reasoning_effort=effort, thinking=self.thinking, vary=vary,
             logic_chain=logic_chain)
         return parse_article_logic(self._extract_content(self._post(payload)))
+
+    def full_article_map(self, *, stage: str, text: str, selected_words=(),
+                         draft=None, reading=None, feedback=()) -> dict:
+        """全文图：独立读原文 / 生成主题树 / 回原文复核，各阶段无共享对话历史。"""
+        from .article_map import ArticleMapError, parse_object, payload
+        try:
+            request = payload(self.model, stage=stage, text=text,
+                              selected_words=selected_words, draft=draft,
+                              reading=reading, feedback=feedback,
+                              reasoning_effort=self.reasoning_effort,
+                              thinking=self.thinking)
+            return parse_object(self._extract_content(self._post(request)))
+        except ArticleMapError as exc:
+            raise ApiError("schema", str(exc)) from exc
 
     # ------------------------------------------------------------- 内部
     def _post(self, payload: dict) -> str:

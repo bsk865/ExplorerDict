@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import math
+import json
 import os
 import tkinter as tk
 from tkinter import messagebox
@@ -568,6 +569,8 @@ class LayoutNode:
     level: int = 0
     isolated: bool = False
     row: int = 0
+    highlighted: bool = False
+    source_quote: str = ""
 
 
 @dataclass(frozen=True)
@@ -2844,6 +2847,213 @@ def layout_graph(labels, relations, *, width: int, height: int, topic_label: str
     return _scaled_layout(core, zoom)
 
 
+def article_label_box(pos, label, m):
+    """包含实际字形留量的文字框；Tk 与 SVG 都以同一中心绘制。"""
+    box=label_box(pos,label,m)
+    half_h=max((box[3]-box[1])/2, m.line_h*LABEL_FONT_SIZE/18)
+    return box[0]-2, pos[1]-half_h-2, box[2]+2, pos[1]+half_h+2
+
+
+def _article_label_position(points, label, m, blockers, nodes, paths):
+    """水平段上方、竖直段左右侧；整字框避开图中每一条线。"""
+    box=article_label_box((0,0),label,m)
+    half_w,half_h=box[2],box[3]
+    gap=max(theme.px(8),m.label_gap)
+    hard=[node_box(n,gap) for n in nodes]+list(blockers)
+    segments=[(a,b) for a,b in zip(points,points[1:]) if a!=b]
+    segments.sort(key=lambda ab:(ab[0][1]!=ab[1][1],-math.dist(*ab)))
+    for a,b in segments:
+        horizontal=abs(a[1]-b[1])<1e-6
+        low,high=sorted((a[0],b[0]) if horizontal else (a[1],b[1]))
+        half=half_w if horizontal else half_h
+        if high-low<2*half+2*gap:
+            continue
+        for fraction in (0.5,0.35,0.65,0.2,0.8,0.1,0.9):
+            along=max(low+half+gap,min(high-half-gap,low+(high-low)*fraction))
+            spots=((along,a[1]-half_h-gap),) if horizontal else (
+                (a[0]+half_w+gap,along),(a[0]-half_w-gap,along))
+            for pos in spots:
+                rect=article_label_box(pos,label,m)
+                if any(rects_intersect(rect,other) for other in hard):
+                    continue
+                keepout=_inflate_box(rect,gap-0.001)
+                if all(route_is_clear(path,[keepout]) for path in paths):
+                    return pos
+    return None
+
+
+def _article_metrics():
+    return replace(metrics_for(), max_w=theme.px(216), min_h=theme.px(52),
+                   pad_x=theme.px(18), pad_y=theme.px(14), pad=theme.px(42),
+                   route_margin=theme.px(12),label_gap=theme.px(8))
+
+
+def _article_route(a, b, nodes, label, m, blockers, previous, organization=()):
+    """主题树专用正交路由：端口外留空，标签和节点分别做净空检查。"""
+    clearance = m.em * 1.7
+    obstacles = [node_box(n, m.route_margin) for n in nodes]
+    def ports(n):
+        return [((n.x+n.w/2,n.y),(n.x+n.w/2+clearance,n.y)),
+                ((n.x-n.w/2,n.y),(n.x-n.w/2-clearance,n.y)),
+                ((n.x,n.y+n.h/2),(n.x,n.y+n.h/2+clearance)),
+                ((n.x,n.y-n.h/2),(n.x,n.y-n.h/2-clearance))]
+    xs = sorted({n.x+n.w/2+clearance*2 for n in nodes}
+                | {n.x-n.w/2-clearance*2 for n in nodes})
+    ys = sorted({n.y+n.h/2+clearance*2 for n in nodes}
+                | {n.y-n.h/2-clearance*2 for n in nodes})
+    # 长关系短句可以使用最外侧的独立通道，不能缩字或压线凑位置。
+    label_w=article_label_box((0,0),label,m)[2]*2
+    xs=sorted(set(xs)|{min(xs)-label_w-clearance,max(xs)+label_w+clearance})
+    candidates = []
+    for start, outer_a in ports(a):
+        for end, outer_b in ports(b):
+            if not route_is_clear((start,outer_a),[node_box(n,m.route_margin) for n in nodes if n.entry_id!=a.entry_id]):
+                continue
+            if not route_is_clear((outer_b,end),[node_box(n,m.route_margin) for n in nodes if n.entry_id!=b.entry_id]):
+                continue
+            paths = [(outer_a,(outer_b[0],outer_a[1]),outer_b),
+                     (outer_a,(outer_a[0],outer_b[1]),outer_b)]
+            paths += [(outer_a,(x,outer_a[1]),(x,outer_b[1]),outer_b) for x in xs]
+            paths += [(outer_a,(outer_a[0],y),(outer_b[0],y),outer_b) for y in ys]
+            for middle in paths:
+                if not route_is_clear(middle,obstacles):
+                    continue
+                points = [start]
+                for point in (*middle,end):
+                    if point != points[-1]:
+                        points.append(point)
+                # 去掉折返与同一直线上的冗余点，命中区域与画面保持一致。
+                clean = []
+                for point in points:
+                    while len(clean)>1 and ((clean[-2][0]==clean[-1][0]==point[0]) or
+                                            (clean[-2][1]==clean[-1][1]==point[1])):
+                        clean.pop()
+                    clean.append(point)
+                if not route_is_clear(clean,blockers):
+                    continue
+                length = sum(math.dist(p,q) for p,q in zip(clean,clean[1:]))
+                crossings = sum(_route_crossings(clean,p) for p in previous)
+                candidates.append((length+len(clean)*m.em*2+crossings*m.em*6,tuple(clean)))
+    for _,points in sorted(candidates,key=lambda item:item[0]):
+        pos=_article_label_position(points,label,m,blockers,nodes,
+                                    [*organization,*previous,points])
+        if pos is not None:
+            return points,pos
+    # 极端手动重叠时不伪造穿过节点的箭头；保留关系及证据供侧栏查看。
+    return (candidates[0][1],None) if candidates else ((),None)
+
+
+def layout_article_graph(graph, saved_nodes, *, width: int, height: int,
+                         depth: int = 2, focus_entries=(), relations=(), pins=None,
+                         reveal_nodes=()) -> MapLayout:
+    """按原文主题树排版，细组织线与有标签的原文关系分别绘制（纯函数）。"""
+    from ..article_map import projection, visible_ids
+    data = graph.article_map
+    m = _article_metrics()
+    _nodes, _relations, ids = projection(data, saved_nodes)
+    selected = None
+    if len(relations) == 1:
+        rel = relations[0]
+        selected = next((r for r in data["relations"]
+                         if ids[r["src"]] == rel.src_entry_id and ids[r["dst"]] == rel.dst_entry_id
+                         and r["label"] == rel.reason), None)
+    show = visible_ids(data, depth, focus_entries=focus_entries, saved_nodes=saved_nodes, relation=selected)
+    by_id = {n["id"]: n for n in data["nodes"]}
+    reveal = set(reveal_nodes) | {eid for rel in relations for eid in (rel.src_entry_id,rel.dst_entry_id)}
+    for nid in (nid for nid,eid in ids.items() if eid in reveal):
+        while nid is not None:
+            show.add(nid)
+            nid = by_id[nid]["parent"]
+    children = {nid: [] for nid in show}
+    for node in data["nodes"]:
+        if node["id"] in show and node["parent"] is not None:
+            children[node["parent"]].append(node["id"])
+    focus = set(focus_entries) or {n.entry_id for n in saved_nodes}
+    highlighted = {nid for b in data["bindings"] if saved_nodes[b["selection_index"]].entry_id in focus
+                   for nid in b["node_ids"]}
+    labels = {nid: tuple(wrap_label(by_id[nid]["label"], m.max_w-2*m.pad_x, m.em)) for nid in show}
+    heights = {nid: max(m.min_h, len(lines)*m.line_h+2*m.pad_y) for nid, lines in labels.items()}
+    sizes, levels = {}, {}
+    gap = max(theme.px(60), m.pad_y*4)
+    def measure(nid, level):
+        levels[nid] = level
+        sizes[nid] = max(heights[nid], sum(measure(c, level+1) for c in children[nid])+gap*max(0,len(children[nid])-1))
+        return sizes[nid]
+    measure(data["root"],0)
+    nodes, positions = [], {}
+    def place(nid, top):
+        x = m.pad+m.max_w/2+levels[nid]*(m.max_w+theme.px(172))
+        y = top+sizes[nid]/2
+        if ids[nid] in (pins or {}):
+            x,y = pins[ids[nid]]
+        item = LayoutNode(ids[nid],by_id[nid]["label"],labels[nid],x,y,m.max_w,heights[nid],
+                          level=levels[nid],row=len(nodes),highlighted=nid in highlighted,
+                          source_quote=by_id[nid]["quote"])
+        nodes.append(item); positions[nid] = item
+        cursor = top
+        for child in children[nid]:
+            place(child,cursor);cursor += sizes[child]+gap
+    place(data["root"],m.pad)
+    links=[]
+    for nid in (n["id"] for n in data["nodes"] if n["id"] in show):
+        parent = by_id[nid]["parent"]
+        if parent is None:
+            continue
+        a,b = positions[parent],positions[nid]
+        start=(a.x+a.w/2,a.y); end=(b.x-b.w/2,b.y)
+        mid=(start[0]+end[0])/2
+        links.append((start,(mid,start[1]),(mid,end[1]),end))
+    shown = {n.entry_id for n in nodes}
+    bases = tuple(LayoutEdge(r,"cross",(),r.reason if r.rel_type=="原文" else r.rel_type,None,r.symmetric)
+                  for r in relations if r.src_entry_id in shown and r.dst_entry_id in shown)
+    blockers=[]
+    edges=[]
+    for edge in bases:
+        a=next(n for n in nodes if n.entry_id==edge.rel.src_entry_id)
+        b=next(n for n in nodes if n.entry_id==edge.rel.dst_entry_id)
+        points,pos=_article_route(a,b,nodes,edge.label,m,blockers,[e.points for e in edges],links)
+        edges.append(replace(edge,points=points,label_pos=pos))
+        if pos:
+            blockers.append(_inflate_box(article_label_box(pos,edge.label,m),max(theme.px(8),m.label_gap)))
+    fixed=edges
+    xs=[n.x+n.w/2 for n in nodes];ys=[n.y+n.h/2 for n in nodes]
+    lefts=[n.x-n.w/2 for n in nodes];tops=[n.y-n.h/2 for n in nodes]
+    for edge in fixed:
+        xs.extend(p[0] for p in edge.points);ys.extend(p[1] for p in edge.points)
+        lefts.extend(p[0] for p in edge.points);tops.extend(p[1] for p in edge.points)
+        if edge.label_pos:
+            xs.append(edge.label_pos[0]+text_px(edge.label,label_em(m))/2)
+            ys.append(edge.label_pos[1]+m.em)
+            lefts.append(edge.label_pos[0]-text_px(edge.label,label_em(m))/2)
+            tops.append(edge.label_pos[1]-m.em)
+    return MapLayout(width,height,nodes=tuple(nodes),edges=tuple(fixed),topic_links=tuple(links),
+                     content_w=max(xs)+m.pad,content_h=max(ys)+m.pad,
+                     content_x0=min(0.0,min(lefts)-m.pad),
+                     content_y0=min(0.0,min(tops)-m.pad),template="article-tree")
+
+
+def article_drag_layout(layout,entry_id,cx,cy,organization_pairs):
+    """拖动预览与离线检查共用的纯几何；输入输出都是自然倍率坐标。"""
+    nodes=[replace(n,x=cx,y=cy) if n.entry_id==entry_id else n for n in layout.nodes]
+    by_id={n.entry_id:n for n in nodes}
+    links=[]
+    for parent_id,child_id in organization_pairs:
+        a,b=by_id[parent_id],by_id[child_id]
+        start,end=(a.x+a.w/2,a.y),(b.x-b.w/2,b.y)
+        mid=(start[0]+end[0])/2
+        links.append((start,(mid,start[1]),(mid,end[1]),end))
+    m=_article_metrics()
+    blockers=[]
+    edges=[]
+    for edge in layout.edges:
+        a,b=by_id[edge.rel.src_entry_id],by_id[edge.rel.dst_entry_id]
+        points,pos=_article_route(a,b,nodes,edge.label,m,blockers,[e.points for e in edges],links)
+        edges.append(replace(edge,points=points,label_pos=pos))
+        if pos is not None:
+            blockers.append(_inflate_box(article_label_box(pos,edge.label,m),max(theme.px(8),m.label_gap)))
+    return replace(layout,nodes=tuple(nodes),edges=tuple(edges),topic_links=tuple(links))
+
+
 def layout_extent(labels, relations, *, width: int, height: int, topic_label: str = "",
                   metrics: MapMetrics | None = None,
                   top_pad: float | None = None,
@@ -3058,7 +3268,7 @@ class ConceptMapWindow:
         # ---- 左：本主题的词条（可多选 = 只分析子集，改进清单 C3）----
         # 全部生成在词条几十上百条时很贵：这里让用户勾出关心的那一小批，只对子集
         # 发一次请求。double-click 一条 = 回主界面打开这条词条（改进清单 C4）。
-        tk.Label(left, text="词条（可多选，只分析选中的）", bg=theme.BG,
+        tk.Label(left, text="收藏词（可多选）", bg=theme.BG,
                  fg=theme.TEXT_FAINT, font=theme.tracking_label(7),
                  anchor="w").pack(fill="x", pady=(theme.px(8), theme.px(2)))
         self.entry_list = tk.Listbox(
@@ -3070,6 +3280,7 @@ class ConceptMapWindow:
         )
         self.entry_list.pack(fill="x")
         self.entry_list.bind("<Double-Button-1>", self._on_entry_list_open)
+        self.entry_list.bind("<<ListboxSelect>>", self._on_article_word_select)
         self.btn_subset = widgets.FlatButton(left, "只分析选中的词",
                                              self._on_subset_generate,
                                              font_size=8, padx=8, pady=3)
@@ -3227,10 +3438,44 @@ class ConceptMapWindow:
         self.diag_text.bind("<Double-Button-1>", self._on_diag_open)
         self._diag_visible = False
 
-        self.evidence = tk.Label(self.win, text="", bg=theme.BG, fg=theme.TEXT_MUTED,
+        self.article_controls = tk.Frame(self.win, bg=theme.BG)
+        article_browse = tk.Frame(self.article_controls,bg=theme.BG)
+        article_browse.pack(fill="x")
+        article_nav = tk.Frame(self.article_controls,bg=theme.BG)
+        article_nav.pack(fill="x",pady=(theme.px(3),0))
+        tk.Label(article_browse, text="精度", bg=theme.BG, fg=theme.TEXT,
+                 font=theme.font(8)).pack(side="left")
+        self.article_depth_var = tk.StringVar(master=self.win, value="核心概念")
+        depth_menu = tk.OptionMenu(article_browse, self.article_depth_var,
+                                   "主干", "核心概念", "全部细节", command=self._change_article_depth)
+        depth_menu.configure(bg=theme.PANEL, fg=theme.TEXT, font=theme.font(8), bd=0, highlightthickness=0)
+        depth_menu.pack(side="left", padx=theme.px(6))
+        self.article_relation_var = tk.StringVar(master=self.win, value="")
+        self.article_prev = widgets.FlatButton(article_browse,"上一条",lambda:self._step_article_relation(-1),font_size=8,padx=7,pady=4)
+        self.article_prev.pack(side="left")
+        self.article_next = widgets.FlatButton(article_browse,"下一条",lambda:self._step_article_relation(1),font_size=8,padx=7,pady=4)
+        self.article_next.pack(side="left")
+        tk.Label(article_browse,textvariable=self.article_relation_var,bg=theme.BG,
+                 fg=theme.TEXT_MUTED,font=theme.font(8),anchor="w").pack(side="left",padx=theme.px(8))
+        widgets.FlatButton(article_browse,"浏览全文关系",self._article_all_relations,font_size=8,padx=7,pady=4).pack(side="left")
+        widgets.FlatButton(article_nav,"定位",self._locate_article_selection,font_size=8,padx=7,pady=4).pack(side="left")
+        widgets.FlatButton(article_nav,"适应全图",self._fit_article_view,font_size=8,padx=7,pady=4).pack(side="left")
+        widgets.FlatButton(article_nav,"100%",self._article_actual_size,font_size=8,padx=7,pady=4).pack(side="left")
+        tk.Label(article_nav,text="细线整理主题 · 箭头说明关系 · 下方原句可选择复制",bg=theme.BG,fg=theme.TEXT_FAINT,font=theme.font(8)).pack(side="left",padx=theme.px(10))
+        self._article_relation_index = 0
+        self._article_scope_node = None
+        self._article_controls_graph = None
+        self.evidence_frame = tk.Frame(self.win,bg=theme.BG)
+        self.evidence_frame.pack(fill="x",padx=theme.px(10),pady=(0,theme.px(8)))
+        self.evidence = tk.Label(self.evidence_frame, text="", bg=theme.BG, fg=theme.TEXT_MUTED,
                                  font=theme.font(8), anchor="w", justify="left",
                                  wraplength=theme.px(620))
-        self.evidence.pack(fill="x", padx=theme.px(10), pady=(0, theme.px(8)))
+        self.evidence.pack(fill="x")
+        self.article_evidence = tk.Text(self.evidence_frame,height=5,wrap="word",bg=theme.PANEL_ALT,
+                                       fg=theme.TEXT_BODY,font=theme.font(9),bd=0,
+                                       padx=theme.px(12),pady=theme.px(8),highlightthickness=0)
+        self.article_evidence_scroll = tk.Scrollbar(self.evidence_frame,command=self.article_evidence.yview)
+        self.article_evidence.configure(yscrollcommand=self.article_evidence_scroll.set,state="disabled")
 
         self.refresh()
 
@@ -3354,6 +3599,155 @@ class ConceptMapWindow:
             return ""                      # 有原文却拿到老路的图：忙态里已经说过了
         return f" · 未取到原文，已按词条关系生成{tier}"
 
+    def _full_article_graph(self):
+        graph = getattr(self, "_graph", None)
+        return graph if getattr(graph, "article_map", None) else None
+
+    def _article_depth(self) -> int:
+        if getattr(self, "_article_export_all", False):
+            return 8
+        try:
+            return max(1, min(8, self.config.get_int("map.display_depth", 2)))
+        except (AttributeError, TypeError, ValueError):
+            return 2
+
+    def _change_article_depth(self, choice) -> None:
+        depth = {"主干": 1, "核心概念": 2, "全部细节": 8}.get(choice, 2)
+        if self.config is not None:
+            self.config.set("map.display_depth", str(depth))
+        self._fit_pending = True
+        self._draw(force=True)
+
+    def _pick_article_relation(self, index: int) -> None:
+        self._article_relation_index = index
+        graph = self._full_article_graph()
+        if graph is not None and 0 <= index < len(graph.relations):
+            self._selected = graph.relations[index]
+            self._selected_node = None
+        self._update_evidence()
+        self._draw(force=True)
+        self._locate_article_selection()
+
+    def _article_relation_choices(self):
+        graph = self._full_article_graph()
+        scope = getattr(self,"_article_scope_node",None)
+        return [i for i,r in enumerate(graph.relations) if scope is None or
+                scope in (r.src_entry_id,r.dst_entry_id)] if graph else []
+
+    def _step_article_relation(self, step):
+        choices = self._article_relation_choices()
+        if choices:
+            current = choices.index(self._article_relation_index) if self._article_relation_index in choices else 0
+            self._pick_article_relation(choices[(current+step)%len(choices)])
+
+    def _article_all_relations(self):
+        self._article_scope_node = None
+        choices = self._article_relation_choices()
+        if choices:
+            self._pick_article_relation(choices[0])
+        self._set_feedback("正在逐条浏览全文关系；点节点可只看与它有关的关系")
+
+    def _select_article_node(self, entry_id):
+        self._article_scope_node = int(entry_id)
+        self._selected_node = int(entry_id)
+        self._selected = None
+        choices = self._article_relation_choices()
+        self._article_relation_index = choices[0] if choices else -1
+        self._draw(force=True)
+
+    def _on_article_word_select(self, _event=None):
+        graph = self._full_article_graph()
+        picks = self._selected_entry_ids()
+        if graph is None or not picks:
+            return
+        from ..article_map import projection
+        _,_,ids = projection(graph.article_map,self._nodes)
+        self._subset_ids = set(picks)
+        targets = [ids[nid] for b in graph.article_map["bindings"]
+                   if self._nodes[b["selection_index"]].entry_id in picks for nid in b["node_ids"]]
+        if targets:
+            self._select_article_node(targets[0])
+            self._locate_article_selection()
+
+    def _locate_article_selection(self):
+        if self._layout is None:
+            return
+        ids = {self._selected_node} if self._selected_node is not None else set()
+        if not ids and self._selected is not None:
+            ids = {self._selected.src_entry_id,self._selected.dst_entry_id}
+        items = [n for n in self._layout.nodes if n.entry_id in ids]
+        if items:
+            # 两端跨度很大时一起纳入视口；单节点定位回到阅读倍率。
+            w,h = self._canvas_size()
+            span_w = (max(n.x+n.w/2 for n in items)-min(n.x-n.w/2 for n in items))/self._zoom
+            span_h = (max(n.y+n.h/2 for n in items)-min(n.y-n.h/2 for n in items))/self._zoom
+            fit = max(0.12,min(1.0,(w-theme.px(48))/span_w,(h-theme.px(48))/span_h))
+            desired = min(fit,max(0.8,self._zoom))
+            if abs(self._zoom-desired)>0.001:
+                self._zoom = desired
+                self._fit_pending = False
+                self._draw(force=True)
+                items = [n for n in self._layout.nodes if n.entry_id in ids]
+            x = (min(n.x-n.w/2 for n in items)+max(n.x+n.w/2 for n in items))/2
+            y = (min(n.y-n.h/2 for n in items)+max(n.y+n.h/2 for n in items))/2
+            self._move_view_to(x-w/2,y-h/2)
+
+    def _fit_article_view(self):
+        if self._full_article_graph() is None:
+            return
+        w,h = self._canvas_size()
+        natural = self._natural_layout(w,h,self.relations_for_draw(),0)
+        self._zoom = max(0.12,min(1.0,(w-theme.px(36))/(natural.content_w-natural.content_x0),
+                                      (h-theme.px(36))/(natural.content_h-natural.content_y0)))
+        self._fit_pending = False
+        self._draw(force=True)
+        self._move_view_to((self._layout.content_w+self._layout.content_x0-w)/2,
+                           (self._layout.content_h+self._layout.content_y0-h)/2)
+        self._set_feedback("已适应当前精度的整张图；点收藏词或「定位」可回到阅读大小")
+
+    def _article_actual_size(self):
+        self.zoom_by(1.0/self._zoom)
+
+    def _sync_article_controls(self) -> None:
+        graph = self._full_article_graph()
+        row = getattr(self, "article_controls", None)
+        if graph is None:
+            if row is not None:
+                row.pack_forget()
+                self.article_evidence.pack_forget()
+                self.article_evidence_scroll.pack_forget()
+                self.evidence.pack(fill="x")
+                self.btn_subset.configure(text="只分析选中的词")
+                self.btn_all.configure(text="分析全部词条")
+            return
+        self._labels.update({n.entry_id: n.term for n in graph.nodes})
+        if row is None:
+            return
+        row.pack(fill="x", padx=theme.px(10), pady=theme.px(4), before=self.evidence_frame)
+        self.evidence.pack_forget()
+        self.article_evidence_scroll.pack(side="right",fill="y")
+        self.article_evidence.pack(side="left",fill="x",expand=True)
+        self.article_depth_var.set({1:"主干",2:"核心概念"}.get(self._article_depth(),"全部细节"))
+        self.btn_subset.configure(text="高光选中的词")
+        self.btn_all.configure(text="高光全部收藏词")
+        if self._article_controls_graph is not graph:
+            self._article_controls_graph = graph
+            self._article_relation_index = 0
+            self._article_scope_node = None
+            self._build_hint_rows(expanded=False)
+            self._reload_pins()
+            self._reload_blocks()
+            if graph.relations:
+                self._selected = graph.relations[0]
+                self._update_evidence()
+        choices = self._article_relation_choices()
+        index = getattr(self,"_article_relation_index",0)
+        number = choices.index(index)+1 if index in choices else 0
+        scope = "当前节点" if self._article_scope_node is not None else "全文"
+        self.article_relation_var.set(f"{scope}关系 {number} / {len(choices)}" if choices else f"{scope}无独立语义关系")
+        self.article_prev.set_enabled(len(choices)>1)
+        self.article_next.set_enabled(len(choices)>1)
+
     def _natural_layout(self, width: int, height: int, relations,
                         top_pad: float) -> MapLayout:
         """这一版内容的**自然布局**（zoom = 1）—— 与缩放无关，因此可以缓存。
@@ -3373,6 +3767,24 @@ class ConceptMapWindow:
         258–463 ms/帧）。分桶之后 ``_layout_core`` 收到的也是桶尺寸（宽高都向上
         取整，不会比视口小），落笔位置与视口的差最多半个桶。
         """
+        graph = self._full_article_graph()
+        if graph is not None:
+            selected = tuple(relations)
+            if not getattr(self,"_article_export_all",False) and graph.relations:
+                index = min(getattr(self,"_article_relation_index",0),len(graph.relations)-1)
+                target = graph.relations[index] if index>=0 else None
+                selected = tuple(r for r in relations if r is target or is_manual(r))
+            pins = self.pinned_positions()
+            reveal = (getattr(self,"_article_scope_node",None),)
+            key = ("article",id(graph),_layout_bucket(width),_layout_bucket(height),
+                   self._article_depth(),tuple(sorted(self._subset_ids)),reveal,
+                   tuple(id(r) for r in selected),tuple(sorted(pins.items())))
+            if self._natural is None or self._natural_key != key:
+                self._natural = layout_article_graph(graph,self._nodes,width=key[2],height=key[3],
+                                            depth=self._article_depth(),focus_entries=self._subset_ids,
+                                            relations=selected,pins=pins,reveal_nodes=reveal)
+                self._natural_key = key
+            return self._natural
         structure = self._structure()
         pins = self.pinned_positions()
         key = (_layout_bucket(width), _layout_bucket(height), float(top_pad),
@@ -3471,8 +3883,8 @@ class ConceptMapWindow:
         if service is None or topic_id is None:
             return False
         try:
-            all_nodes, nodes = self._scope_nodes(service, int(topic_id))
             self._article = self._load_article(service, int(topic_id))
+            all_nodes, nodes = self._scope_nodes(service, int(topic_id))
             fingerprint = str(service.fingerprint(int(topic_id), nodes,
                                                   article=self._article))
         except Exception:  # pragma: no cover - 读库失败不该炸窗口，保留当前显示
@@ -3486,7 +3898,7 @@ class ConceptMapWindow:
             note = str(note_fn(int(topic_id), len(nodes)) or "") if callable(note_fn) else ""
         except Exception:  # pragma: no cover - 统计失败不影响出图
             note = ""
-        if self._subset_ids and len(nodes) != len(all_nodes):
+        if self._subset_ids and len(nodes) != len(all_nodes) and not article_is_usable(self._article):
             note = f"本次只分析选中的 {len(nodes)} 词（该主题共 {len(all_nodes)} 词）"
         ids = tuple(int(n.entry_id) for n in nodes)
         # 换词条 = 换材料（批次 M21-B）：阶梯回到标准做法，否则「重新生成」的档位
@@ -3511,6 +3923,8 @@ class ConceptMapWindow:
         self._reload_pins()
         self._reload_blocks()
         self._fill_entry_list(all_nodes)
+        if not changed:
+            self._sync_article_controls()
         return changed
 
     def _load_article(self, service, topic_id: int):
@@ -3536,6 +3950,8 @@ class ConceptMapWindow:
         分析结果 —— 切回全部会重新生成（数据不丢，只是缓存指纹不同）。
         """
         all_nodes = list(service.nodes_for_topic(int(topic_id)))
+        if article_is_usable(getattr(self,"_article",None)):
+            return all_nodes, all_nodes
         if not self._subset_ids:
             return all_nodes, all_nodes
         keep = {int(eid) for eid in self._subset_ids}
@@ -3889,10 +4305,12 @@ class ConceptMapWindow:
                 f"{text}{note}{self._model_note(graph)}{self._source_note(graph)}"))
         else:
             # 错误 / 非法 JSON / schema 错误：**不画伪图**，只保留词节点 + 短状态 + 重试
-            self._graph = None
-            self._state = "error"
+            previous = self._full_article_graph()
+            if previous is None:
+                self._graph = None
+            self._state = "ready" if previous is not None else "error"
             detail = error.display() if hasattr(error, "display") else str(error or "生成失败")
-            self._set_feedback(f"生成失败：{detail}")
+            self._set_feedback(f"生成失败：{detail}" + ("；继续显示上一张合格图" if previous is not None else ""))
         self._update_evidence()
         self._sync_button()
         self._draw()
@@ -3942,11 +4360,8 @@ class ConceptMapWindow:
         # 只在真有原文时递进 —— 没有原文那张图是代码按关系分层画的，换档没有意义。
         note = self._tidy_for_regenerate()
         if article_is_usable(self._article) is True:
-            step = min(int(self._vary or 0) + 1, int(api_client.ARTICLE_VARY_MAX))
-            if step > int(self._vary or 0):
-                self._vary = step
-                label, _approach, _temperature = api_client.article_vary(step)
-                note = f"{note}（换第 {step + 1} 档思路：{label}）"
+            self._vary = 0
+            note = f"{note}（独立读原文、生成与复核，最多三轮纠错）"
         self._request(force=True, note=note)
 
     def _open_settings(self) -> None:
@@ -4110,11 +4525,15 @@ class ConceptMapWindow:
         #: 每一行的「原色」：淡出中会被改掉，重新展开时要按它还原。
         self.hint_row_fg: list = []
         if expanded:
-            n_lines = len(HINT_LINES)
+            article = self._full_article_graph() is not None
+            hint_lines = (("单击收藏词 = 定位完整概念 · 点节点 = 看原句与相关关系",
+                           "拖空白处 = 平移 · 滚轮 = 指针处缩放 · 双击空白 = 适应全图",
+                           "拖卡片 = 固定位置 · Alt + 拖卡片 = 建关系 · 双击卡片 = 定位") if article else HINT_LINES)
+            n_lines = len(hint_lines)
             fonts_fg = ((theme.TEXT_MUTED,)
                         + (theme.TEXT_FAINT,) * (n_lines - 1)
                         + (theme.TEXT_FAINT,) * len(REL_PLAIN_ROWS))
-            for index, line in enumerate(HINT_LINES):
+            for index, line in enumerate(hint_lines):
                 last = index == n_lines - 1
                 label = tk.Label(self.hint_inner, text=line, bg=tint,
                                  fg=fonts_fg[index], font=theme.font(8),
@@ -4127,7 +4546,8 @@ class ConceptMapWindow:
                     pass
                 self.hint_rows.append(label)
                 self.hint_row_fg.append(fonts_fg[index])
-            self._build_hint_legend(tint, fonts_fg[n_lines:])
+            if not article:
+                self._build_hint_legend(tint, fonts_fg[n_lines:])
             return
         label = tk.Label(self.hint_inner, text=HINT_COLLAPSED_TEXT, bg=tint,
                          fg=theme.TEXT_FAINT, font=theme.font(8),
@@ -4261,6 +4681,8 @@ class ConceptMapWindow:
         """
         src = str(self._labels.get(int(rel.src_entry_id), "（不在本主题）"))
         dst = str(self._labels.get(int(rel.dst_entry_id), "（不在本主题）"))
+        if self._full_article_graph() is not None and rel.rel_type == "原文":
+            return f"{src} — {rel.reason} → {dst}\n原句依据：「{rel.evidence}」"
         if is_manual(rel):
             #: 人工关系没有「证据片段」也不该假装有：说明它是你自己的判断（C6）
             note = str(getattr(rel, "note", "") or getattr(rel, "reason", "") or "").strip()
@@ -4295,6 +4717,29 @@ class ConceptMapWindow:
         ``ISOLATED_UNKNOWN``（整张图都没有记录）。
         """
         entry_id = int(entry_id)
+        full = self._full_article_graph()
+        if full is not None:
+            from ..article_map import projection
+            _nodes,_rels,ids = projection(full.article_map,self._nodes)
+            nid = next((k for k,v in ids.items() if v==entry_id),None)
+            if nid is not None:
+                node = next(n for n in full.article_map["nodes"] if n["id"]==nid)
+                parent = next((n["label"] for n in full.article_map["nodes"] if n["id"]==node["parent"]),"全文主题")
+                related = [r for r in full.relations if entry_id in (r.src_entry_id,r.dst_entry_id)]
+                lines=[f"{node['label']} · {parent}",f"原句依据：「{node['quote']}」"]
+                if related:
+                    index=getattr(self,"_article_relation_index",-1)
+                    current=full.relations[index] if 0<=index<len(full.relations) else related[0]
+                    lines.append(f"相关关系 {len(related)} 条 · 可用上一条 / 下一条浏览")
+                    lines.append(self._rel_text(current))
+                for binding in full.article_map["bindings"]:
+                    if nid in binding["node_ids"]:
+                        word=self._nodes[binding["selection_index"]].term
+                        lines.append(f"划选词「{word}」对应此节点。" + ("建议排除，当前仍保留。" if binding["suggest_exclude"] else "") + binding["note"])
+                        for candidate in binding["candidates"]:
+                            candidate_label = next(n["label"] for n in full.article_map["nodes"] if n["id"]==candidate["node_id"])
+                            lines.append(f"候选「{candidate_label}」依据：「{candidate['quote']}」")
+                return "\n".join(lines)
         name = str(self._labels.get(entry_id, "（不在本主题）"))
         rels = [rel for rel in self.relations_for_draw()
                 if int(rel.src_entry_id) == entry_id or int(rel.dst_entry_id) == entry_id]
@@ -4336,12 +4781,23 @@ class ConceptMapWindow:
         if self._selected_node is not None:
             text = self._node_text(int(self._selected_node))
         elif self._selected is None:
-            text = (f"点击一条连线看依据，或点一个词看它的关系 / 为什么是孤立词"
-                    f"（{MAP_TAG}，仅供参考）")
+            if self._full_article_graph() is not None:
+                text = "细线整理文章主题；箭头表示原文关系。点节点或关系线可查看原句依据。"
+            else:
+                text = (f"点击一条连线看依据，或点一个词看它的关系 / 为什么是孤立词"
+                        f"（{MAP_TAG}，仅供参考）")
         else:
             text = self._rel_text(self._selected)
         try:
             self.evidence.configure(text=text)
+            panel = getattr(self,"article_evidence",None)
+            if panel is not None and self._full_article_graph() is not None and getattr(self,"_article_evidence_text",None)!=text:
+                panel.configure(state="normal")
+                panel.delete("1.0","end")
+                panel.insert("1.0",text)
+                panel.configure(state="disabled")
+                panel.yview("moveto",0)
+                self._article_evidence_text = text
         except tk.TclError:  # pragma: no cover
             pass
 
@@ -4394,6 +4850,16 @@ class ConceptMapWindow:
         edge = None if node is not None else layout.edge_at(x, y, tol=theme.px(HIT_TOL))
         self._selected_node = int(node.entry_id) if node is not None else None
         self._selected = edge.rel if edge is not None else None
+        if self._full_article_graph() is not None:
+            if node is not None:
+                old_left,old_top = self._view_left(),self._view_top()
+                self._select_article_node(node.entry_id)
+                current = self._layout.find(node.entry_id)
+                if current is not None:
+                    self._move_view_to(old_left+current.x-node.x,old_top+current.y-node.y)
+                return
+            if edge is not None:
+                self._article_relation_index = next((i for i,r in enumerate(self._graph.relations) if r is edge.rel),-1)
         self._update_evidence()
         self._highlight_edges()
 
@@ -4415,6 +4881,15 @@ class ConceptMapWindow:
         except (AttributeError, TypeError, ValueError):  # pragma: no cover
             return
         node = layout.node_at(x, y, pad=theme.px(NODE_HIT_PAD))
+        if self._full_article_graph() is not None:
+            if node is not None:
+                self._select_article_node(node.entry_id)
+                self._locate_article_selection()
+            elif layout.edge_at(x,y,tol=theme.px(HIT_TOL)) is None:
+                self._fit_article_view()
+            else:
+                self._on_canvas_click(event)
+            return
         if node is None:
             edge = layout.edge_at(x, y, tol=theme.px(HIT_TOL))
             if edge is not None:
@@ -4867,6 +5342,9 @@ class ConceptMapWindow:
         node = layout.find(entry_id)
         if node is None:  # pragma: no cover - 正在拖的卡一定在布局里
             return
+        if layout.template == "article-tree":
+            self._follow_article_edges(entry_id,cx,cy)
+            return
         for edge in layout.edges:
             src, dst, _type = _relation_parts(edge.rel)
             if entry_id not in (src, dst):
@@ -4882,6 +5360,23 @@ class ConceptMapWindow:
                 self.canvas.coords(item, x1, y1, x2, y2)
             except (tk.TclError, AttributeError):  # pragma: no cover - 图元已删
                 continue
+
+    def _follow_article_edges(self,entry_id,cx,cy):
+        """只重排当前显示的语义线和文字，组织线同步跟随拖动。"""
+        z=self._zoom
+        natural=_scaled_layout(self._layout,1/z)
+        items=getattr(self,"_article_tree_items",())
+        preview=article_drag_layout(natural,entry_id,cx/z,cy/z,[(a,b) for a,b,_ in items])
+        for (_,_,item),points in zip(items,preview.topic_links):
+            self.canvas.coords(item,*[v*z for p in points for v in p])
+        for edge in preview.edges:
+            line=self._edge_items.get(id(edge.rel))
+            text=self._edge_label_items.get(id(edge.rel))
+            if line is not None and len(edge.points)>=2:
+                self.canvas.coords(line,*[v*z for p in edge.points for v in p])
+            if text is not None and edge.label_pos is not None:
+                self.canvas.coords(text,edge.label_pos[0]*z,edge.label_pos[1]*z)
+        self._article_drag_preview=preview
 
     def _clear_link_line(self) -> None:
         """删掉拖拽期间那条临时线（松手 / 取消都要删，绝不留在图上）。"""
@@ -4960,7 +5455,11 @@ class ConceptMapWindow:
         topic_id = self._topic_id
         if topic_id is not None:
             try:
-                pins = dict(self.db.list_node_pins(int(topic_id)))
+                full = self._full_article_graph()
+                if full is not None:
+                    pins = {int(r["item_key"]):tuple(json.loads(r["payload"])) for r in self.db.article_map_edits(int(topic_id),full.fingerprint,"pin")}
+                else:
+                    pins = dict(self.db.list_node_pins(int(topic_id)))
             except Exception:  # pragma: no cover - 老库 / 读失败都不该炸窗口
                 log.exception("读取卡片固定位置失败")
                 pins = {}
@@ -4974,7 +5473,13 @@ class ConceptMapWindow:
         topic_id = self._topic_id
         if topic_id is not None:
             try:
-                pairs = set(self.db.map_edge_block_pairs(int(topic_id)))
+                full = self._full_article_graph()
+                if full is not None:
+                    for row in self.db.article_map_edits(int(topic_id),full.fingerprint,"block"):
+                        src,dst = json.loads(row["item_key"])
+                        pairs.update({(int(src),int(dst)),(int(dst),int(src))})
+                else:
+                    pairs = set(self.db.map_edge_block_pairs(int(topic_id)))
             except Exception:  # pragma: no cover - 老库 / 读失败
                 log.exception("读取 AI 关系黑名单失败")
                 pairs = set()
@@ -5023,7 +5528,11 @@ class ConceptMapWindow:
         world_x, world_y = self._to_world(x, y)
         try:
             eid = int(entry_id)
-            self.db.set_node_pin(int(self._topic_id), eid, world_x, world_y)
+            full = self._full_article_graph()
+            if full is not None:
+                self.db.set_article_map_edit(int(self._topic_id),full.fingerprint,"pin",str(eid),[world_x,world_y])
+            else:
+                self.db.set_node_pin(int(self._topic_id), eid, world_x, world_y)
         except ValueError as exc:
             return False, str(exc)
         except Exception:
@@ -5038,7 +5547,7 @@ class ConceptMapWindow:
             self._set_feedback("还没有选中主题")
             return
         try:
-            count = int(self.db.clear_node_pins(int(self._topic_id)))
+            count = self._clear_current_pins()
         except Exception:
             log.exception("恢复自动布局失败")
             self._set_feedback("恢复自动布局失败，详见日志")
@@ -5051,6 +5560,12 @@ class ConceptMapWindow:
         self._set_feedback(f"已恢复自动布局（取消固定 {count} 张卡片）")
         self._draw(force=True)
 
+    def _clear_current_pins(self) -> int:
+        full = self._full_article_graph()
+        if full is not None:
+            return int(self.db.clear_article_map_edits(int(self._topic_id),full.fingerprint,"pin"))
+        return int(self.db.clear_node_pins(int(self._topic_id)))
+
     def _tidy_for_regenerate(self) -> str:
         """「重新生成」之前**先整理一次**：取消本主题全部固定位置（批次 M18-B）。
 
@@ -5061,7 +5576,7 @@ class ConceptMapWindow:
         if self._topic_id is None:
             return ""
         try:
-            count = int(self.db.clear_node_pins(int(self._topic_id)))
+            count = self._clear_current_pins()
         except Exception:
             log.exception("重新生成前的整理失败")
             return ""
@@ -5234,6 +5749,9 @@ class ConceptMapWindow:
         切模板**只改摆法**：关系、筛选、人工关系、黑名单、导出格式都不动 ——
         所以这里既不碰缓存也不重新请求模型，直接按同一份关系重排一次。
         """
+        if self._full_article_graph() is not None:
+            self._set_feedback("全文导图按文章主题树组织；可用精度切换展开层数")
+            return False
         wanted = str(key or "").strip()
         spec = map_templates.spec_of(wanted)
         if spec is None:
@@ -5288,7 +5806,13 @@ class ConceptMapWindow:
         label = str(getattr(rel, "rel_type", "") or getattr(rel, "label", "") or "")
         reason = str(getattr(rel, "evidence", "") or "")
         try:
-            self.db.block_map_edge(int(self._topic_id), src, dst, label=label, reason=reason)
+            full = self._full_article_graph()
+            if full is not None:
+                pair = json.dumps(sorted([src,dst]))
+                self.db.set_article_map_edit(int(self._topic_id),full.fingerprint,"block",pair,
+                                             {"src_entry_id":src,"dst_entry_id":dst,"label":label,"reason":reason})
+            else:
+                self.db.block_map_edge(int(self._topic_id), src, dst, label=label, reason=reason)
         except ValueError as exc:
             return False, str(exc)
         except Exception:
@@ -5304,7 +5828,13 @@ class ConceptMapWindow:
         if self._topic_id is None:
             return False, "还没有选中主题"
         try:
-            removed = int(self.db.clear_map_edge_blocks(int(self._topic_id), int(src), int(dst)))
+            full = self._full_article_graph()
+            if full is not None:
+                matches=[r for r in self.db.article_map_edits(int(self._topic_id),full.fingerprint,"block")
+                         if json.loads(r["item_key"])==sorted([int(src),int(dst)])]
+                removed=sum(self.db.delete_article_map_edit(int(self._topic_id),full.fingerprint,"block",r["id"]) for r in matches)
+            else:
+                removed = int(self.db.clear_map_edge_blocks(int(self._topic_id), int(src), int(dst)))
         except Exception:
             log.exception("恢复 AI 关系失败")
             return False, "恢复 AI 关系失败，详见日志"
@@ -5320,6 +5850,9 @@ class ConceptMapWindow:
         if topic_id is None:
             return []
         try:
+            full = self._full_article_graph()
+            if full is not None:
+                return [dict(json.loads(r["payload"]),id=r["id"]) for r in self.db.article_map_edits(int(topic_id),full.fingerprint,"block")]
             return list(self.db.list_map_edge_blocks(int(topic_id)))
         except Exception:  # pragma: no cover - 老库 / 读失败都不该炸窗口
             log.exception("读取 AI 关系黑名单失败")
@@ -5330,7 +5863,11 @@ class ConceptMapWindow:
         if self._topic_id is None:
             return False, "还没有选中主题"
         try:
-            removed = bool(self.db.delete_map_edge_block(int(block_id)))
+            full = self._full_article_graph()
+            if full is not None:
+                removed=bool(self.db.delete_article_map_edit(int(self._topic_id),full.fingerprint,"block",int(block_id)))
+            else:
+                removed = bool(self.db.delete_map_edge_block(int(block_id)))
         except Exception:
             log.exception("恢复 AI 关系失败")
             return False, "恢复 AI 关系失败，详见日志"
@@ -5414,6 +5951,9 @@ class ConceptMapWindow:
         """
         if not (self._all_nodes or self._nodes):
             self._set_feedback("该主题还没有词条：先在阅读页解释并记录几个词")
+            return
+        if (src_id is not None and int(src_id)<0) or (dst_id is not None and int(dst_id)<0):
+            self._set_feedback("全文新增概念保留原句依据；添加人工关系时请从收藏词列表选择两端")
             return
         try:
             from .relation_editor import RelationEditor
@@ -5532,6 +6072,12 @@ class ConceptMapWindow:
     def _on_subset_generate(self) -> None:
         """只分析选中的词（C3）：省 token 的核心入口。"""
         picks = self._selected_entry_ids()
+        if article_is_usable(getattr(self,"_article",None)):
+            self._subset_ids = set(picks)
+            self._draw(force=True)
+            self._on_article_word_select()
+            self._set_feedback(f"已高光选中的 {len(picks)} 个词；完整文章结构保留" if picks else "已高光全部收藏词")
+            return
         if not picks:
             self._set_feedback("先在左边选几个词（Ctrl / Shift 可多选），再点「只分析选中的词」")
             return
@@ -5542,6 +6088,12 @@ class ConceptMapWindow:
 
     def _on_all_generate(self) -> None:
         """切回「整个主题」：子集范围清空后重新生成（子集与全部是两份结果）。"""
+        if article_is_usable(getattr(self,"_article",None)):
+            self._subset_ids = set()
+            self._apply_entry_list_selection()
+            self._draw(force=True)
+            self._set_feedback("已高光全部收藏词；完整文章结构保留")
+            return
         if not self._subset_ids:
             self._on_generate()
             return
@@ -5553,6 +6105,18 @@ class ConceptMapWindow:
     # ------------------------------------ 孤立词诊断（C2）/ 打开词条（C4）
     def _diag_summary(self) -> str:
         """一次生成的孤立词汇总：哪些词被孤立、候选各被判成什么（不用逐条点）。"""
+        full = self._full_article_graph()
+        if full is not None:
+            data = full.article_map
+            lines = [full.summary(), "所有节点均在全文主题树中；没有语义线不等于解释错误。"]
+            by_id = {n["id"]:n["label"] for n in data["nodes"]}
+            for binding in data["bindings"]:
+                word = self._nodes[binding["selection_index"]].term
+                targets = "、".join(by_id[t] for t in binding["node_ids"])
+                lines.append(f"{word} → {targets}" + ("（建议排除，已保留）" if binding["suggest_exclude"] else ""))
+                if binding["note"]:
+                    lines.append(binding["note"])
+            return "\n".join(lines)
         nodes = list(self._nodes)
         if not nodes:
             return "该主题还没有词条。"
@@ -5726,6 +6290,10 @@ class ConceptMapWindow:
 
     def _focus_node(self, entry_id: int) -> bool:
         """选中某个词并把视图拉到它附近（诊断面板 / 词条列表共用）。"""
+        if self._full_article_graph() is not None:
+            self._select_article_node(entry_id)
+            self._locate_article_selection()
+            return any(n.entry_id==entry_id for n in self._layout.nodes)
         self._selected = None
         self._selected_node = int(entry_id)
         self._update_evidence()
@@ -5775,6 +6343,11 @@ class ConceptMapWindow:
 
     def _open_entry(self, entry_id: int) -> None:
         """在主界面里打开并选中这条词条（C4：不用回列表里翻）。"""
+        if int(entry_id)<0:
+            self._selected_node = int(entry_id)
+            self._selected = None
+            self._update_evidence()
+            return
         opener = getattr(self.app, "open_main_window", None)
         if callable(opener):
             try:
@@ -5856,16 +6429,33 @@ class ConceptMapWindow:
             self._set_feedback("导出模块不可用，详见日志")
             return
         try:
+            article_view = None
+            full = self._full_article_graph()
+            if full is not None:
+                article_view = (self._zoom, self._fit_pending, self._view_left(), self._view_top())
+                self._fit_pending = False
+                self._article_export_all = True
+                self._draw(force=True)
+                self.canvas.update_idletasks()
             result = map_export.export_map(
                 layout=self._layout, style=self.export_style(), canvas=self.canvas,
                 topic_name=self._topic_name_text,
                 model_config=str(getattr(self.config, "model_display", "") or ""),
-                template_name=self.template_name(),
+                template_name="全文主题树" if full is not None else self.template_name(),
+                **({"article_map":full.article_map} if full is not None else {}),
             )
         except Exception as exc:
             log.exception("导出关系图失败")
             self._set_feedback(f"导出关系图失败：{exc}")
             return
+        finally:
+            if getattr(self,"_article_export_all",False):
+                self._article_export_all = False
+                self._zoom = article_view[0]
+                self._fit_pending = False
+                self._draw(force=True)
+                self._move_view_to(article_view[2],article_view[3])
+                self._fit_pending = article_view[1]
         self._set_feedback(f"{result.summary()}　→　{result.directory}")
         self._open_directory(result.directory)
 
@@ -6248,7 +6838,8 @@ class ConceptMapWindow:
         """
         try:
             current = float(self._zoom)
-            zoomed = max(ZOOM_MIN, min(ZOOM_MAX, current * float(factor)))
+            minimum = 0.12 if self._full_article_graph() is not None else ZOOM_MIN
+            zoomed = max(minimum, min(ZOOM_MAX, current * float(factor)))
             ratio = zoomed / current
         except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
             return False
@@ -6452,6 +7043,7 @@ class ConceptMapWindow:
         self._items = []
         self._edge_items = {}
         self._edge_rels = {}
+        self._edge_label_items = {}
         self._drag_items = []
         self._drag_last = None
         # 重画时把「半路的拖动」也一并忘掉：卡片 / 连线都不在了，留着状态只会
@@ -6556,11 +7148,13 @@ class ConceptMapWindow:
             self._defer_draw()
             return self._item_count()
         width, height = self._canvas_size()
+        self._sync_article_controls()
         relations = self.relations_for_draw()
         manual = tuple(rel for rel in relations if is_manual(rel))
         key = (width, height, round(self._zoom, 3), self._topic_id,
                self._topic_name_text, self._fingerprint,
-               str(self._template),
+               str(self._template), self._article_depth(), id(self._graph),
+               getattr(self,"_article_relation_index",0), bool(getattr(self,"_article_export_all",False)),
                tuple(sorted(self._subset_ids)),
                tuple(sorted((int(r.src_entry_id), int(r.dst_entry_id), str(r.rel_type))
                             for r in relations)))
@@ -6638,16 +7232,24 @@ class ConceptMapWindow:
         # ② 主题 → 顶层词的细线：分类结构（**不是** AI 语义关系）。
         #    走线是**折线**：主题底边 → 母线（``topic_gap`` 正中）→ 水平 → 下层卡片
         #    顶边；所有连线共用同一条母线，因此不再是从主题斜射出去的扇形交叉。
+        self._article_tree_items = []
         for link in layout.topic_links:
-            self._line([value for point in link for value in point],
+            item = self._line([value for point in link for value in point],
                        fill=theme.BORDER, width=max(1, theme.px(1)),
                        _kind="topic-link")
+            if layout.template == "article-tree":
+                parent = next((n for n in layout.nodes if abs(n.x+n.w/2-link[0][0])<1 and abs(n.y-link[0][1])<1),None)
+                child = next((n for n in layout.nodes if abs(n.x-n.w/2-link[-1][0])<1 and abs(n.y-link[-1][1])<1),None)
+                if parent and child:
+                    self._article_tree_items.append((parent.entry_id,child.entry_id,item))
         # ③ 参考关系：颜色与线宽**全图统一**（用户口径：不要每条线一个灰度、不要人工
         #    更粗），只靠虚线与线上的类型短标签区分 —— 四种线型见 ``EDGE_STYLES``。
         #    画的就是 ``edge.points``（布局里已经采样 / 绕开节点的**同一串点**）：
         #    不开 Tk 的 smooth —— 平滑会把折线的拐角鼓回被绕开的节点里，
         #    而这里的折线本来就是按避障净空算出来的，必须原样画出去。
         for edge in layout.edges:
+            if len(edge.points)<2:
+                continue
             style = EDGE_STYLES.get(edge.kind, EDGE_STYLES["cross"])
             points = [value for point in edge.points for value in point]
             item = self._line(points, fill=style["fill"],
@@ -6662,14 +7264,24 @@ class ConceptMapWindow:
         #    连接点（用户要求）：建关系改成「按住 Alt + 左键拖」。
         for node in layout.nodes:
             fill = theme.CARD_BG if not node.isolated else theme.PANEL
+            if node.highlighted:
+                fill = theme.ACCENT_SOFT
+            article = layout.template == "article-tree"
+            root = article and node.level == 0
+            selected = article and (node.entry_id == self._selected_node or
+                       (self._selected is not None and node.entry_id in
+                        (self._selected.src_entry_id,self._selected.dst_entry_id)))
+            if root:
+                fill = theme.ACCENT
             #: 框与文字**打同一个 tag**（``node-24``）：拖动时按这个 tag 认图元、搬图元。
             #: 见 :data:`NODE_TAG_PREFIX` —— 不能靠「图元中心 == 布局坐标」去找，
             #: 那套比对只认得出「此刻正好落在布局坐标上」的图元，卡片一搬走就失联。
             tag = node_tag(node.entry_id)
             self._round(node.x - node.w / 2.0, node.y - node.h / 2.0, node.w, node.h,
-                        theme.px(9), fill=fill, outline=theme.BORDER_STRONG,
-                        width=max(1, theme.px(1)), tags=(tag,), _kind="node")
-            self._text(node.x, node.y, text="\n".join(node.lines), fill=theme.TEXT,
+                        theme.px(6)*self._zoom if article else theme.px(9), fill=fill,
+                        outline=theme.ACCENT if selected or root else theme.BORDER_STRONG,
+                        width=max(1, theme.px(2 if selected else 1)*self._zoom), tags=(tag,), _kind="node")
+            self._text(node.x, node.y, text="\n".join(node.lines), fill=theme.BG if root else theme.TEXT,
                        font=theme.font_at(9, self._zoom), anchor="center",
                        justify="center", tags=(tag,), _kind="node-text")
         # ⑤ 中心主题节点
@@ -6699,11 +7311,12 @@ class ConceptMapWindow:
         for edge in layout.edges:
             if edge.label_pos is None:
                 continue
-            self._text(edge.label_pos[0], edge.label_pos[1],
+            item=self._text(edge.label_pos[0], edge.label_pos[1],
                        text=edge.label,
                        fill=EDGE_LABEL_FILL,
                        font=theme.font_at(LABEL_FONT_SIZE, self._zoom),
                        anchor="center", _kind="edge-label")
+            self._edge_label_items[id(edge.rel)]=item
         # ⑧ 图上不再画固定的图例 / 操作提示（用户要求删掉左上角那两行）：
         #    操作提示改成画布右下角的浮层（见 ``__init__`` 的 ``hint_box``），
         #    「AI 参考」那句留在窗口底部的状态行里。

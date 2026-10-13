@@ -94,7 +94,7 @@ MIN_EVIDENCE_CHARS = 6
 #:     「类型不认识」与「端点不在本主题」从此分开计数。同一篇文章在 v5 下画出来的
 #:     图会**少掉整块层级结构**（真机实测：一章有 3 条层级边全被丢），因此 v5 的
 #:     缓存一律不命中，要重新生成才对得上。
-MAP_VALIDATION_VERSION = 6
+MAP_VALIDATION_VERSION = 7
 
 #: 删边兜底最多为几个孤立词补问（批次 M23）。实测一轮补问只救 0～1 个词，
 #: 但每个词 = 一次候选调用 + 一次核对调用，因此设硬上限，绝不让兜底把一次
@@ -1312,6 +1312,9 @@ class MapGraph:
     #: 由 :attr:`logic_chain_empty` 如实标注 —— 界面可以据此说清「这次是按老路径画的」。
     logic_chain: dict = field(default_factory=dict)
     logic_chain_empty: bool = True
+    #: 完整文章树及原文关系，不受收藏词数量、视图精度限制。
+    article_map: dict = field(default_factory=dict)
+    quality: dict = field(default_factory=dict)
 
     def relation_for(self, src_id: int, dst_id: int, rel_type: str) -> MapRelation | None:
         for rel in self.relations:
@@ -1328,6 +1331,8 @@ class MapGraph:
         return tuple(sorted(rows, key=lambda row: int(row.get("index", 0) or 0)))
 
     def summary(self) -> str:
+        if self.article_map:
+            return f"全文 {len(self.nodes)} 个节点，{len(self.relations)} 条原文关系（独立复核通过）"
         dropped = dropped_summary(self.dropped)
         if not self.relations:
             base = "没有足够依据的关系"
@@ -2340,7 +2345,7 @@ def vary_plan(step: int, *, reasoning_effort: str = "", model: str = "") -> dict
 
 def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str = "",
                         reasoning_effort: str = "", source: str = "",
-                        vary: int = 0) -> str:
+                        vary: int = 0, thinking: str = "") -> str:
     """内容指纹：主题 + 每个词条的 (id, term, context, 释义) + 模型配置 (+ 生成方式 / 档位)。
 
     新词 / 改词 / 换模型 / 改推理强度 → 指纹变化 → 旧缓存不命中（过期检测）；
@@ -2376,6 +2381,8 @@ def content_fingerprint(topic_id: int, nodes, *, base_url: str = "", model: str 
         "source": str(source or ""),
     }
     step = int(vary or 0)
+    if str(source).startswith("article:"):
+        payload_data["thinking"] = str(thinking or "")
     if step:
         payload_data["vary"] = step
     payload = json.dumps(
@@ -2465,6 +2472,9 @@ class MapService:
             return []
         cap = int(self.config.get_int("map.max_entries", MAP_MAX_ENTRIES))
         cap = max(1, min(cap, MAP_MAX_ENTRIES))
+        # 全文树保留全部收藏词；旧词图的24词采样上限不适用于全文关联。
+        if self._article_usable(self._article_row(int(topic_id))):
+            cap = max(1, self.db.count_entries(batch_id=int(topic_id)))
         if limit is not None:
             cap = max(1, min(cap, int(limit)))
         try:
@@ -2693,9 +2703,9 @@ class MapService:
         """生成方式的指纹标签（纯函数；进 :func:`content_fingerprint`）。
 
         * ``""`` —— 老路：按词条关系生成（没有可用原文）；
-        * ``"article:<doc_key>#ok:<字数>"`` —— 按这篇原文归纳。
+        * ``"article:<doc_key>#ok:<字数>:<正文SHA256>"`` —— 按这篇原文归纳。
 
-        为什么带上字数：同一篇原文改了（用户换了页面 / 重新抓过）就是另一张图，
+        为什么带上正文摘要：同字数改文也必须得到另一张图，
         不能让旧缓存顶上来。为什么带上 ``doc_key``：不同文章的同一批词也不该混。
         留档不是成功原文（抓失败 / 太短）时一律返回 ``""`` —— 那就该退回老路。
         """
@@ -2708,7 +2718,9 @@ class MapService:
         body = logic_text_of(article) if text is None else text
         if not key or not body:
             return ""
-        return f"article:{key}#ok:{len(body)}"
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        from .article_map import POLICY_VERSION
+        return f"article:{key}#ok:{len(body)}:{digest}:policy{POLICY_VERSION}"
 
     def material_payload(self, nodes) -> list[dict]:
         """发给模型的**受限**材料：编号 + 词语 + 截断上下文 + 截断释义。"""
@@ -2936,6 +2948,7 @@ class MapService:
         return content_fingerprint(topic_id, nodes, base_url=self.config.base_url,
                                    model=self.config.model,
                                    reasoning_effort=self.config.reasoning_effort,
+                                   thinking=getattr(self.config,"article_map_thinking", ""),
                                    source=self.source_tag(article, text))
 
     # ------------------------------------------------------------- 缓存
@@ -2965,6 +2978,7 @@ class MapService:
             fp = content_fingerprint(int(topic_id), nodes, base_url=self.config.base_url,
                                      model=self.config.model,
                                      reasoning_effort=self.config.reasoning_effort,
+                                     thinking=getattr(self.config,"article_map_thinking", ""),
                                      source=tag)
         else:
             fp = str(fingerprint)
@@ -2983,6 +2997,23 @@ class MapService:
             stored_version = 0
         if stored_version != MAP_VALIDATION_VERSION:
             return None
+        full = _row_json(row, "raw")
+        if isinstance(full, dict) and full.get("format") == "full_article_map_v1":
+            from .article_map import ArticleMapError, projection, review_issues, validate_draft, validate_reading
+            try:
+                current_article = article if article is not None else self.article_for_topic(int(topic_id), ensure=False)
+                text = logic_text_of(current_article)
+                data = validate_draft(full["article_map"], text, [n.term for n in nodes])
+                quality = full["quality"]
+                reading = validate_reading(quality["independent_reading"], text, [n.term for n in nodes])
+                if quality.get("approved") is not True or review_issues(data, reading, quality["review"]):
+                    return None
+                display_nodes, relations, _ids = projection(data, nodes)
+            except (ArticleMapError, KeyError, ValueError, TypeError):
+                return None
+            return MapGraph(int(topic_id), fp, relations=relations, nodes=display_nodes,
+                            source="article", model_config=f"{row['base_url']}|{row['model']}",
+                            article_map=data, quality=quality, logic_chain_empty=False)
         try:
             raw_rel = json.loads(row["payload"] or "[]")
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -3054,15 +3085,12 @@ class MapService:
         ``article`` 是 ``articles`` 表的一行（调用方用
         :meth:`article_for_topic` 取；**抓失败的那一行也照传**，让指纹与状态说明
         看到真实情况）：给了**且 ``status='ok'`` 且正文够长**（
-        :func:`article_is_usable`）时走「按原文归纳」那条流水线
-        （:func:`run_logic_graph`）；否则一律走老路（按词条关系），并且**如实说明**
+        :func:`article_is_usable`）时走全文树与独立质量复核流程；
+        否则走收藏词关系流程，并且**如实说明**
         没有原文可用 —— 绝不拿一句失败理由或 240 字上下文硬编一篇原文出来。
 
-        ``vary`` 是「第几次重新生成」的**思维阶梯档位**（批次 M21-B，默认 0 =
-        老口径）：每一档换一套归纳策略、放宽 ``temperature``、抬高推理强度，
-        并**进指纹** —— 因此每一档各是一张图、各有自己的缓存，而不是拿旧图
-        冒充新结果。有原文时才逐档递进；没原文（走词条关系那条路）时只有第 0 档
-        有意义，别的档位会被跳过（见下方 ``step`` 的计算）。
+        ``vary`` 保留参数兼容旧调用，本流程使用0；精度由显示层数控制。
+        全文图冻结同一模型、推理强度与思考模式，最多三轮纠错。
 
         迟到的结果带 ``(token, topic_id, fingerprint)``：UI 只接受与当前主题 +
         当前指纹都匹配的结果，因此切主题 / 改词后的旧结果不会串图。
@@ -3081,13 +3109,14 @@ class MapService:
             # 绝不拿一句「取原文失败」的理由当文章去归纳。
             text = ""
         source = self.source_tag(article, text)
-        # 思维阶梯只在**有原文**时逐档递进：没原文那张图是代码按关系分层画出来的，
-        # 与「换个思路读文章」无关，硬抬档位只会白花钱。
-        plan = vary_plan(vary if text else 0,
+        # 精度由视图控制；重新生成保持配置，走独立阅读与质量复核。
+        plan = vary_plan(0,
                          reasoning_effort=self.config.reasoning_effort,
                          model=model)
+        plan["thinking"] = str((self.config.article_map_thinking if text else self.config.map_thinking) or "")
         fp = content_fingerprint(topic_id, nodes, base_url=base_url, model=model,
                                  reasoning_effort=plan["effort"],
+                                 thinking=plan["thinking"],
                                  source=source, vary=plan["vary"])
 
         if not force:
@@ -3109,7 +3138,8 @@ class MapService:
         threading.Thread(
             target=self._worker,
             args=(token, topic_id, fp, tuple(nodes), base_url, model,
-                  float(self.config.timeout), str(self.config.api_key()), str(topic_name or "")),
+                  float(self.config.article_map_timeout if text else self.config.timeout),
+                  str(self.config.api_key()), str(topic_name or "")),
             kwargs={"article": (article, text) if text else None, "plan": plan},
             name=f"map-t{token}",
             daemon=True,
@@ -3212,110 +3242,53 @@ class MapService:
         return merged, merged_verdicts, carried_keys
 
     def _worker_article(self, token: int, topic_id: int, fp: str, nodes, article,
-                        plan=None) -> None:
-        """后台线程（按原文归纳那条路）：归纳 → 代码校验 → 落到词条上 → 写缓存。
+                        plan=None, snapshot=None) -> None:
+        """全文树与关系完整保留；只有独立复核通过的结果能进入合格缓存。"""
+        from .article_map import FORMAT, projection, run
+        _row, text = article
+        plan, snapshot = dict(plan or {}), dict(snapshot or {})
+        base_url = snapshot.get("base_url", str(self.config.base_url or ""))
+        model = snapshot.get("model", str(self.config.model or ""))
 
-        ``article`` 是 ``(articles 表的一行, 正文)``。这一路**不**做第二次模型核对：
-        归纳的每一步都由 :func:`validate_logic` 拿代码算过（实体必须在原文里逐字
-        找得到、时序不许讲反、分支要够），比再问一遍模型更硬，也少花一次钱。
+        def keep_attempt(round_no, draft, issues, review):
+            self.db.put_article_map_draft(topic_id, fp, round_no, draft, issues, review)
 
-        ``plan`` 是 :func:`vary_plan` 的换思路方案（批次 M21-B）：模型、推理强度、
-        ``temperature``、追加指令全按它来 —— 点「重新生成」才会真的换一张图。
-
-        分支落进 ``map_graphs.raw`` 那一列（存归纳结果的 JSON）：读缓存时由
-        :func:`_with_provenance` 认回来，界面才说得出「按哪篇文章归纳的」。
-        """
-        row, text = article
-        plan = dict(plan or {})
-        #: ★ 第零轮逻辑链的出口（批次 M24）：``run_logic_graph`` 会把骨架写进来，
-        #: 这里既用它落缓存、也用它决定界面上说不说「这一次没走到逻辑链」。
-        sink: dict = {"chain": {}}
-        doc_key = title = ""
         try:
-            doc_key = str(row["doc_key"] or "").strip()
-            title = str(row["title"] or "").strip()
-        except (IndexError, KeyError, TypeError):  # pragma: no cover - 传了别的行
-            pass
-        try:
-            client = self.make_client(base_url=str(self.config.base_url or ""),
-                                      model=str(self.config.model or ""),
-                                      timeout=float(self.config.timeout),
-                                      api_key=str(self.config.api_key()),
-                                      reasoning_effort=str(
-                                          plan.get("effort")
-                                          or self.config.reasoning_effort or ""))
-            graph = run_logic_graph(
-                client, doc_key=doc_key, title=title, text=text,
-                terms=tuple(node.term for node in nodes),
-                model_config=self.model_config(), plan=plan, logic_sink=sink)
-            # 「层级」边的方向要拿第零轮骨架现算（批次 M26）：骨架就在 sink 里，
-            # 不额外花一次调用。猜方向的那几条会单独计数，界面上说得清。
-            relations, skipped, counts = logic_to_map_relations(
-                graph, nodes, chain=dict(sink.get("chain") or {}))
-            dropped: dict[str, int] = {key: int(value) for key, value in counts.items()
-                                       if int(value or 0) > 0}
-            if skipped:
-                # 丢掉的边要留痕（不静默吞掉）：日志里逐条，界面上按原因计数。
-                log.info("按原文归纳：%s 条边没能画上图（%s）",
-                         len(skipped), "；".join(skipped[:12]))
+            client = self.make_client(base_url=base_url, model=model,
+                                      timeout=snapshot.get("timeout", self.config.timeout),
+                                      api_key=snapshot.get("api_key") if "api_key" in snapshot else self.config.api_key(),
+                                      reasoning_effort=str(plan.get("effort") or ""),
+                                      thinking=str(plan.get("thinking") or ""))
+            data, quality = run(client, text=text, selected_words=[n.term for n in nodes],
+                                on_attempt=keep_attempt)
+            display_nodes, relations, _ids = projection(data, nodes)
+            result = MapGraph(topic_id, fp, relations=relations, nodes=display_nodes,
+                              source="article", model_config=f"{base_url}|{model}",
+                              article_map=data, quality=quality, logic_chain_empty=False)
+            # raw 不再截成4000字；截断会损坏JSON、丢全文节点及原句。
+            self.db.put_map_graph(topic_id=topic_id, fingerprint=fp, base_url=base_url,
+                                  model=model, relations=[r.as_dict() for r in relations],
+                                  raw=json.dumps({"format": FORMAT, "article_map": data, "quality": quality}, ensure_ascii=False),
+                                  validation_version=MAP_VALIDATION_VERSION)
         except ApiError as exc:
-            log.info("按原文归纳失败 token=%s: %s", token, exc.display())
             self._deliver(token, topic_id, fp, RESULT_ERROR, None, exc)
-            return
-        except Exception as exc:  # pragma: no cover - 兜底，不让线程静默死掉
-            log.exception("按原文归纳异常 token=%s", token)
-            self._deliver(token, topic_id, fp, RESULT_ERROR, None,
-                          ApiError("unknown", redact(str(exc))))
-            return
+        except Exception as exc:  # pragma: no cover - 写草稿失败也不能报复核通过
+            log.exception("全文导图生成失败 token=%s", token)
+            self._deliver(token, topic_id, fp, RESULT_ERROR, None, ApiError("unknown", redact(str(exc))))
+        else:
+            self._deliver(token, topic_id, fp, RESULT_OK, result, None)
         finally:
             with self._lock:
                 self._inflight.discard((topic_id, fp))
-
-        chain = dict(sink.get("chain") or {})
-        if not chain:
-            # 第零轮没跑成（方法不存在 / 报错 / 回了空骨架）：如实记一个，界面就能
-            # 说清「这一次没走到逻辑链」，而不是假装走过了。
-            dropped["logic_chain_empty"] = 1
-        result = MapGraph(
-            topic_id=topic_id,
-            fingerprint=fp,
-            relations=tuple(relations),
-            nodes=tuple(nodes),
-            dropped=dict(dropped),
-            source="article",
-            model_config=self.model_config(),
-            main_logic=str(graph.main_logic or ""),
-            branches=tuple(dict(branch) for branch in graph.branches),
-            vary=int(graph.vary or 0),
-            vary_label=str(graph.vary_label or ""),
-            logic_chain=chain,
-            logic_chain_empty=not chain,
-        )
-        try:
-            self.db.put_map_graph(
-                topic_id=topic_id, fingerprint=fp,
-                base_url=str(self.config.base_url or ""),
-                model=str(self.config.model or ""),
-                relations=[rel.as_dict() for rel in relations],
-                raw=json.dumps(graph.as_dict(), ensure_ascii=False)[:4000],
-                validation_version=MAP_VALIDATION_VERSION,
-                dropped=dict(dropped), verdicts=[],
-                logic_chain=chain,
-            )
-        except Exception:  # 写缓存失败不影响本次显示
-            log.exception("写导图缓存失败（按原文归纳）topic=%s", topic_id)
-        self._deliver(token, topic_id, fp, RESULT_OK, result, None)
 
     def _worker(self, token: int, topic_id: int, fp: str, nodes, base_url: str,
                 model: str, timeout: float, api_key: str, topic_name: str,
                 article=None, plan=None) -> None:
         """后台线程：候选 → 本地校验 → **独立核对** → 写缓存 → 投递结果。
 
-        有原文时走的是另一条路（``article=(行, 正文)``）：**按原文归纳**
-        （:func:`run_logic_graph`）—— 一次调用出分支 + 边，代码校验（零 token），
-        不合格带差异清单重试，最多 :data:`LOGIC_MAX_ATTEMPTS` 轮。归纳出来的边
-        同样要过 :func:`validate_relations`；**只有两端都在本主题词库里的边**才画
-        得上去（见 :func:`logic_to_map_relations`，丢掉的条数如实记进 ``dropped``）。
+        有原文时转入 `_worker_article`：独立阅读、生成完整主题树、逐项复核，
+        新概念与关系完整保存，失败草稿与合格缓存分开。以下合并旧关系的逻辑
+        仅用于没有完整原文的收藏词图。
 
         第二次调用沿用**同一份冻结配置**（base_url / model / timeout / key 都是发起
         时抓下来的快照，改设置不会影响在途请求）。核对失败（网络 / 顶层格式）按错误
@@ -3334,7 +3307,8 @@ class MapService:
         try:
             if article is not None:
                 self._worker_article(token, topic_id, fp, tuple(nodes), article,
-                                     plan=plan)
+                                     plan=plan, snapshot={"base_url": base_url, "model": model,
+                                                          "timeout": timeout, "api_key": api_key})
                 return
             try:
                 client = self.make_client(base_url=base_url, model=model,
