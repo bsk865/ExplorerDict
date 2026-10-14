@@ -267,7 +267,7 @@ def _strip_hinted_containers(html: str) -> str:
         stripped = _drop_element(html[at:], hit.group(1).lower())
         if len(stripped) == len(html) - at:  # 什么都没删掉：防呆，别死循环
             return html
-        html = stripped + html[:at]
+        html = html[:at] + stripped
     return html
 
 
@@ -295,9 +295,13 @@ class _BlockCollector(HTMLParser):
         self._stack: list[str] = []
         self._buf: list[str] = []
         self._depth = 0
+        self._annotation_depth = 0
 
     def handle_starttag(self, tag, attrs):
         tag = tag.lower()
+        if self._annotation_depth or tag in {'annotation', 'annotation-xml'}:
+            self._annotation_depth += 1
+            return
         if tag == "br":
             # 段落内的换行：留在同一个块里（数据里用 \n 表示）。
             self._buf.append("\n")
@@ -316,6 +320,9 @@ class _BlockCollector(HTMLParser):
 
     def handle_endtag(self, tag):
         tag = tag.lower()
+        if self._annotation_depth:
+            self._annotation_depth -= 1
+            return
         if tag in _BLOCK_TAGS and tag in self._stack:
             while self._stack:
                 top = self._stack.pop()
@@ -325,7 +332,7 @@ class _BlockCollector(HTMLParser):
             self._flush()
 
     def handle_data(self, data):
-        if data:
+        if data and not self._annotation_depth:
             self._buf.append(data)
 
     def _flush(self) -> None:
@@ -424,7 +431,13 @@ def extract_article_text(html: str) -> tuple[str, str, str]:
     raw = html or ""
     if not raw.strip():
         return "", "", "页面是空的（没有 HTML 内容）"
-    stripped = _strip_boilerplate(raw)
+    semantic = None
+    for tag in ('article', 'main'):
+        if len(re.findall(rf'<{tag}\b', raw, re.I)) == 1:
+            semantic = re.search(rf'<{tag}\b[^>]*>(.*)</{tag}\s*>', raw, re.I | re.S)
+            if semantic:
+                break
+    stripped = _strip_boilerplate(semantic.group(1) if semantic else raw)
     collector = _BlockCollector()
     try:
         collector.feed(stripped)
@@ -441,6 +454,9 @@ def extract_article_text(html: str) -> tuple[str, str, str]:
     blocked = detect_blocked("\n".join(text for _tag, text, _depth in blocks))
     if blocked:
         return "", "", blocked
+
+    if semantic:
+        return _join_blocks([text for _tag, text, _depth in blocks]), 'semantic-article', ''
 
     scored = [(i, _score(text), text) for i, (_tag, text, _depth) in enumerate(blocks)]
     best_i, best_score, _ = max(scored, key=lambda item: item[1])

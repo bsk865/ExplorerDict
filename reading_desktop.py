@@ -13,7 +13,7 @@ from app.paths import data_dir
 def main():
     if '--headless' not in sys.argv:
         try:
-            record=json.loads((data_dir()/'workspace-session.json').read_text(encoding='utf-8'))
+            record=json.loads((data_dir()/'workspace-session-v2.json').read_text(encoding='utf-8'))
             url=record['url']; parts=urlsplit(url)
             if parts.scheme!='http' or parts.hostname!='127.0.0.1':
                 raise ValueError()

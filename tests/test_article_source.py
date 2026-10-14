@@ -109,7 +109,7 @@ class TestExtractArticleText(unittest.TestCase):
         text, method, why = extract_article_text(page(f"<article><p>{para('甲')}</p></article>"))
         self.assertEqual(why, "")
         self.assertIn("甲：", text)
-        self.assertEqual(method, "density")
+        self.assertEqual(method, "semantic-article")
         for noise in ("首页", "分类", "版权", "京ICP备", "评论区第一楼", "var x=1"):
             self.assertNotIn(noise, text, f"正文里不该出现页面噪音：{noise}")
 

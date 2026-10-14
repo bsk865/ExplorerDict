@@ -258,18 +258,18 @@ def make_handler(workspace, token):
             if origin and origin != 'http://' + host:
                 return False
             cookie = self.headers.get('Cookie', '')
-            return any(v.strip() == 'workspace=' + token for v in cookie.split(';'))
+            return any(v.strip() == f'workspace_{self.server.server_port}=' + token for v in cookie.split(';'))
 
         def do_GET(self):
             path = urlsplit(self.path).path
             if path == '/session' and secrets.compare_digest(parse_qs(urlsplit(self.path).query).get('token', [''])[0], token) and self.headers.get('Host') == f'127.0.0.1:{self.server.server_port}':
-                self.send_response(303); self.send_header('Set-Cookie', f'workspace={token}; HttpOnly; SameSite=Strict; Path=/'); self.send_header('Location', '/'); self.end_headers(); return
+                self.send_response(303); self.send_header('Set-Cookie', f'workspace_{self.server.server_port}={token}; HttpOnly; SameSite=Strict; Path=/'); self.send_header('Location', '/'); self.end_headers(); return
             if not self.authorized():
                 self.send({'error': '请从桌面快捷方式打开应用。'}, 403); return
             workspace.last_seen = time.monotonic()
             try:
                 if path == '/api/state':
-                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.14-reading-1'})
+                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.14-reading-2'})
                 elif path.startswith('/api/article/'):
                     self.send(workspace.store.article(path.rsplit('/',1)[1]))
                 elif path.startswith('/api/session/'):
@@ -322,6 +322,16 @@ def make_handler(workspace, token):
                     self.send(article)
                 elif path == '/api/demo':
                     self.send(demo(s))
+                elif path == '/api/extract':
+                    from .reader_source import capture_source
+                    old = s.article(body['article_id']) if body.get('article_id') else None
+                    article = capture_source(s, str(body.get('url') or (old or {}).get('source_url') or ''))
+                    if old and old['id'] != article['id']:
+                        old['superseded_by'] = article['id']
+                        s.update_article(old)
+                        article['previous_id'] = old['id']
+                        s.update_article(article)
+                    self.send(article)
                 elif path == '/api/link':
                     target, source = s.article(body['article_id']), s.article(body['source_id'])
                     blocks = [{k:v for k,v in b.items() if k != 'id'} for b in target['blocks']]
@@ -364,7 +374,7 @@ def main():
     args=parser.parse_args(); workspace=Workspace(data_dir()); token=secrets.token_urlsafe(32)
     server=ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(workspace,token))
     url=f'http://127.0.0.1:{server.server_port}/session?token={token}'
-    state=data_dir()/'workspace-session.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url}),encoding='utf-8')
+    state=data_dir()/'workspace-session-v2.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v2'}),encoding='utf-8')
     if not args.headless:
         edge=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe'
         if edge.exists():

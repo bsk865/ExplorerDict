@@ -1,0 +1,15 @@
+{
+  "checks": [
+    "article only default",
+    "selection bar hidden until selection",
+    "selected term opens contextual assistant",
+    "draft survives tab switch",
+    "assistant closes",
+    "image opens same assistant",
+    "image crop creates independent object",
+    "mobile no page overflow",
+    "map renders",
+    "no browser errors"
+  ],
+  "errors": []
+}

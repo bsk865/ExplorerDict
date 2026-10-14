@@ -159,7 +159,7 @@ class WorkspaceStore:
     def summaries(self):
         with self.connect() as db:
             articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles ORDER BY rowid DESC')]
-        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map'))} for a in articles]
+        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map'))} for a in articles if not a.get('superseded_by')]
 
     def model_config(self):
         config = self.get('settings', 'model', {})
@@ -200,6 +200,10 @@ class WorkspaceStore:
                 # Preserve the exact archived text for existing map fingerprints.
                 blocks = [{'type': 'text', 'text': row['text']}]
                 article = self.import_article(row['title'], blocks, origin='legacy')
+                if not article.get('source_url'):
+                    article['source_url'] = row['url']
+                    article['source_status'] = 'legacy_text'
+                    self.update_article(article)
                 count += 1
                 entries = list(db.execute('SELECT * FROM entries WHERE doc_key=?', (row['doc_key'],)))
                 for e in entries:
