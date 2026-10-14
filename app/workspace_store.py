@@ -156,6 +156,31 @@ class WorkspaceStore:
             db.execute('UPDATE objects SET payload=? WHERE id=?', (json.dumps(obj, ensure_ascii=False), oid))
         return obj
 
+    def update_session(self, key, changes):
+        with self.lock:
+            current = self.get('sessions', key, {'messages': [], 'draft': ''})
+            for field, limit in (('draft', 6000), ('note', 10000)):
+                if field in changes:
+                    current[field] = str(changes[field])[:limit]
+            self.put('sessions', key, current)
+        return current
+
+    def saved_entries(self):
+        with self.connect() as db:
+            articles = {r['id']: json.loads(r['payload']) for r in db.execute('SELECT id,payload FROM articles')}
+            objects = [json.loads(r[0]) for r in db.execute('SELECT payload FROM objects ORDER BY rowid DESC')]
+            sessions = {r['id']: json.loads(r['payload']) for r in db.execute('SELECT id,payload FROM sessions')}
+        rows = []
+        for obj in objects:
+            a = articles.get(obj['article_id'])
+            if a and (obj.get('saved') or obj.get('note')):
+                rows.append({'article_id': a['id'], 'article_title': a['title'], 'archived': bool(a.get('superseded_by')), **obj})
+        for a in articles.values():
+            note = sessions.get(a['id'] + ':' + a['version'] + ':', {}).get('note', '')
+            if note:
+                rows.append({'article_id': a['id'], 'article_title': a['title'], 'title': a['title'], 'type': 'article', 'note': note, 'archived': bool(a.get('superseded_by'))})
+        return rows
+
     def summaries(self):
         with self.connect() as db:
             articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles ORDER BY rowid DESC')]

@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "article note survives navigation",
+    "note update preserves chat draft",
+    "uncategorized note visible in notes collection",
+    "article note visible in notes collection",
+    "collection opens exact article note",
+    "export includes article note",
+    "missing model opens settings without losing question",
+    "failed answer restores question",
+    "internal citation IDs hidden",
+    "source remains clickable",
+    "answer citation returns to original paragraph",
+    "mobile layout fits",
+    "long article does not offer failing full-map action",
+    "empty map has one clear primary action",
+    "no browser errors"
+  ],
+  "errors": []
+}

@@ -60,6 +60,28 @@ class WorkspaceTests(unittest.TestCase):
         self.store.put('sessions','a:v:image2',{'draft':'第二张','messages':[]})
         self.assertEqual(self.store.get('sessions','a:v:image1')['draft'],'第一张')
 
+    def test_note_and_draft_updates_preserve_each_other_and_messages(self):
+        key='a:v:'
+        self.store.put('sessions',key,{'messages':[{'role':'user','content':'Question'}],'draft':'Draft'})
+        self.store.update_session(key,{'note':'Article note'})
+        self.store.update_session(key,{'draft':'New draft'})
+        result=self.store.get('sessions',key)
+        self.assertEqual(result['note'],'Article note')
+        self.assertEqual(result['draft'],'New draft')
+        self.assertEqual(result['messages'][0]['content'],'Question')
+
+    def test_saved_notes_include_superseded_article_and_article_notes(self):
+        a=self.article()
+        obj=self.store.object(a['id'],{'type':'term','title':'细研磨','block':'b0'})
+        self.store.update_object(obj['id'],{'note':'Remember this'})
+        a['superseded_by']='new-version'
+        self.store.update_article(a)
+        self.store.update_session(a['id']+':'+a['version']+':',{'note':'Article note'})
+        rows=self.store.saved_entries()
+        self.assertEqual(len(rows),2)
+        self.assertTrue(all(r['archived'] for r in rows))
+        self.assertEqual({r['note'] for r in rows},{'Remember this','Article note'})
+
     def test_settings_key_encrypted_and_capability_reset(self):
         self.store.save_config({'base_url':'https://example.com/v1','model':'vision','key':'test-secret'})
         self.assertNotIn('test-secret',self.store.path.read_bytes().decode('latin1'))
@@ -94,13 +116,14 @@ class WorkspaceTests(unittest.TestCase):
         class Client:
             model = 'test'
             def chat(inner, messages):
-                workspace.store.put('sessions',key,{'draft':'等待时输入的新问题','messages':[]})
+                workspace.store.put('sessions',key,{'draft':'等待时输入的新问题','note':'等待时保存的笔记','messages':[]})
                 return '细研磨增加表面积。[b0]'
         workspace.client = lambda: Client()
         job={'cancel':threading.Event()}
         workspace.work(job,'chat',{'article_id':article['id'],'object_id':obj['id'],'question':'为什么？'})
         self.assertEqual(job['status'],'done')
         self.assertEqual(workspace.store.get('sessions',key)['draft'],'等待时输入的新问题')
+        self.assertEqual(workspace.store.get('sessions',key)['note'],'等待时保存的笔记')
         self.assertEqual(len(workspace.store.get('sessions',key)['messages']),2)
         self.assertEqual(workspace.store.get('sessions',other_key)['messages'],[])
 

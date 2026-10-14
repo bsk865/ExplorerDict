@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "selection sends plain user action",
+    "notes entered during answer survive completion",
+    "notes persisted to disk",
+    "cancel retains question and offers retry",
+    "image preflight leads to capability check",
+    "no browser errors"
+  ]
+}

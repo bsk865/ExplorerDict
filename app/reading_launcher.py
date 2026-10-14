@@ -5,6 +5,6 @@ from .paths import project_root
 
 def open_workspace():
     root = project_root()
-    release = root / '探索词典-阅读版2.exe'
+    release = root / '探索词典-阅读版3.exe'
     command = [str(release)] if release.exists() else [str(root / '.build-env/Scripts/pythonw.exe'), str(root / 'reading_entry.pyw')]
     subprocess.Popen(command, cwd=root, creationflags=0x08000000)
