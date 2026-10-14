@@ -184,7 +184,7 @@ class WorkspaceStore:
     def summaries(self):
         with self.connect() as db:
             articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles ORDER BY rowid DESC')]
-        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map'))} for a in articles if not a.get('superseded_by')]
+        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map')), 'cover': next((b.get('asset') for b in a['blocks'] if b['type']=='image'), None)} for a in articles if not a.get('superseded_by')]
 
     def model_config(self):
         config = self.get('settings', 'model', {})

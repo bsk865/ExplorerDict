@@ -1,0 +1,31 @@
+/* image2.5 illustrations use existing theme tokens; reading controls remain code-native. */
+:root[data-palette] .hero{min-height:248px;padding:32px;overflow:hidden;background:var(--quiet);position:relative;isolation:isolate}
+:root .hero .hero-art{position:absolute;inset:0 0 0 auto;width:58%;height:100%;margin:0;object-fit:cover;object-position:right center;z-index:0;mask-image:linear-gradient(to right,transparent,#000 22%);pointer-events:none}
+:root .hero .hero-title-block{position:relative;z-index:2;max-width:57%;background:none;padding:0}
+:root .hero>.primary{position:relative;z-index:2;margin-left:auto;align-self:flex-end;margin-bottom:0;box-shadow:0 2px 12px rgb(40 25 15 / .12)}
+:root .hero:before,:root .hero:after{display:none}
+:root[data-theme="dark"] .hero .hero-art{mask-image:linear-gradient(to right,transparent,#000 34%)}
+.theme-scene{overflow:hidden;isolation:isolate}
+.theme-scene img{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;object-position:right center!important;opacity:1!important;transform:none!important;z-index:0;mask-image:none!important}
+.theme-scene-copy{z-index:1;max-width:58%;position:relative}
+:root[data-theme="dark"] .theme-scene-copy{color:#40342d}
+:root[data-theme="dark"] .theme-scene-copy small{color:#65584d}
+.xiaotan-avatar,.assistant-heading>img,.shelf-quiet-note img,.knowledge-empty>img{object-fit:cover;object-position:center;border:1px solid var(--accent-line)}
+.xiaotan-card .xiaotan-avatar{width:44px;height:44px;flex-shrink:0;background:var(--surface)}
+.shelf-quiet-note img{width:48px;height:48px}
+.xiaotan-character-dialog{width:min(780px,calc(100vw - 32px));max-height:90dvh}
+.xiaotan-character-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:28px;align-items:center;margin:16px 0 22px}
+.xiaotan-portrait-frame{margin:0;overflow:hidden;border:1px solid var(--line);border-radius:20px;background:#f8f5ef}
+.xiaotan-portrait-frame img{width:100%;height:auto;display:block}
+.xiaotan-portrait-frame figcaption{font-size:11px;padding:12px 16px;background:var(--surface);color:var(--muted);line-height:1.7}
+.xiaotan-character-copy h3{font-family:var(--theme-serif);font-size:28px;font-weight:500;margin:0 0 12px}
+.xiaotan-character-copy>p{font-size:13px;line-height:2;color:var(--muted);margin:0 0 18px}
+.xiaotan-character-copy .xiaotan-feature{padding:12px 0;border-top:1px solid var(--line);margin:0}
+.xiaotan-character-copy .xiaotan-feature small{line-height:1.8}
+.xiaotan-outfit-note{font-size:11px;line-height:1.9;color:var(--muted);margin:10px 0 0}
+.xiaotan-character-dialog .modal-actions{position:sticky;bottom:-28px;background:var(--surface);padding:16px 0 8px;border-top:1px solid var(--line);z-index:3}
+.assistant-welcome-portrait{display:block;width:126px;height:126px;object-fit:cover;object-position:center 22%;border-radius:28px;border:1px solid var(--line);margin:0 auto 20px;background:var(--surface)}
+@media(max-width:1020px){:root[data-palette] .hero{min-height:228px;padding:26px}:root .hero .hero-title-block{max-width:62%}:root .hero .hero-art{width:55%}:root .hero h1{font-size:29px}}
+@media(max-width:720px){:root[data-palette] .hero{display:block;min-height:0;padding:24px 20px 20px;margin-bottom:24px}:root .hero .hero-title-block{max-width:100%}:root .hero .hero-art{display:block;position:relative;inset:auto;width:calc(100% + 40px);height:132px;object-position:right 58%;object-fit:cover;margin:20px -20px 0;mask-image:linear-gradient(to bottom,transparent,#000 24%)}:root[data-theme="dark"] .hero .hero-art{mask-image:linear-gradient(to bottom,transparent,#000 24%)}:root .hero>.primary{display:flex;width:max-content;margin-top:16px;margin-left:auto;min-height:40px}:root .hero h1{font-size:26px}.xiaotan-character-layout{grid-template-columns:1fr;gap:20px}.xiaotan-portrait-frame{max-width:250px;margin:auto}.xiaotan-character-copy h3{font-size:24px}.xiaotan-character-copy .xiaotan-feature{padding:10px 0}.xiaotan-character-dialog{padding:20px}.assistant-welcome-portrait{width:100px;height:100px}.theme-scene-copy small{font-size:7px;letter-spacing:.5px}}
+@media(max-width:380px){:root[data-palette] .hero{padding:21px 16px 16px}:root .hero .hero-art{width:calc(100% + 32px);margin-inline:-16px;height:112px}:root .hero h1{font-size:24px}}
+@media(max-width:720px){.xiaotan-character-dialog .modal-actions{bottom:-20px;gap:10px}.xiaotan-character-dialog .modal-actions .primary{font-size:12px}.xiaotan-character-dialog .modal-actions .text-button{font-size:11px}.xiaotan-character-dialog .modal-actions button{min-height:44px}}

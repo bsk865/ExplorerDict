@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "list view",
+    "image filter",
+    "search empty state",
+    "images exposed alongside word records",
+    "image object opens",
+    "note save and return collection",
+    "concept filter excludes images",
+    "map geometry preserved",
+    "six themes, light/dark, five viewport widths",
+    "mobile source tab",
+    "mobile citation returns to source and keeps draft",
+    "no browser or asset errors"
+  ],
+  "combinations": 60,
+  "errors": []
+}

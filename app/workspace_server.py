@@ -270,7 +270,7 @@ def make_handler(workspace, token):
             workspace.last_seen = time.monotonic()
             try:
                 if path == '/api/state':
-                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.14-reading-3'})
+                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.14-reading-4'})
                 elif path == '/api/saved':
                     self.send(workspace.store.saved_entries())
                 elif path.startswith('/api/article/'):
@@ -383,7 +383,7 @@ def main():
     args=parser.parse_args(); workspace=Workspace(data_dir()); token=secrets.token_urlsafe(32)
     server=ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(workspace,token))
     url=f'http://127.0.0.1:{server.server_port}/session?token={token}'
-    state=data_dir()/'workspace-session-v3.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v3'}),encoding='utf-8')
+    state=data_dir()/'workspace-session-v4.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v4'}),encoding='utf-8')
     if not args.headless:
         edge=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe'
         if edge.exists():

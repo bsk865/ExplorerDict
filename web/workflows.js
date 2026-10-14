@@ -82,7 +82,7 @@ send=async function(question){
 
 savedPage=async function(){
     await saveDraft();document.body.dataset.page='shelf';state.page='saved';setCrumb('笔记与收藏');
-    const rows=await api('saved');
+    const rows=(await api('saved')).filter(o=>state.collectionKind!=='term'||o.type==='term');
     $('#main').innerHTML=`<div class="page-heading"><h1>笔记与收藏</h1>${button('shelf','我的文章')}</div><div class="filter-row"><input id="note-search" aria-label="搜索笔记" placeholder="搜索笔记或文章"></div><div id="saved-items"></div>`;
     const paint=query=>{$('#saved-items').innerHTML=rows.filter(o=>(o.title+' '+o.note+' '+o.article_title).toLowerCase().includes(query.toLowerCase())).map(o=>`<div class="saved-row">${o.asset?`<img src="${asset(o.asset)}" alt="">`:`<span class="book-symbol">${o.type==='article'?'▤':'☆'}</span>`}<div><h3>${esc(o.title)}</h3><small>${esc(o.article_title)}${o.archived?' · 旧版原文':''}</small><p>${esc(o.note||'已收藏')}</p></div><div class="actions">${o.type==='article'?`<button data-article-note="${o.article_id}">打开笔记</button>`:`<button data-review="${o.id}" data-article="${o.article_id}">${o.understood?'✓ 已理解':'标记已理解'}</button><button data-return="${o.id}" data-article="${o.article_id}">回到原文</button>`}</div></div>`).join('')||'<div class="empty">暂无笔记或收藏。阅读时可以随手记录。</div>';};
     paint('');$('#note-search').oninput=e=>paint(e.target.value);

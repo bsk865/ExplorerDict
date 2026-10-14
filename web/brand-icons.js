@@ -1,0 +1,27 @@
+/* 24×24统一网格：1.65px描边、圆端点、轻填充，书页/卡片/探索星贯穿主要图标。 */
+window.ExplorerIcons=Object.freeze({
+  grid:'<rect class="icon-fill" x="3" y="4" width="7" height="8" rx="2"/><rect x="3" y="4" width="7" height="8" rx="2"/><rect x="3" y="16" width="7" height="5" rx="1.6"/><rect x="14" y="13" width="7" height="8" rx="2"/><path class="icon-star" d="m17.5 2 1.3 3.2L22 6.5l-3.2 1.3-1.3 3.2-1.3-3.2L13 6.5l3.2-1.3Z"/>',
+  book:'<path class="icon-fill" d="M3 5h5a5 5 0 0 1 4 2v14a6 6 0 0 0-5-2H3Z"/><path d="M3 5h5a5 5 0 0 1 4 2v14a6 6 0 0 0-5-2H3V5Zm18 0h-5a5 5 0 0 0-4 2v14a6 6 0 0 1 5-2h4V5ZM6 9h3M6 12h3M15 9h3"/>',
+  repeat:'<path class="icon-fill" d="M7 8h7v12l-3.5-2L7 20Z"/><path d="M7 8h7v12l-3.5-2L7 20V8ZM18 17a8 8 0 1 0-15-4M19 10v6h-5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  archive:'<rect x="3" y="4" width="18" height="5" rx="1.6"/><path d="M5 9v11h14V9M9 13h6"/>',
+  settings:'<path d="M4 7h4m6 0h6M4 17h10m6 0h0"/><circle class="icon-fill" cx="11" cy="7" r="3"/><circle cx="11" cy="7" r="3"/><circle cx="17" cy="17" r="3"/>',
+  'arrow-up-right':'<path d="M6 18 18 6M8 6h10v10"/>',
+  'arrow-right':'<path d="M4 12h16m-6-6 6 6-6 6"/>',
+  'chevron-down':'<path d="m7 9 5 5 5-5"/>',
+  search:'<circle class="icon-fill" cx="10.5" cy="10.5" r="6.5"/><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>',
+  x:'<path d="m6 6 12 12M6 18 18 6"/>',
+  file:'<path class="icon-fill" d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8Z"/><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5M8 12h8M8 16h5"/>',
+  check:'<path d="m5 12 4 4 10-10"/>',
+  bookmark:'<path class="icon-fill" d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-6-4-6 4Z"/><path d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16l-6-4-6 4V5ZM9 8h6"/>',
+  download:'<path d="M12 3v12m-4-4 4 4 4-4M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/>',
+  list:'<rect class="icon-fill" x="3" y="3" width="5" height="5" rx="1.4"/><rect x="3" y="3" width="5" height="5" rx="1.4"/><path d="M12 5.5h9M12 12h9M12 18.5h9"/><rect x="3" y="9.5" width="5" height="5" rx="1.4"/><rect x="3" y="16" width="5" height="5" rx="1.4"/>',
+  send:'<path class="icon-fill" d="m3 5 18 7-18 7 4-7Z"/><path d="m3 5 18 7-18 7 4-7-4-7Zm4 7h14"/>',
+  trash:'<path d="M4 6h16M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"/>',
+  map:'<rect class="icon-fill" x="8" y="2" width="8" height="6" rx="2"/><rect x="8" y="2" width="8" height="6" rx="2"/><rect x="2" y="16" width="7" height="6" rx="2"/><rect x="15" y="16" width="7" height="6" rx="2"/><path d="M12 8v4H5.5v4M12 12h6.5v4"/>',
+  moon:'<path class="icon-fill" d="M20 15A8 8 0 0 1 9 4a9 9 0 1 0 11 11Z"/><path d="M20 15A8 8 0 0 1 9 4a9 9 0 1 0 11 11Z"/>',
+  concept:'<path class="icon-fill" d="M5 4h11l3 3v13H5Z"/><path d="M5 4h11l3 3v13H5V4ZM8 9h5M8 13h8M8 16h5"/>',
+  spark:'<path class="icon-star" d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',
+  note:'<path class="icon-fill" d="M5 4h14v13l-4 4H5Z"/><path d="M5 4h14v13l-4 4H5V4ZM15 21v-4h4M8 8h8M8 12h6"/>',
+  link:'<path d="m9 15 6-6M8 13l-2 2a3 3 0 0 0 4 4l3-3M11 8l3-3a3 3 0 0 1 4 4l-2 2"/>'
+});

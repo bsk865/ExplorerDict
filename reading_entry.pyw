@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent
 
 def launch():
     directory = Path(os.environ.get('EXPLORER_DICT_DATA_DIR', ROOT / 'data'))
-    record = directory / 'workspace-session-v3.json'
+    record = directory / 'workspace-session-v4.json'
     if record.exists():
         try:
             url = json.loads(record.read_text(encoding='utf-8'))['url']

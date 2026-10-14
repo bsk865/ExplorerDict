@@ -1,0 +1,61 @@
+/* 暖纸书桌：赤陶的温度，侘寂的留白，杂志的阅读层级。 */
+:root[data-palette="clay"]{--bg:#f7f2ea;--surface:#fffdf8;--ink:#40342d;--muted:#706052;--line:#e7ddd0;--soft:#f1e6d9;--quiet:#f0e8dc;--strong:#c9b9a6;--accent:#9d5c43;--accent-hover:#864931;--accent-soft:#f3e1d4;--accent-line:#d3b29b;--accent-text:#955438;--gold:#84603d;--gold-soft:#f2e6cf;--title-font:"Noto Serif SC","Source Han Serif SC","Songti SC","SimSun",Georgia,serif}
+:root[data-palette="clay"][data-theme="dark"]{--bg:#251f1a;--surface:#302822;--ink:#f0e5d7;--muted:#c3ad99;--line:#4c3e32;--soft:#453429;--quiet:#332a21;--strong:#8d735b;--accent:#e1ae8e;--accent-hover:#edc5a8;--accent-soft:#51392a;--accent-line:#a17d5d;--accent-text:#e8bfa0;--gold:#dabd8a;--gold-soft:#433726}
+:root[data-palette="clay"] .sidebar{background:var(--quiet);border-right-color:var(--line)}
+:root[data-palette="clay"] .brand{letter-spacing:.8px;font-weight:600}
+:root[data-palette="clay"] .brand small{font-size:8px;letter-spacing:1.6px}
+:root[data-palette="clay"] .workspace-name{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:8px 8px 15px;margin-top:23px}
+:root[data-palette="clay"] .nav-item.active{background:var(--accent-soft);color:var(--accent-text)}
+:root[data-palette="clay"] .nav-count{background:var(--surface)}
+:root[data-palette="clay"] .topbar{background:var(--bg)}
+:root[data-palette="clay"] .search-box{background:var(--surface)}
+:root[data-palette="clay"] .content{padding-top:32px}
+:root[data-palette="clay"] .hero{padding:27px 27px 28px;min-height:176px;background:var(--quiet);border:1px solid var(--line);border-radius:14px;margin-bottom:29px;position:relative;overflow:hidden;gap:20px}
+:root[data-palette="clay"] .hero:after{content:"";height:3px;width:100%;background:linear-gradient(to right,var(--accent-line) 0 20%,transparent 20% 69%,var(--strong) 69% 100%);position:absolute;bottom:0;left:0;opacity:.55}
+:root[data-palette="clay"] .hero h1{font-family:var(--title-font);font-weight:500;font-size:34px;letter-spacing:.2px;margin:17px 0 12px;line-height:1.4}
+:root[data-palette="clay"] .hero .eyebrow{font-size:10px;letter-spacing:1.6px}
+:root[data-palette="clay"] .hero p{font-size:12px;line-height:1.9}
+:root[data-palette="clay"] .hero-art{width:190px;height:125px;flex-shrink:0;margin-left:auto;margin-right:2px}
+:root[data-palette="clay"] .hero>.primary{margin-bottom:0;flex-shrink:0;align-self:flex-end;padding:11px 16px}
+:root[data-palette="clay"] .primary{border-radius:9px}
+:root[data-palette="clay"] .primary,:root[data-palette="clay"] .question-form .icon-button{color:#fffaf3}
+:root[data-palette="clay"][data-theme="dark"] .primary,:root[data-palette="clay"][data-theme="dark"] .question-form .icon-button{color:#332319}
+:root[data-palette="clay"] .collection-bar{padding-top:3px;padding-bottom:17px}
+:root[data-palette="clay"] .collection-bar strong{font-size:15px;font-weight:500}
+:root[data-palette="clay"] .grid-header{margin-top:19px;margin-bottom:16px}
+:root[data-palette="clay"] .concept-grid{gap:16px}
+:root[data-palette="clay"] .concept-card{padding:20px 20px 17px;min-height:177px;border-radius:10px;border-color:var(--line);box-shadow:0 2px 4px rgb(111 78 46 / .025)}
+:root[data-palette="clay"] .concept-card:hover{border-color:var(--accent-line);background:var(--surface);box-shadow:0 3px 10px rgb(111 78 46 / .06)}
+:root[data-palette="clay"] .concept-card.selected{background:var(--accent-soft);border-color:var(--accent-line)}
+:root[data-palette="clay"] .concept-card.selected:before{width:2px}
+:root[data-palette="clay"] .card-glyph{background:var(--quiet)}
+:root[data-palette="clay"] .card-top .card-index{font-size:10px;letter-spacing:.5px;color:var(--muted)}
+:root[data-palette="clay"] .concept-card h3{font-size:20px;font-weight:500;margin-top:13px;letter-spacing:-.3px}
+:root[data-palette="clay"] .concept-card p{font-size:12px;line-height:1.9}
+:root[data-palette="clay"] .card-bottom{font-size:10px}
+:root[data-palette="clay"] .card-tag{background:var(--quiet);padding:3px 6px;font-size:9px;border-radius:4px}
+:root[data-palette="clay"] .detail-inline{border-radius:12px;padding:22px;background:var(--surface);box-shadow:0 3px 12px rgb(111 78 46 / .035)}
+:root[data-palette="clay"] .detail-heading h2{font-weight:500;font-size:28px;letter-spacing:-.5px}
+:root[data-palette="clay"] .detail-top{font-size:10px;letter-spacing:.6px}
+:root[data-palette="clay"] .source-quote{background:var(--bg);border-left-color:var(--accent-line);color:var(--muted)}
+:root[data-palette="clay"] .detail-tab.active{font-weight:500}
+:root[data-palette="clay"] .tag-chip{background:var(--quiet);color:var(--muted)}
+:root[data-palette="clay"] .xiaotan-card{background:var(--surface);padding:13px 11px;border-color:var(--strong)}
+:root[data-palette="clay"] .xiaotan-card small{font-size:10px}
+:root[data-palette="clay"] .xiaotan-avatar{border-color:var(--surface);border-radius:12px}
+:root[data-palette="clay"] .ask-area .xiaotan-avatar{border-radius:7px}
+:root[data-palette="clay"] .article h2{font-family:var(--title-font);font-size:29px;font-weight:500;letter-spacing:.5px}
+:root[data-palette="clay"] .article-body h3{font-family:var(--title-font);font-size:18px;font-weight:500;letter-spacing:.8px;border-top:1px solid var(--line);padding-top:19px;margin-top:28px}
+:root[data-palette="clay"] .article-body p{font-size:16px;line-height:2.2}
+:root[data-palette="clay"] .reading-companion{border-radius:12px}
+:root[data-palette="clay"] .review-card{border-radius:14px;box-shadow:0 3px 12px rgb(111 78 46 / .035)}
+:root[data-palette="clay"] .review-card h2{font-weight:500}
+:root[data-palette="clay"] button:focus-visible{outline-color:var(--accent-text)}
+:root[data-palette="clay"] .toast{color:#fffaf3;background:var(--accent);box-shadow:0 4px 15px rgb(111 78 46 / .12)}
+:root[data-palette="clay"][data-theme="dark"] .toast{color:#332319}
+@media(min-width:1500px){:root[data-palette="clay"] .hero{padding:30px 33px;min-height:190px}:root[data-palette="clay"] .hero h1{font-size:37px}:root[data-palette="clay"] .hero-art{width:210px}}
+@media(max-width:1280px){:root[data-palette="clay"] .hero-art{width:150px;height:112px}:root[data-palette="clay"] .hero{gap:14px;padding:24px}:root[data-palette="clay"] .hero h1{font-size:30px}:root[data-palette="clay"] .hero>.primary{font-size:11px;padding:10px 12px}}
+@media(max-width:1120px) and (min-width:721px){:root[data-palette="clay"] .hero-art{display:none}}
+@media(max-width:1020px){:root[data-palette="clay"] .hero h1{font-size:32px}:root[data-palette="clay"] .hero>.primary{font-size:12px}:root[data-palette="clay"] .card-bottom{font-size:10px}}
+@media(max-width:720px){:root[data-palette="clay"] .sidebar{background:var(--surface)}:root[data-palette="clay"] .content{padding-top:23px}:root[data-palette="clay"] .hero{display:block;min-height:0;padding:24px 20px;border-radius:12px;margin-bottom:24px}:root[data-palette="clay"] .hero h1{font-size:27px;letter-spacing:-.5px;margin-top:14px;white-space:nowrap}:root[data-palette="clay"] .hero .eyebrow{font-size:9px;letter-spacing:1px}:root[data-palette="clay"] .hero p{font-size:11px}:root[data-palette="clay"] .hero>.primary{margin-top:18px;padding:10px 14px;font-size:11px;min-height:40px}:root[data-palette="clay"] .hero-art{display:none}:root[data-palette="clay"] .concept-grid{gap:12px}:root[data-palette="clay"] .concept-card{padding:16px 13px;min-height:177px}:root[data-palette="clay"] .concept-card h3{font-size:17px}:root[data-palette="clay"] .card-top .card-index{font-size:9px}:root[data-palette="clay"] .card-bottom{font-size:8px}:root[data-palette="clay"] .card-tag{font-size:8px}:root[data-palette="clay"] .article h2{font-size:25px}:root[data-palette="clay"] .article-body h3{font-size:17px}:root[data-palette="clay"] .detail-heading h2{font-size:28px}}
+@media(max-width:380px){:root[data-palette="clay"] .hero{padding:21px 15px}:root[data-palette="clay"] .hero h1{font-size:23px;letter-spacing:-1px}:root[data-palette="clay"] .hero .eyebrow{font-size:8px;letter-spacing:.5px}:root[data-palette="clay"] .hero p{font-size:10px}:root[data-palette="clay"] .concept-card{min-height:150px;padding:17px}:root[data-palette="clay"] .concept-card h3{font-size:19px}:root[data-palette="clay"] .card-bottom{font-size:9px}}
