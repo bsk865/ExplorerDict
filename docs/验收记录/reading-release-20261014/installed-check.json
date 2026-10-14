@@ -1,0 +1,9 @@
+{
+  "installed_url": "http://127.0.0.1:18771",
+  "page_title": "探索词典 · 阅读工作区",
+  "model": "deepseek-chat",
+  "served_model": "deepseek-flash",
+  "vision": "supported",
+  "svg_export_bytes": 6003,
+  "errors": []
+}

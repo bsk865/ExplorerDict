@@ -6,6 +6,7 @@
 
 # ---- 打包 / 构建产物（由 tools\build_app.ps1 重新生成）----
 /_runtime/
+/_reading_runtime/
 /artifacts/
 *.exe
 *.pkg

@@ -1,0 +1,17 @@
+[
+  {
+    "kind": "chat",
+    "status": "done",
+    "message": "小探正在结合原文回答…",
+    "messages": 2,
+    "answer_chars": 370,
+    "has_citations": true
+  },
+  {
+    "kind": "map",
+    "status": "done",
+    "message": "第 1 轮复核完成",
+    "nodes": 14,
+    "relations": 9
+  }
+]

@@ -1,0 +1,45 @@
+{
+  "checks": [
+    {
+      "name": "actual verified graph loaded",
+      "pass": true
+    },
+    {
+      "name": "real image reply with source links",
+      "pass": true
+    },
+    {
+      "name": "real capability probe via UI",
+      "pass": true
+    },
+    {
+      "name": "real text selection creates term",
+      "pass": true
+    },
+    {
+      "name": "actual term reply persisted",
+      "pass": true
+    },
+    {
+      "name": "new version distinct",
+      "pass": true
+    },
+    {
+      "name": "old version preserved",
+      "pass": true
+    },
+    {
+      "name": "term copied to new version",
+      "pass": true
+    },
+    {
+      "name": "new version does not reuse stale graph",
+      "pass": true
+    },
+    {
+      "name": "no runtime errors",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,113 @@
+{
+  "checks": [
+    {
+      "name": "correct title",
+      "pass": true
+    },
+    {
+      "name": "two equal image objects",
+      "pass": true
+    },
+    {
+      "name": "second image isolated",
+      "pass": true
+    },
+    {
+      "name": "first image draft restored",
+      "pass": true
+    },
+    {
+      "name": "region object created",
+      "pass": true
+    },
+    {
+      "name": "selection remains visible",
+      "pass": true
+    },
+    {
+      "name": "map nodes",
+      "pass": true
+    },
+    {
+      "name": "only curved tree edges",
+      "pass": true
+    },
+    {
+      "name": "selected evidence",
+      "pass": true
+    },
+    {
+      "name": "81-node long-title no overlap",
+      "pass": true
+    },
+    {
+      "name": "evidence source highlight",
+      "pass": true
+    },
+    {
+      "name": "saved image visible",
+      "pass": true
+    },
+    {
+      "name": "saved image back to source",
+      "pass": true
+    },
+    {
+      "name": "theme clay",
+      "pass": true
+    },
+    {
+      "name": "theme violet",
+      "pass": true
+    },
+    {
+      "name": "theme parchment",
+      "pass": true
+    },
+    {
+      "name": "theme blue",
+      "pass": true
+    },
+    {
+      "name": "theme forest",
+      "pass": true
+    },
+    {
+      "name": "theme ocean",
+      "pass": true
+    },
+    {
+      "name": "dark theme",
+      "pass": true
+    },
+    {
+      "name": "no page overflow 1024",
+      "pass": true
+    },
+    {
+      "name": "no page overflow 768",
+      "pass": true
+    },
+    {
+      "name": "no page overflow 390",
+      "pass": true
+    },
+    {
+      "name": "no page overflow 320",
+      "pass": true
+    },
+    {
+      "name": "persistent image bytes",
+      "pass": true
+    },
+    {
+      "name": "persistent first draft",
+      "pass": true
+    },
+    {
+      "name": "no console errors",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

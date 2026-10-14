@@ -95,6 +95,7 @@ BUTTON_TOOLTIPS: dict[str, str] = {
     "导出": "选一种格式导出当前看到的词表：CSV / Markdown / JSON / JSONL / "
             "Anki / PDF / HTML / TXT（落到「设置 → 导出」里的保存位置，不发网络请求）",
     "导图": "把**勾选**的词画成参考关系图（图里的生成要单独点，会消耗额度）",
+    "阅读工作区": "打开新版文章、图片探索和清晰思维导图；可同步桌面原文与收藏",
     "设置": "接口、取词、解释与外观设置",
     "游戏模式：关": "游戏模式：开会暂停取词并把浮窗压下去，全屏游戏时不再打扰",
     "暂停取词": "临时不记录新划的词（已存的词条不受影响）",
@@ -337,6 +338,8 @@ class MainWindow:
             side="right", padx=(theme.px(10), theme.px(4)))
         _toolbar_button("设置", self.app.open_settings).pack(side="right",
                                                              padx=theme.px(4))
+        from ..reading_launcher import open_workspace
+        _toolbar_button("阅读工作区", open_workspace).pack(side="right", padx=theme.px(4))
         _toolbar_button("导图", self.app.open_concept_map).pack(side="right",
                                                                 padx=theme.px(4))
         #: 导出（B3）：把**当前看到的**词表写成 CSV + Markdown，落在 data/exports/。
