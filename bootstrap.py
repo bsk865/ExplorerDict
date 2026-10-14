@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hashlib
 import io
 import os
 import shutil
@@ -440,6 +441,15 @@ def run_diagnose(boot: Bootstrap) -> int:
             boot.note(traceback.format_exc().rstrip())
             continue
         boot.note(f"import {mod}: ok")
+        module_file = getattr(sys.modules.get(mod), "__file__", None)
+        if module_file:
+            boot.note(f"module_origin {mod}: {module_file}")
+            if mod in ("app.ui.concept_map", "app.map_export", "app.map_service",
+                       "app.api_client", "app.explain_service", "app.uia_bridge"):
+                source_path = Path(module_file)
+                if source_path.is_file():
+                    boot.note(f"module_sha256 {mod}: "
+                              f"{hashlib.sha256(source_path.read_bytes()).hexdigest()}")
 
     boot.enter("diagnose:tkinter")
     try:

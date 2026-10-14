@@ -1,0 +1,79 @@
+{
+  "scope": "isolated helper launch to first ping; no capture, UI or selection requests",
+  "samples": [
+    {
+      "label": "before",
+      "sample": 1,
+      "launch_to_first_ping_ms": 2419.9,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "after",
+      "sample": 1,
+      "launch_to_first_ping_ms": 2014.9,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "before",
+      "sample": 2,
+      "launch_to_first_ping_ms": 2098.5,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "after",
+      "sample": 2,
+      "launch_to_first_ping_ms": 1941.0,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "before",
+      "sample": 3,
+      "launch_to_first_ping_ms": 2093.8,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "after",
+      "sample": 3,
+      "launch_to_first_ping_ms": 1913.2,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "before",
+      "sample": 4,
+      "launch_to_first_ping_ms": 2069.6,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "after",
+      "sample": 4,
+      "launch_to_first_ping_ms": 1943.2,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "before",
+      "sample": 5,
+      "launch_to_first_ping_ms": 2113.7,
+      "ok": true,
+      "exit": 0
+    },
+    {
+      "label": "after",
+      "sample": 5,
+      "launch_to_first_ping_ms": 1929.5,
+      "ok": true,
+      "exit": 0
+    }
+  ],
+  "median_ms": {
+    "before": 2098.5,
+    "after": 1941.0
+  }
+}

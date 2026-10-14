@@ -1,0 +1,297 @@
+...................................................................................................................逻辑链分析失败（按原文归纳）：按老路径继续 doc_key=k
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\map_service.py", line 601, in run_logic_graph
+    candidate = client.map_logic_chain(body, topic=str(title or ""),
+                                       terms=tuple(names))
+  File "D:\探索工具\探索词典\tests\test_article_logic.py", line 787, in boom
+    raise reply
+RuntimeError: 网络断了
+.....................................................................................................C:\Python314\Lib\tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+...........sssssssss................................................................................................................呼出事件创建失败（错误码 2），继续启动
+呼出事件不可用（OSError），继续启动
+.发送呼出请求失败（OSError）
+..发送呼出请求失败（SetEvent 返回失败）
+...打开主界面前的门控判定失败，暂缓显示
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\main.py", line 2154, in request_open_main
+    decision = self.gate.evaluate()
+  File "C:\Python314\Lib\unittest\mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1241, in _execute_mock_call
+    raise effect
+OSError: unavailable
+....首次配置向导没能建出来（不影响主界面）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\main.py", line 2051, in maybe_show_setup_wizard
+    self.open_setup_wizard()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\main.py", line 2076, in open_setup_wizard
+    self._wizard_win = SetupWizard(self.root, self)
+                       ~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\setup_wizard.py", line 74, in __init__
+    self.win = tk.Toplevel(master)
+               ~~~~~~~~~~~^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2854, in __init__
+    BaseWidget.__init__(self, master, 'toplevel', cnf, {}, extra)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2799, in __init__
+    self._setup(master, cnf)
+    ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2766, in _setup
+    self.tk = master.tk
+              ^^^^^^^^^
+AttributeError: 'FakeRoot' object has no attribute 'tk'
+.....................sssssssss..........................................................导出关系图失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 6440, in export_map_files
+    result = map_export.export_map(
+        layout=self._layout, style=self.export_style(), canvas=self.canvas,
+    ...<3 lines>...
+        **({"article_map":full.article_map} if full is not None else {}),
+    )
+  File "C:\Python314\Lib\unittest\mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\unittest\mock.py", line 1247, in _execute_mock_call
+    result = effect(*args, **kwargs)
+  File "D:\探索工具\探索词典\tests\test_full_article_map.py", line 322, in export
+    raise RuntimeError("模拟导出失败")
+RuntimeError: 模拟导出失败
+...................................s..........................s..................关系图 PNG 导出失败（SVG 已写出）：拿不到画布窗口句柄：窗口已经销毁
+....................................................................................................原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+........................................................启动时记录阅读来源失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\main.py", line 2594, in _run_ui
+    app.capture_service.note_foreground()
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'FakeApp' object has no attribute 'capture_service'
+...................................................................................原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+...................................................关键热键注册失败（呼出键）：[1]
+.鼠标钩子启动失败
+鼠标钩子启动失败
+.关键热键注册失败（呼出键）：[1]
+......首次配置向导没能建出来（不影响主界面）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\main.py", line 2051, in maybe_show_setup_wizard
+    self.open_setup_wizard()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\main.py", line 2076, in open_setup_wizard
+    self._wizard_win = SetupWizard(self.root, self)
+                       ~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\setup_wizard.py", line 74, in __init__
+    self.win = tk.Toplevel(master)
+               ~~~~~~~~~~~^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2854, in __init__
+    BaseWidget.__init__(self, master, 'toplevel', cnf, {}, extra)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2799, in __init__
+    self._setup(master, cnf)
+    ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Python314\Lib\tkinter\__init__.py", line 2766, in _setup
+    self.tk = master.tk
+              ^^^^^^^^^
+AttributeError: 'FakeRoot' object has no attribute 'tk'
+..淘汰卡死的 UIA helper（check timeout），下次取词会重新启动
+.淘汰卡死的 UIA helper（selection timeout），下次取词会重新启动
+.淘汰卡死的 UIA helper（selection timeout），下次取词会重新启动
+....................................已经有一个探索词典实例在运行：本次启动退出（避免抢热键 / 并发写库）
+...启动时记录阅读来源失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\main.py", line 2594, in _run_ui
+    app.capture_service.note_foreground()
+    ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'FakeApp' object has no attribute 'capture_service'
+.............................................................................................................................重读主题词条失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3887, in _reload_nodes
+    all_nodes, nodes = self._scope_nodes(service, int(topic_id))
+                       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3952, in _scope_nodes
+    all_nodes = list(service.nodes_for_topic(int(topic_id)))
+TypeError: 'NoneType' object is not iterable
+重读主题词条失败
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3887, in _reload_nodes
+    all_nodes, nodes = self._scope_nodes(service, int(topic_id))
+                       ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\ui\concept_map.py", line 3952, in _scope_nodes
+    all_nodes = list(service.nodes_for_topic(int(topic_id)))
+TypeError: 'NoneType' object is not iterable
+.................................................关系图 PNG 导出失败（SVG 已写出）：拿不到画布窗口句柄：winfo_id() 返回 0（窗口可能已经销毁）
+............................................................................................................................................................................................................................................D:\探索工具\探索词典\tests\test_ui_roundrect.py:9819: ResourceWarning: unclosed file <_io.TextIOWrapper name='D:\\探索工具\\探索词典\\app\\ui\\reading_panel.py' mode='r' encoding='utf-8'>
+  text = open(panel.__file__, encoding="utf-8").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...........shelper 脚本不存在: Z:\definitely\not\here\uia_helper.ps1
+.....ss..原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+..........................原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+....................原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+....原文留档截断失败（url:https://a.example.com/p）
+Traceback (most recent call last):
+  File "D:\探索工具\探索词典\app\capture_service.py", line 948, in _fetch_article_worker
+    if article_source.clip_article(article, self.config.article_max_chars):
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 444, in article_max_chars
+    self.get_int("capture.article_max_chars", 200_000)))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 276, in get_int
+    return int(str(self.get(key, str(default))).strip())
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "D:\探索工具\探索词典\app\config.py", line 241, in get
+    v = self.db.get_setting(key)
+  File "D:\探索工具\探索词典\app\db.py", line 472, in get_setting
+    row = self.query_one("SELECT v FROM settings WHERE k=?", (key,))
+  File "D:\探索工具\探索词典\app\db.py", line 467, in query_one
+    rows = self.query(sql, params)
+  File "D:\探索工具\探索词典\app\db.py", line 463, in query
+    self._ensure_open()
+    ~~~~~~~~~~~~~~~~~^^
+  File "D:\探索工具\探索词典\app\db.py", line 444, in _ensure_open
+    raise sqlite3.ProgrammingError("数据库连接已关闭")
+sqlite3.ProgrammingError: 数据库连接已关闭
+......................sss.
+----------------------------------------------------------------------
+Ran 1373 tests in 68.542s
+
+OK (skipped=26)
+{"directory": "C:\\Users\\张哲铭\\AppData\\Local\\Temp\\tmpsgdruniu", "ok": false, "counts": {"passed": 1, "failed": 0, "not_approved": 1, "input_error": 1}}

@@ -921,6 +921,9 @@ class ReadingPanel(FloatingWindow):
                                                     self._on_retry_explain, font_size=8,
                                                     padx=10, pady=2)
         self.btn_retry_explain.pack(side="left")
+        self.btn_stop_explain = widgets.FlatButton(self.retry_row, "停止解释",
+                                                   self._on_stop_explain, font_size=8,
+                                                   padx=10, pady=2)
         self._retry_packed = False
 
         # ---- ④ 中部可滚动区（pack 顺序最后 → 空间不足时先被压缩）----
@@ -1781,6 +1784,29 @@ class ReadingPanel(FloatingWindow):
             except Exception:  # pragma: no cover - 服务内部异常不该炸面板
                 return self.status == "pending"
         return self.status == "pending"
+
+    def show_retry_progress(self, entry_id, token, attempt, maximum, delay, label) -> bool:
+        """Update the current request without reopening or switching the panel."""
+        if (self.entry_id != entry_id or self.request_token != token
+                or self.status != "pending" or self.message.startswith("正在停止")):
+            return False
+        if not self.display_allowed(already_visible=True):
+            self.hide()
+        self.message = f"{label}，{delay:.1f} 秒后重试（{attempt}/{maximum}）"
+        self._render_detail()
+        return True
+
+    def _on_stop_explain(self) -> bool:
+        if self.request_token is None:
+            return False
+        service = getattr(self.app, "explain_service", None)
+        cancel = getattr(service, "cancel", None)
+        if callable(cancel) and cancel(self.request_token):
+            self.message = "正在停止本次解释…"
+            self._render_detail()
+            self._set_enabled(self.btn_stop_explain, False)
+            return True
+        return False
 
     def _on_retry_explain(self) -> bool:
         """详情页唯一解释入口：只解释**这条已保存的词条**。
@@ -3054,6 +3080,13 @@ class ReadingPanel(FloatingWindow):
         if need:
             self._set_label(self.btn_retry_explain, label)
         self._set_enabled(self.btn_retry_explain, not self._explain_inflight())
+        stop = getattr(self, "btn_stop_explain", None)
+        if stop is not None:
+            if self.status == "pending" and self.request_token is not None:
+                stop.pack(side="left", padx=theme.px(4))
+                self._set_enabled(stop, not self.message.startswith("正在停止"))
+            else:
+                stop.pack_forget()
         packed = bool(getattr(self, "_retry_packed", False))
         if need == packed:
             return

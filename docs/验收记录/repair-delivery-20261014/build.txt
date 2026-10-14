@@ -1,0 +1,178 @@
+352 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.8
+353 INFO: Python: 3.14.5
+410 INFO: Platform: Windows-11-10.0.26200-SP0
+410 INFO: Python environment: D:\探索工具\探索词典\.build-env
+225 WARNING: Failed to collect submodules for 'curses' because importing 'curses' raised: ModuleNotFoundError: No module named '_curses'
+43954 INFO: Module search paths (PYTHONPATH):
+['D:\\探索工具\\探索词典',
+ 'C:\\Python314\\python314.zip',
+ 'C:\\Python314\\DLLs',
+ 'C:\\Python314\\Lib',
+ 'C:\\Python314',
+ 'D:\\探索工具\\探索词典\\.build-env',
+ 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages',
+ 'D:\\探索工具\\探索词典']
+44537 INFO: Appending 'datas' from .spec
+44538 INFO: checking Analysis
+44583 INFO: Building because excludes changed
+44583 INFO: Looking for Python shared library...
+44583 INFO: Using Python shared library: C:\Python314\python314.dll
+44583 INFO: Running Analysis Analysis-00.toc
+44583 INFO: Target bytecode optimization level: 0
+44583 INFO: Initializing module dependency graph...
+44585 INFO: Initializing module graph hook caches...
+44604 INFO: Analyzing modules for base_library.zip ...
+47339 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+48221 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+48574 INFO: Processing standard module hook 'hook-math.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+48766 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+48785 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+52392 INFO: Caching module dependency graph...
+52432 INFO: Analyzing D:\探索工具\探索词典\desktop_entry.py
+52499 INFO: Processing standard module hook 'hook-sysconfig.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+52507 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+52699 INFO: Processing pre-find-module-path hook 'hook-tkinter.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+52702 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+53286 INFO: Processing standard module hook 'hook-_tkinter.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+54219 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+55065 INFO: Processing standard module hook 'hook-PIL.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+55255 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+55970 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+56004 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+56307 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+56740 INFO: Processing standard module hook 'hook-pystray.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+57406 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+57571 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+D:\探索工具\探索词典\.build-env\Lib\site-packages\pystray\_util\gtk.py:53: SyntaxWarning: 'return' in a 'finally' block
+  return False
+59415 INFO: Analyzing hidden import 'asyncio'
+59647 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+60764 INFO: Analyzing hidden import 'asyncio.__main__'
+61053 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+61204 INFO: Processing standard module hook 'hook-webbrowser.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+61641 INFO: Analyzing hidden import 'bdb'
+61689 INFO: Analyzing hidden import 'cProfile'
+61844 INFO: Analyzing hidden import 'cmath'
+61845 INFO: Analyzing hidden import 'compileall'
+61881 INFO: Analyzing hidden import 'compression.bz2'
+61882 INFO: Analyzing hidden import 'compression.gzip'
+61883 INFO: Analyzing hidden import 'compression.lzma'
+61884 INFO: Analyzing hidden import 'compression.zlib'
+61885 INFO: Analyzing hidden import 'configparser'
+61948 INFO: Analyzing hidden import 'ctypes._aix'
+61958 INFO: Analyzing hidden import 'ctypes._layout'
+61969 INFO: Analyzing hidden import 'ctypes.macholib'
+61970 INFO: Analyzing hidden import 'ctypes.macholib.dyld'
+61981 INFO: Analyzing hidden import 'ctypes.util'
+62010 INFO: Analyzing hidden import 'curses'
+62024 INFO: Analyzing hidden import 'dbm'
+62033 INFO: Analyzing hidden import 'dbm.dumb'
+62048 INFO: Analyzing hidden import 'dbm.gnu'
+62050 INFO: Analyzing hidden import 'dbm.sqlite3'
+62058 INFO: Analyzing hidden import 'doctest'
+62534 INFO: Analyzing hidden import 'email.mime'
+62535 INFO: Analyzing hidden import 'email.mime.application'
+62541 INFO: Analyzing hidden import 'email.mime.audio'
+62544 INFO: Analyzing hidden import 'email.mime.image'
+62551 INFO: Analyzing hidden import 'email.mime.message'
+62553 INFO: Analyzing hidden import 'email.mime.multipart'
+62555 INFO: Analyzing hidden import 'email.mime.text'
+62558 INFO: Analyzing hidden import 'faulthandler'
+62558 INFO: Analyzing hidden import 'fileinput'
+62576 INFO: Analyzing hidden import 'getpass'
+62588 INFO: Analyzing hidden import 'graphlib'
+62597 INFO: Analyzing hidden import 'http.cookies'
+62618 INFO: Analyzing hidden import 'imaplib'
+62692 INFO: Analyzing hidden import 'importlib.metadata.diagnose'
+62695 INFO: Analyzing hidden import 'importlib.resources.simple'
+62701 INFO: Analyzing hidden import 'importlib.simple'
+62702 INFO: Analyzing hidden import 'json.__main__'
+62710 INFO: Analyzing hidden import 'logging.config'
+62763 INFO: Analyzing hidden import 'mailbox'
+62891 INFO: Analyzing hidden import 'modulefinder'
+62928 INFO: Analyzing hidden import 'nturl2path'
+62933 INFO: Analyzing hidden import 'pathlib._local'
+62934 INFO: Analyzing hidden import 'pathlib.types'
+62954 INFO: Analyzing hidden import 'pickletools'
+63005 INFO: Analyzing hidden import 'plistlib'
+63052 INFO: Analyzing hidden import 'poplib'
+63069 INFO: Analyzing hidden import 'pty'
+63078 INFO: Analyzing hidden import 'pyclbr'
+63094 INFO: Analyzing hidden import 'sched'
+63101 INFO: Analyzing hidden import 'shelve'
+63111 INFO: Processing standard module hook 'hook-shelve.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+63113 INFO: Analyzing hidden import 'sqlite3.__main__'
+63120 INFO: Analyzing hidden import 'sqlite3.dump'
+63125 INFO: Analyzing hidden import 'string.templatelib'
+63128 INFO: Analyzing hidden import 'symtable'
+63150 INFO: Analyzing hidden import 'sysconfig.__main__'
+63165 INFO: Analyzing hidden import 'tabnanny'
+63180 INFO: Analyzing hidden import 'timeit'
+63193 INFO: Analyzing hidden import 'tkinter.__main__'
+63195 INFO: Analyzing hidden import 'tkinter.dialog'
+63198 INFO: Analyzing hidden import 'tkinter.dnd'
+63211 INFO: Analyzing hidden import 'tomllib'
+63262 INFO: Analyzing hidden import 'trace'
+63298 INFO: Analyzing hidden import 'turtle'
+63455 INFO: Analyzing hidden import 'unittest.__main__'
+63457 INFO: Analyzing hidden import 'unittest.mock'
+63600 INFO: Analyzing hidden import 'urllib.robotparser'
+63620 INFO: Analyzing hidden import 'uuid'
+63660 INFO: Analyzing hidden import 'wave'
+63689 INFO: Analyzing hidden import 'winsound'
+63690 INFO: Analyzing hidden import 'wsgiref'
+63691 INFO: Analyzing hidden import 'wsgiref.handlers'
+63728 INFO: Analyzing hidden import 'wsgiref.simple_server'
+63736 INFO: Analyzing hidden import 'wsgiref.types'
+63743 INFO: Analyzing hidden import 'wsgiref.validate'
+63762 INFO: Analyzing hidden import 'xml.dom'
+63772 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+63774 INFO: Analyzing hidden import 'xml.dom.NodeFilter'
+63777 INFO: Analyzing hidden import 'xml.dom.expatbuilder'
+64034 INFO: Analyzing hidden import 'xmlrpc.server'
+64070 INFO: Analyzing hidden import 'zipapp'
+64084 INFO: Analyzing hidden import 'zipfile.__main__'
+64086 INFO: Analyzing hidden import 'zoneinfo'
+64088 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+64143 INFO: Analyzing hidden import 'PIL._tkinter_finder'
+64145 INFO: Processing module hooks (post-graph stage)...
+64148 WARNING: Hidden import "tzdata" not found!
+64662 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+64731 INFO: Processing standard module hook 'hook-_tkinter.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks'
+64747 INFO: Performing binary vs. data reclassification (930 entries)
+64915 INFO: Looking for ctypes DLLs
+64988 INFO: Analyzing run-time hooks ...
+64991 INFO: Including run-time hook 'pyi_rth__tkinter.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+64994 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+64997 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+65001 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\探索工具\\探索词典\\.build-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+65037 INFO: Creating base_library.zip...
+65060 INFO: Looking for dynamic libraries
+65831 INFO: Extra DLL search directories (AddDllDirectory): []
+65831 INFO: Extra DLL search directories (PATH): []
+66559 INFO: Warnings written to D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\warn-ExplorerDict.txt
+66609 INFO: Graph cross-reference written to D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\xref-ExplorerDict.html
+66655 INFO: checking PYZ
+66691 INFO: Building because D:\探索工具\探索词典\bootstrap.py changed
+66692 INFO: Building PYZ (ZlibArchive) D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\PYZ-00.pyz
+67277 INFO: Building PYZ (ZlibArchive) D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\PYZ-00.pyz completed successfully.
+67296 INFO: checking PKG
+67300 INFO: Building because D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\PYZ-00.pyz changed
+67300 INFO: Building PKG (CArchive) 探索词典.pkg
+67337 INFO: Building PKG (CArchive) 探索词典.pkg completed successfully.
+67339 INFO: Bootloader D:\探索工具\探索词典\.build-env\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+67339 INFO: checking EXE
+67357 INFO: Rebuilding EXE-00.toc because pkg is more recent
+67357 INFO: Building EXE from EXE-00.toc
+67359 INFO: Copying bootloader EXE to D:\探索工具\探索词典\artifacts\pyinstaller\ExplorerDict\探索词典.exe
+67449 INFO: Copying icon to EXE
+67507 INFO: Copying 0 resources to EXE
+67507 INFO: Embedding manifest in EXE
+67560 INFO: Appending PKG archive to EXE
+67643 INFO: Fixing EXE headers
+67984 INFO: Building EXE from EXE-00.toc completed successfully.
+67995 INFO: checking COLLECT
+68026 INFO: Removing dir D:\探索工具\探索词典\artifacts\package\探索词典
+68235 INFO: Building COLLECT COLLECT-00.toc
+69645 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+69663 INFO: Build complete! The results are available in: D:\探索工具\探索词典\artifacts\package

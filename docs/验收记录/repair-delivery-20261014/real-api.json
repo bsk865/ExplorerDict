@@ -1,0 +1,12 @@
+{
+  "test": "real synthetic explanation; production DB read only",
+  "date": "2026-10-14",
+  "base_url": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "route": "direct:api.deepseek.com:443",
+  "ok": true,
+  "one_line": "指思维导图中的关系必须能在原文中找到对应表述，不能自行添加。",
+  "detail_nonempty": true,
+  "examples_valid": true,
+  "elapsed_ms": 2043.6
+}

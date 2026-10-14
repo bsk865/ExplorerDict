@@ -194,6 +194,8 @@ class App:
         self.explain_service = ExplainService(db, config)
         self.explain_service.set_entry_result_sink(
             lambda *a: self._ui_q.put(("explain_result", a)))
+        self.explain_service.set_progress_sink(
+            lambda *a: self._ui_q.put(("explain_progress", a)))
         #: 追问（对话）服务：用户点「发送」才会请求；结果按 (request_id, entry_id) 归属
         self.chat_service = ChatService(db, config)
         self.chat_service.set_result_sink(
@@ -239,7 +241,7 @@ class App:
     # ------------------------------------------------------------- 启动
     def start(self) -> None:
         self.root.after(60, self._pump)
-        self.root.after(200, self._start_services)
+        self.root.after(0, self._start_services)
         #: 托盘随应用启动常驻：关闭主窗口后仍然能在托盘里打开词典 / 暂停 / 退出。
         #: 依赖缺失（没装 pystray/Pillow）只是没有托盘，不影响任何既有功能。
         self._start_tray()
@@ -1050,6 +1052,7 @@ class App:
         旧页面的，结果会被 page_changed 丢掉（用户看到的就是「切页后第一个词
         划了没反应」）。采样后**一次锁内**取两个世代号，保证它们属于同一时刻。
         """
+        started = time.monotonic()
         service = self.capture_service
         try:
             service.note_foreground()
@@ -1057,7 +1060,7 @@ class App:
             log.exception("手势入队前的前台采样失败")
         try:
             generation, page_epoch = service.gesture_fingerprint()
-            self._gesture_q.put_nowait((x, y, kind, generation, page_epoch))
+            self._gesture_q.put_nowait((x, y, kind, generation, page_epoch, started))
         except queue.Full:  # pragma: no cover
             pass
 
@@ -1065,6 +1068,13 @@ class App:
         while not self._gesture_stop.is_set():
             try:
                 item = self._gesture_q.get(timeout=0.4)
+                # Pending selection gestures describe the same mutable OS
+                # selection. Read only the most recent one after a slow call.
+                while True:
+                    try:
+                        item = self._gesture_q.get_nowait()
+                    except queue.Empty:
+                        break
             except queue.Empty:
                 continue
             try:
@@ -1072,7 +1082,8 @@ class App:
                 gen = int(item[3]) if len(item) > 3 and item[3] is not None else None
                 epoch = int(item[4]) if len(item) > 4 and item[4] is not None else None
                 self.capture_service.handle_gesture(x, y, kind, generation=gen,
-                                                    page_epoch=epoch)
+                                                    page_epoch=epoch,
+                                                    gesture_started=item[5] if len(item) > 5 else None)
             except Exception:  # pragma: no cover
                 log.exception("处理手势失败")
 
@@ -1184,6 +1195,18 @@ class App:
 
         point = payload.get("point") or (0, 0)
         shown = self.selection_bar.show_selection(snapshot, self._selection_token, point)
+        started = payload.get("gesture_started")
+        if started:
+            # after_idle measures completed Tk geometry/render work, without
+            # pumping unrelated events recursively. It isn't photon latency.
+            report = lambda began=float(started), visible=bool(shown): log.info(
+                "Capture display elapsed_ms=%.1f shown=%s",
+                (time.monotonic() - began) * 1000, visible)
+            idle = getattr(self.root, "after_idle", None)
+            if callable(idle):
+                idle(report)
+            else:
+                report()
         if shown:
             self._bar_shown_at = time.monotonic()
         self._refresh_overlay_hwnds()
@@ -1354,6 +1377,10 @@ class App:
 
         elif event == "explain_result":
             self._handle_entry_explain_result(payload)
+
+        elif event == "explain_progress":
+            entry_id, token, attempt, maximum, delay, label = payload
+            self.reading_panel.show_retry_progress(entry_id, token, attempt, maximum, delay, label)
 
         elif event == "chat_result":
             self._handle_chat_result(payload)
@@ -2359,6 +2386,7 @@ class App:
         if self._closing:
             return
         self._closing = True
+        self.explain_service.cancel_all()
         log.info("正在退出…")
         self._uia_wanted = False
         try:

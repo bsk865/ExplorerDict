@@ -566,6 +566,7 @@ class TestUiaBridgeTimeoutEviction(unittest.TestCase):
         bridge = UiaBridge(Path("Z:/unused/uia_helper.ps1"))
         proc = FakeProc()
         bridge._proc = proc
+        bridge._ready = True
         bridge._restarts = 3
         return bridge, proc
 
@@ -602,8 +603,8 @@ class TestUiaBridgeTimeoutEviction(unittest.TestCase):
             bridge.get_selection(expected_hwnd=55501, expected_pid=9999, timeout=0.01)
 
         starts: list[int] = []
-        with mock.patch.object(bridge, "start",
-                               side_effect=lambda: (starts.append(1), True)[1]), \
+        with mock.patch.object(bridge, "ensure_started",
+                               side_effect=lambda timeout=None: (starts.append(1), True)[1]), \
                 mock.patch("app.uia_bridge.w32.foreground_info",
                            return_value=dict(self.FG)), \
                 mock.patch.object(bridge, "_request",

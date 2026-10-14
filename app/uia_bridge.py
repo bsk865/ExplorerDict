@@ -23,6 +23,7 @@ log = get_logger("uia")
 
 DEFAULT_TIMEOUT = 3.0
 START_TIMEOUT = 20.0
+CAPTURE_READY_TIMEOUT = DEFAULT_TIMEOUT
 #: 重启预算：窗口内最多重启几次（超过就等窗口滚动，避免重启风暴）
 RESTART_BUDGET = 5
 RESTART_WINDOW_SECONDS = 60.0
@@ -49,6 +50,11 @@ class UiaBridge:
         self._proc: subprocess.Popen | None = None
         self._lock = threading.RLock()
         self._write_lock = threading.Lock()
+        self._start_lock = threading.Lock()
+        self._ready = False
+        self._starting = False
+        self._startup_done = threading.Event()
+        self._startup_done.set()
         self._pending: dict[int, queue.Queue] = {}
         self._next_id = 1
         self._reader: threading.Thread | None = None
@@ -74,6 +80,25 @@ class UiaBridge:
         return exe
 
     def start(self) -> bool:
+        # A live child may still be loading .NET. Only a successful handshake
+        # makes it ready; concurrent callers share the same initialization.
+        with self._start_lock:
+            with self._lock:
+                if self._ready and self._proc and self._proc.poll() is None and self._enabled:
+                    return True
+                self._starting = True
+                self._startup_done.clear()
+            began = time.monotonic()
+            try:
+                return self._start_serial()
+            finally:
+                with self._lock:
+                    self._starting = False
+                    self._startup_done.set()
+                log.info("UIA initialization ready=%s elapsed_ms=%.1f", self._ready,
+                         (time.monotonic() - began) * 1000)
+
+    def _start_serial(self) -> bool:
         """启动 helper 并等待其可用。返回是否成功。
 
         ``enabled=False`` 时**绝不启动**：门控进入硬阻断（游戏/全屏/用户暂停）后，
@@ -83,7 +108,7 @@ class UiaBridge:
             if not self._enabled:
                 self._last_error = "UIA 取词已关闭（门控阻断中），不启动 helper"
                 return False
-            if self._proc and self._proc.poll() is None:
+            if self._ready and self._proc and self._proc.poll() is None:
                 return True
             if not self.script.exists():
                 self._last_error = f"helper 脚本不存在: {self.script}"
@@ -122,6 +147,7 @@ class UiaBridge:
                 return False
 
             self._started_at = time.time()
+            proc = self._proc
             self._reader = threading.Thread(
                 target=self._read_loop, args=(self._proc,), name="uia-reader", daemon=True
             )
@@ -137,16 +163,25 @@ class UiaBridge:
             log.error(self._last_error)
             self.stop()
             return False
-        ok = bool(resp.get("ok"))
+        with self._lock:
+            ok = bool(resp.get("ok")) and self._proc is proc and self._enabled
+            self._ready = ok
         if ok:
             log.info("UIA helper 就绪 (PowerShell %s)", resp.get("ps", "?"))
         else:
             self._last_error = str(resp)
+            self.stop()
         return ok
 
     def stop(self) -> None:
         with self._lock:
             proc, self._proc = self._proc, None
+            self._ready = False
+            pending = list(self._pending.values())
+            self._pending.clear()
+            self._startup_done.set()
+        for q in pending:
+            q.put_nowait(None)
         self._terminate(proc)
 
     def _terminate(self, proc) -> None:
@@ -173,8 +208,8 @@ class UiaBridge:
                         stream.close()
                 except OSError:
                     pass
-        with self._lock:
-            self._pending.clear()
+        # Pending requests are detached by stop/eviction. An old process being
+        # reaped here must never clear queues belonging to its replacement.
 
     def _evict_stuck_helper(self, reason: str = "timeout") -> bool:
         """淘汰**卡死**的 helper：立刻摘掉句柄，后台终止进程。
@@ -186,11 +221,15 @@ class UiaBridge:
         """
         with self._lock:
             proc, self._proc = self._proc, None
+            self._ready = False
+            pending = list(self._pending.values())
             self._pending.clear()
             self._restarts = 0
             self._restart_window = 0.0
         if proc is None:
             return False
+        for q in pending:
+            q.put_nowait(None)
         log.warning("淘汰卡死的 UIA helper（%s），下次取词会重新启动", reason)
         threading.Thread(target=self._terminate, args=(proc,),
                          name="uia-evict", daemon=True).start()
@@ -244,8 +283,10 @@ class UiaBridge:
             pass
         finally:
             with self._lock:
-                pending = list(self._pending.values())
-                self._pending.clear()
+                pending = list(self._pending.values()) if self._proc is proc else []
+                if self._proc is proc:
+                    self._pending.clear()
+                    self._ready = False
             for q in pending:
                 q.put(None)
 
@@ -301,14 +342,22 @@ class UiaBridge:
         return resp
 
     # -------------------------------------------------------------- 公共 API
-    def ensure_started(self) -> bool:
+    def ensure_started(self, timeout: float | None = None) -> bool:
         if not self._enabled:
             return False
         with self._lock:
-            alive = self._proc is not None and self._proc.poll() is None
-        if alive:
-            return True
-        return self.start()
+            if self._ready and self._proc is not None and self._proc.poll() is None:
+                return True
+        if timeout is None:
+            return self.start()
+        with self._lock:
+            if not self._starting:
+                self._starting = True
+                self._startup_done.clear()
+                threading.Thread(target=self.start, name="uia-warmup", daemon=True).start()
+        self._startup_done.wait(max(0.0, timeout))
+        with self._lock:
+            return bool(self._enabled and self._ready and self._proc and self._proc.poll() is None)
 
     def ping(self, timeout: float = START_TIMEOUT) -> bool:
         if not self.ensure_started():
@@ -369,9 +418,15 @@ class UiaBridge:
                 int(fg.get("pid") or 0) != int(expected_pid):
             return {"ok": False, "reason": "foreground_changed_before_call"}
 
-        if not self.ensure_started():
-            if not self._restart():
-                return {"ok": False, "reason": "helper_unavailable", "error": self._last_error}
+        began = time.monotonic()
+        if not self.ensure_started(timeout=min(timeout, CAPTURE_READY_TIMEOUT)):
+            return {"ok": False, "reason": "helper_initializing" if self._starting else "helper_unavailable",
+                    "error": self._last_error}
+        ready_ms = (time.monotonic() - began) * 1000
+        # Initialization may have taken time; recheck identity before enqueueing.
+        fg = w32.foreground_info()
+        if int(fg.get("hwnd") or 0) != int(expected_hwnd) or int(fg.get("pid") or 0) != int(expected_pid):
+            return {"ok": False, "reason": "foreground_changed_before_call"}
         payload: dict = {
             "cmd": "selection",
             "contextChars": int(context_chars),
@@ -382,27 +437,23 @@ class UiaBridge:
             payload["x"] = int(x)
             payload["y"] = int(y)
         try:
-            resp = self._request(payload, timeout=timeout)
+            resp = self._request(payload, timeout=max(0.01, timeout - ready_ms / 1000))
         except TimeoutError:
             log.debug("取词超时")
             # 超时 = helper 卡死在一次 UIA 调用里：当场淘汰，下一次能恢复
             self._evict_stuck_helper("selection timeout")
             return {"ok": False, "reason": "timeout"}
         except UiaUnavailable as exc:
-            if self._restart():
-                try:
-                    resp = self._request(payload, timeout=timeout)
-                except TimeoutError:
-                    self._evict_stuck_helper("selection timeout")
-                    return {"ok": False, "reason": "timeout"}
-                except (UiaUnavailable) as exc2:
-                    return {"ok": False, "reason": "helper_unavailable", "error": str(exc2)}
-            else:
-                return {"ok": False, "reason": "helper_unavailable", "error": str(exc)}
+            # Never make a mouse gesture wait through another 20s startup.
+            self._evict_stuck_helper("selection unavailable")
+            return {"ok": False, "reason": "helper_unavailable", "error": str(exc)}
 
         if resp.get("ok"):
             resp["text"] = (resp.get("text") or "").strip()
             resp["context"] = (resp.get("context") or "").strip()
+        log.info("UIA selection ready_wait_ms=%.1f request_ms=%.1f ok=%s reason=%s",
+                 ready_ms, (time.monotonic() - began) * 1000 - ready_ms,
+                 bool(resp.get("ok")), resp.get("reason", ""))
         return resp
 
     def last_error(self) -> str:

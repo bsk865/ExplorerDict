@@ -1035,7 +1035,7 @@ class TestRealAppSharedPanelChain(unittest.TestCase):
             self.assertFalse(panel.restore(), "用户关闭过：显式 restore 也不找回")
 
     def test_game_to_normal_restores_dock_only(self):
-        with self._open(config={"gate__game_mode": "1"}) as app:
+        with self._open(config={"gate__game_mode": "1", "ui__overlay_topmost_consent": "1"}) as app:
             panel = app.reading_panel
             self.assertFalse(panel.show_dock(explicit=True),
                              "游戏模式（硬阻断）下不得映射任何窗口")
@@ -1365,6 +1365,8 @@ class TestLaunchHidesMainWindowFirst(unittest.TestCase):
         with mock.patch.object(tk, "Tk", return_value=root), \
                 mock.patch.object(app_main, "build_app", side_effect=fake_build_app), \
                 mock.patch.object(app_main, "setup_logging", lambda *a, **k: None), \
+                mock.patch.object(app_main, "acquire_process_guard", return_value=(None, None)), \
+                mock.patch.object(app_main, "release_process_guard"), \
                 mock.patch.object(app_main.w32, "enable_dpi_awareness", lambda: None):
             self.assertEqual(app_main.main([]), 0)
 
@@ -2925,6 +2927,8 @@ class TestTopmostAndRecallPreserveWindows(unittest.TestCase):
         withdraw），而主窗口无论如何只被下发普通层级（``-topmost`` False）。
         """
         with self._open() as app:
+            app.config.set_overlay_topmost_consent(True)
+            app.apply_topmost()
             panel = app.reading_panel
             show_selection(app, make_sel(term="卷积"))
             self.assertTrue(panel.is_open())

@@ -16,22 +16,11 @@ import urllib.request
 from .article_source import clip_text
 from .logging_setup import get_logger, redact
 from .models import ExplainResult
+from .api_transport import (ApiError, KIND_LABELS, RetryPolicy, http_error,
+                            post_json, validate_endpoint)
 
 log = get_logger("api")
 
-KIND_LABELS = {
-    "schema": "生成未通过检查",
-    "config": "配置缺失",
-    "network": "网络不可达",
-    "timeout": "请求超时",
-    "auth": "鉴权失败",
-    "billing": "模型账户付费受限",
-    "rate_limit": "请求过于频繁（限流）",
-    "bad_request": "请求被拒绝",
-    "server": "服务端错误",
-    "bad_response": "响应非法",
-    "unknown": "未知错误",
-}
 
 SYSTEM_PROMPT = """你是一个严谨的阅读助手。用户在阅读时划选了一个术语，请给出简洁、准确、可核查的解释。
 
@@ -1108,22 +1097,6 @@ def parse_map_relations(content: str) -> list:
     return relations
 
 
-class ApiError(RuntimeError):
-    def __init__(self, kind: str, message: str, *, status: int | None = None, preview: str = ""):
-        super().__init__(message)
-        self.kind = kind
-        self.status = status
-        self.preview = preview
-
-    @property
-    def label(self) -> str:
-        return KIND_LABELS.get(self.kind, KIND_LABELS["unknown"])
-
-    def display(self) -> str:
-        extra = f" (HTTP {self.status})" if self.status else ""
-        return f"{self.label}{extra}：{self}"
-
-
 def endpoint_for(base_url: str) -> str:
     base = (base_url or "").strip().rstrip("/")
     if not base:
@@ -1248,7 +1221,7 @@ def parse_topic(content: str, *, limit: int = 16) -> str:
 
 class DeepSeekClient:
     def __init__(self, base_url: str, model: str, api_key: str, timeout: float = 25.0,
-                 reasoning_effort: str = "", thinking: str = ""):
+                 reasoning_effort: str = "", thinking: str = "", *, retry_policy=None):
         self.base_url = (base_url or "").strip()
         self.model = (model or "").strip()
         self._api_key = api_key or ""
@@ -1257,6 +1230,9 @@ class DeepSeekClient:
         self.reasoning_effort = str(reasoning_effort or "").strip().lower()
         # 空串 = 请求体里不带 thinking；"disabled" = 关掉思考模式（见 _with_thinking）
         self.thinking = str(thinking or "").strip().lower()
+        self.retry_policy = retry_policy or RetryPolicy()
+        self.cancel_event = None
+        self.on_retry = None
 
     @property
     def has_key(self) -> bool:
@@ -1470,67 +1446,14 @@ class DeepSeekClient:
 
     # ------------------------------------------------------------- 内部
     def _post(self, payload: dict) -> str:
-        """POST 一次 ``/chat/completions``，返回 HTTP 200 的响应原文。
-
-        配置缺失、网络错误、超时、鉴权失败等一律转成 :class:`ApiError`；
-        错误信息全部走 ``redact``，绝不泄露 key。
-        """
-        if not self._api_key:
-            raise ApiError("config", "尚未配置 API Key（设置 → API Key）")
-        if not self.model:
-            raise ApiError("config", "尚未配置模型名")
-        url = endpoint_for(self.base_url)
-        if not url.lower().startswith(("http://", "https://")):
-            raise ApiError("config", f"Base URL 必须以 http:// 或 https:// 开头：{url}")
-
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("Accept", "application/json")
-        req.add_header("Authorization", f"Bearer {self._api_key}")
-
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                status = resp.status
-                raw_bytes = resp.read()
-        except urllib.error.HTTPError as exc:
-            detail = ""
-            try:
-                detail = exc.read().decode("utf-8", "replace")[:300]
-            except Exception:  # pragma: no cover
-                pass
-            raise self._http_error(exc.code, detail) from exc
-        except urllib.error.URLError as exc:
-            reason = exc.reason
-            if isinstance(reason, (socket.timeout, TimeoutError)):
-                raise ApiError("timeout", f"连接超时（{self.timeout:g}s）") from exc
-            raise ApiError("network", redact(f"无法连接：{reason}")) from exc
-        except (socket.timeout, TimeoutError) as exc:
-            raise ApiError("timeout", f"请求超时（{self.timeout:g}s）") from exc
-        except OSError as exc:
-            raise ApiError("network", redact(f"网络错误：{exc}")) from exc
-
-        text = raw_bytes.decode("utf-8", "replace")
-        if status != 200:
-            raise self._http_error(status, text[:300])
-        return text
+        """Audit and send using a fresh route with bounded transient retries."""
+        return post_json(endpoint_for(self.base_url), payload, api_key=self._api_key,
+                         timeout=self.timeout, policy=self.retry_policy,
+                         cancel_event=self.cancel_event, on_retry=self.on_retry)
 
     @staticmethod
     def _http_error(status: int, detail: str) -> ApiError:
-        safe = redact(detail or "")
-        if status in (401, 403):
-            return ApiError("auth", "API Key 无效或没有权限，请在设置中检查 Key", status=status,
-                            preview=safe)
-        if status == 402:
-            return ApiError("billing", "请检查模型账户余额或付费状态，处理后再重试",
-                            status=status, preview=safe)
-        if status == 429:
-            return ApiError("rate_limit", "触发限流，请稍后重试", status=status, preview=safe)
-        if status == 400:
-            return ApiError("bad_request", f"请求被拒绝：{safe[:160]}", status=status, preview=safe)
-        if status >= 500:
-            return ApiError("server", f"服务端错误：{safe[:160]}", status=status, preview=safe)
-        return ApiError("unknown", f"HTTP {status}：{safe[:160]}", status=status, preview=safe)
+        return http_error(status, detail)
 
     @staticmethod
     def _extract_content(text: str) -> str:
@@ -1572,10 +1495,12 @@ def ping_endpoint(*, base_url: str, model: str, api_key: str,
     线程 / 后台线程里都不需要再包一层 try。
     """
     client = DeepSeekClient(base_url or "", model or "", api_key or "",
-                            timeout=max(3.0, float(timeout or 12.0)))
+                            timeout=max(3.0, float(timeout or 12.0)),
+                            retry_policy=RetryPolicy(max_retries=0,
+                                                     total_timeout=max(3.0, float(timeout or 12.0))))
     try:
         return True, client.ping()
     except ApiError as exc:
-        return False, f"连接失败：{exc}"
+        return False, f"连接失败：{exc.display()}"
     except Exception as exc:  # pragma: no cover - 兜底：线程里绝不把异常抛出去
         return False, f"连接失败：{redact(str(exc))[:200]}"

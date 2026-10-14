@@ -1171,7 +1171,7 @@ class CaptureService:
 
     def handle_gesture(self, x: int, y: int, kind: str, *, delay: float = 0.12,
                        generation: int | None = None,
-                       page_epoch: int | None = None) -> None:
+                       page_epoch: int | None = None, gesture_started: float | None = None) -> None:
         """在取词工作线程里执行：延迟 → 门控 → UIA → **只发内存快照事件**。
 
         最终交互（用户要求「划选本身不落库、不联网」）：
@@ -1185,6 +1185,9 @@ class CaptureService:
         环境指纹，UI 消费时必须回比当前门控世代、当前页面世代与当前前台窗口，
         过期结果不得显示浮条。
         """
+        began = time.monotonic()
+        gesture_started = gesture_started if gesture_started is not None else began
+        log.info("Capture queue_wait_ms=%.1f", (began - gesture_started) * 1000)
         if not self.config.capture_enabled:
             log.info("本次手势未取词：取词已暂停")
             return
@@ -1243,6 +1246,7 @@ class CaptureService:
             "selection_ready",
             {
                 "selection": sel,
+                "gesture_started": gesture_started,
                 "point": (int(x), int(y)),
                 "kind": kind,
                 "reason": "",

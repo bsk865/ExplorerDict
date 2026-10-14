@@ -138,6 +138,11 @@ function Get-ValueOf($el) {
 # ---------------------------------------------------------------- foreground gate
 # Minimal Win32 foreground query (no injection, no memory reads, no modules).
 try {
+    # Built ahead of time: avoid invoking the C# compiler on first use/resume.
+    $nativeDll = Join-Path $PSScriptRoot 'ExplorerDict.Native.dll'
+    if (Test-Path -LiteralPath $nativeDll) {
+        try { Add-Type -Path $nativeDll } catch { }
+    }
     if (-not ([System.Management.Automation.PSTypeName]'ExplorerDict.Native').Type) {
         Add-Type -Namespace ExplorerDict -Name Native -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -560,10 +565,10 @@ function Handle-Selection($req) {
     $chars = Get-DefaultContextChars $req.contextChars
     $candidates = New-Object System.Collections.ArrayList
     $focused = $null
+    $at = $null
     try { $focused = $script:AE::FocusedElement } catch { }
     if ($null -ne $focused) {
         Add-Candidate $candidates $focused 'focused'
-        Add-AncestorCandidates $candidates $focused 'focused'
     }
 
     if ($null -ne $req.x -and $null -ne $req.y) {
@@ -572,7 +577,6 @@ function Handle-Selection($req) {
             $at = $script:AE::FromPoint($pt)
             if ($null -ne $at) {
                 Add-Candidate $candidates $at 'frompoint'
-                Add-AncestorCandidates $candidates $at 'frompoint'
             }
         } catch { }
     }
@@ -583,6 +587,7 @@ function Handle-Selection($req) {
     $lastReason = 'no_candidate_element'
     $index = 0
     $topSearched = $false
+    $ancestorsAdded = $false
     $result = $null
     if ($candidates.Count -eq 0) {
         $topSearched = $true
@@ -644,6 +649,13 @@ function Handle-Selection($req) {
                 break
             }
             $lastReason = $r.reason
+        }
+        # Try focused/point first; expand ancestors only when they failed.
+        # This avoids UIA tree walks on a normal successful body selection.
+        if (-not $ancestorsAdded -and $index -ge $candidates.Count) {
+            $ancestorsAdded = $true
+            Add-AncestorCandidates $candidates $focused 'focused'
+            Add-AncestorCandidates $candidates $at 'frompoint'
         }
         # All direct candidates (focused / point + bounded ancestors) failed:
         # do ONE bounded search inside the verified top-level window.

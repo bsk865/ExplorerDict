@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +54,10 @@ EXCLUDES = [
 #: 托盘图标 ``assets/app.ico`` 在下面图标步骤之后再补进 DATAS（首次构建时它
 #: 才由本脚本生成）。
 DATAS = [(str(UIA_HELPER), "scripts")]
+subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", str(PROJECT_ROOT / "tools" / "build_uia_native.ps1")], check=True,
+               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+DATAS.append((str(PROJECT_ROOT / "scripts" / "ExplorerDict.Native.dll"), "scripts"))
 
 
 # --------------------------------------------------------------------- 图标

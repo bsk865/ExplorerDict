@@ -454,6 +454,8 @@ class TestGateSoftAndHardBlocks(unittest.TestCase):
         from tests.support import foreground
 
         with headless_app() as app:
+            app.config.set_overlay_topmost_consent(True)
+            app.apply_topmost()
             self.assertTrue(app.effective_topmost(), "普通前台下主界面应保持置顶")
             hook, uia = app.mouse_hook, app.uia
             with foreground(title="探索词典", app="python.exe", pid=1234, hwnd=55599,
@@ -472,6 +474,8 @@ class TestGateSoftAndHardBlocks(unittest.TestCase):
 
         bridge = FakeBridge(ok_response(text="secret"))
         with headless_app(bridge=bridge) as app:
+            # The shutdown contract applies to services already started.
+            app._services_started = True
             hook, uia = app.mouse_hook, app.uia
             with foreground(title="游戏", app="steam.exe", hwnd=70001, pid=7001):
                 decision = app._apply_gate()
@@ -515,6 +519,8 @@ class TestForegroundSwitchInvalidatesSelection(unittest.TestCase):
             app.capture_service.note_foreground(dict(DEFAULT_HEADLESS_FG))
             show_selection(app, make_sel())
             token_before = app._selection_token
+            pump_app(app)
+            follow_before = app.main.follow_calls
             app.capture_service.note_foreground({
                 "hwnd": 66001, "pid": 4242, "title": "别的文档", "app": "firefox.exe",
                 "exe": "C:\\firefox.exe", "is_self": False})
@@ -524,7 +530,7 @@ class TestForegroundSwitchInvalidatesSelection(unittest.TestCase):
             self.assertIsNone(app._current_selection, "旧选区必须作废")
             self.assertEqual(app._selection_token, token_before + 1)
             self.assertIn("前台窗口已切换", app.main.status_label.cget("text"))
-            self.assertEqual(app.main.follow_calls, 1,
+            self.assertEqual(app.main.follow_calls, follow_before + 1,
                              "换页面要让主界面列表跟着当前页面走（只记待办）")
 
     def test_same_hwnd_title_change_voids_selection(self):

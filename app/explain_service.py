@@ -22,7 +22,8 @@ import json
 import threading
 from dataclasses import dataclass
 
-from .api_client import ApiError, DeepSeekClient, normalize_topic_name
+from .api_client import (ApiError, DeepSeekClient, normalize_topic_name,
+                         endpoint_for, validate_endpoint)
 from .config import model_signature
 from .logging_setup import get_logger, redact
 from .models import ExplainResult, now_iso
@@ -134,6 +135,24 @@ class ExplainService:
         self._inflight: set[int] = set()
         self._token_inflight: set[int] = set()
         self._next_token = 1
+        self._cancel_events: dict[int, threading.Event] = {}
+        self._on_progress = None
+
+    def set_progress_sink(self, callback) -> None:
+        self._on_progress = callback
+
+    def cancel(self, token: int) -> bool:
+        with self._lock:
+            event = self._cancel_events.get(int(token))
+            if event is None:
+                return False
+            event.set()
+            return True
+
+    def cancel_all(self) -> None:
+        with self._lock:
+            for event in self._cancel_events.values():
+                event.set()
 
     def set_token_sink(self, callback) -> None:
         """注册「按 token 归属」的结果回调 ``(token, status, result, error)``。"""
@@ -170,6 +189,12 @@ class ExplainService:
             return False, "尚未配置 API Key"
         if not self.config.base_url:
             return False, "尚未配置 Base URL"
+        if not self.config.model:
+            return False, "尚未配置模型名"
+        try:
+            validate_endpoint(endpoint_for(self.config.base_url))
+        except ApiError as exc:
+            return False, str(exc)
         return True, ""
 
     # ------------------------------------------------------------- 缓存
@@ -308,6 +333,7 @@ class ExplainService:
             token = self._next_token
             self._next_token += 1
             self._token_inflight.add(token)
+            self._cancel_events[token] = threading.Event()
             if key:
                 self._inflight.add(key)
 
@@ -315,6 +341,7 @@ class ExplainService:
         if not ok:
             with self._lock:
                 self._token_inflight.discard(token)
+                self._cancel_events.pop(token, None)
                 self._inflight.discard(key)
             err = ApiError("config", msg)
             if key:
@@ -350,9 +377,17 @@ class ExplainService:
         成功 / stale / 错误三条路径的归属规则必须完全一致。
         """
         key = int(snapshot.entry_id or 0)
+        with self._lock:
+            cancel = self._cancel_events.get(token, threading.Event())
+
+        def progress(attempt, maximum, delay, error):
+            if self._on_progress is not None and not cancel.is_set():
+                self._on_progress(snapshot.entry_id, token, attempt, maximum, delay, error.label)
+
         try:
             try:
-                result = self._run(snapshot, use_cache=not force)
+                result = self._run(snapshot, use_cache=not force,
+                                   cancel_event=cancel, on_retry=progress)
             except ApiError as exc:
                 log.info("解释失败 token=%s: %s", token, exc.display())
                 self._mark_error(snapshot, exc.display())
@@ -384,6 +419,7 @@ class ExplainService:
         finally:
             with self._lock:
                 self._token_inflight.discard(token)
+                self._cancel_events.pop(token, None)
                 if key:
                     self._inflight.discard(key)
 
@@ -533,7 +569,8 @@ class ExplainService:
             log.exception("解释结果回调失败")
 
     # ------------------------------------------------------------- 内部
-    def _run(self, snapshot: ExplainSnapshot, *, use_cache: bool) -> ExplainResult:
+    def _run(self, snapshot: ExplainSnapshot, *, use_cache: bool,
+             cancel_event=None, on_retry=None) -> ExplainResult:
         """执行一次（可能联网的）解释，缓存读写一律使用快照里的配置。"""
         key = snapshot.cache_key
         if use_cache:
@@ -549,7 +586,14 @@ class ExplainService:
             api_key=snapshot.api_key,
             reasoning_effort=snapshot.reasoning_effort,
         )
+        # Lightweight test/extension clients remain compatible; real clients
+        # share the transport policy without recreating the request snapshot.
+        if isinstance(client, DeepSeekClient):
+            client.cancel_event = cancel_event
+            client.on_retry = on_retry
         result = client.explain(snapshot.term, snapshot.request_context)
+        if cancel_event is not None and cancel_event.is_set():
+            raise ApiError("cancelled", "本次解释已停止", stage="cancel")
         # 关键：用**快照**的 base_url/model 写缓存，设置中途切换也不会张冠李戴。
         self._put_cache(key, snapshot.term, snapshot.request_context, result, "",
                         base_url=snapshot.base_url, model=snapshot.model)

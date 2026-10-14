@@ -1019,9 +1019,13 @@ def headless_gesture(app, x=10, y=10, kind="drag"):
     返回 ``(selection, reason)``；期间产生的 UI 事件仍在队列里，调用方自行
     用 ``pump_app(app)`` 消费。
     """
-    gen = app.capture_service.current_generation()
     app._on_gesture(x, y, kind)
-    app.capture_service.handle_gesture(x, y, kind, delay=0, generation=gen)
+    original = app.capture_service.handle_gesture
+    # Consume the fingerprint actually queued AFTER note_foreground. The old
+    # fixture captured a prior generation and silently dropped the first word.
+    with mock.patch.object(app.capture_service, "handle_gesture",
+                           side_effect=lambda *a, **kw: original(*a, delay=0, **kw)):
+        run_gesture_worker(app)
     return app.capture_service.last_selection(), app.capture_service.last_failure_reason
 
 
@@ -1059,6 +1063,9 @@ class _GestureQueueOnce:
 
     def put_nowait(self, item):
         return self._source.put_nowait(item)
+
+    def get_nowait(self):
+        return self._source.get_nowait()
 
     def empty(self) -> bool:
         return bool(self._source.empty())

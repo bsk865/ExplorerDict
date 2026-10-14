@@ -8,7 +8,7 @@ import unittest
 from tests.support import temp_db
 from tools.fake_api_server import FakeApiServer
 
-from app.api_client import (ApiError, DeepSeekClient, MAP_LOGIC_CHAIN_SYSTEM_PROMPT,
+from app.api_client import (ApiError, DeepSeekClient, RetryPolicy, MAP_LOGIC_CHAIN_SYSTEM_PROMPT,
                             MAP_VERIFY_SYSTEM_PROMPT, build_logic_chain_material,
                             build_map_logic_chain_payload, build_map_payload,
                             build_map_rescue_payload, build_map_verify_payload,
@@ -37,7 +37,7 @@ class ApiTestBase(unittest.TestCase):
         self.addCleanup(self.server.stop)
 
     def client(self, timeout: float = 8.0) -> DeepSeekClient:
-        return DeepSeekClient(self.server.base_url, "fake-model", FAKE_KEY, timeout=timeout)
+        return DeepSeekClient(self.server.base_url, "fake-model", FAKE_KEY, timeout=timeout, retry_policy=RetryPolicy(max_retries=0))
 
 
 class TestSuccessPath(ApiTestBase):
@@ -164,7 +164,7 @@ class TestFailurePath(ApiTestBase):
         self.assertEqual(ctx.exception.label, "请求超时")
 
     def test_network_unreachable(self):
-        client = DeepSeekClient("http://127.0.0.1:1/v1", "m", FAKE_KEY, timeout=2.0)
+        client = DeepSeekClient("http://127.0.0.1:1/v1", "m", FAKE_KEY, timeout=2.0, retry_policy=RetryPolicy(max_retries=0))
         with self.assertRaises(ApiError) as ctx:
             client.explain("t", "c")
         self.assertIn(ctx.exception.kind, ("network", "timeout"))

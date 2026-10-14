@@ -1,0 +1,26 @@
+[
+  {
+    "log": "repair-final-tests.txt",
+    "sha256": "d65096a79a69acfc664733d76e45d881e57fd38dd48eb4c68dc53df29e23380a",
+    "result": [
+      "Ran 1373 tests in 68.542s",
+      "OK (skipped=26)"
+    ]
+  },
+  {
+    "log": "repair-targeted-tests.txt",
+    "sha256": "c629b627b79dd8646afca66b3a505dff7c3e3caf7182451277482b723660a716",
+    "result": [
+      "Ran 132 tests in 20.958s",
+      "OK (skipped=2)"
+    ]
+  },
+  {
+    "log": "repair-interaction-recheck.txt",
+    "sha256": "36d103d3253af5fa2e5f784159df457b8f241addb9e7579a022f3bf26adbd3bf",
+    "result": [
+      "Ran 252 tests in 7.504s",
+      "OK (skipped=1)"
+    ]
+  }
+]

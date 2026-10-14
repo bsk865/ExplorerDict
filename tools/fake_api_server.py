@@ -49,7 +49,9 @@ class FakeApiServer:
                     "raw": raw,
                 }
                 outer.requests.append(record)
-                status, body, delay = outer.responder(record)
+                response = outer.responder(record)
+                status, body, delay = response[:3]
+                extra_headers = response[3] if len(response) > 3 else {}
                 if delay:
                     time.sleep(delay)
                 if isinstance(body, (dict, list)):
@@ -62,6 +64,8 @@ class FakeApiServer:
                     self.send_response(status)
                     self.send_header("Content-Type", ctype)
                     self.send_header("Content-Length", str(len(payload)))
+                    for name, value in extra_headers.items():
+                        self.send_header(name, str(value))
                     self.end_headers()
                     self.wfile.write(payload)
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
