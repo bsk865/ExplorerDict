@@ -240,7 +240,7 @@ def make_handler(workspace, token):
             workspace.last_seen = time.monotonic()
             try:
                 if path == '/api/state':
-                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.15-reading-5'})
+                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.15-reading-6'})
                 elif path == '/api/capture/status':
                     from .capture_bridge import status
                     self.send(status())
@@ -275,7 +275,12 @@ def make_handler(workspace, token):
                 body = json.loads(self.rfile.read(length))
                 path = urlsplit(self.path).path
                 s = workspace.store
-                if path == '/api/import':
+                if path == '/api/shutdown':
+                    for job in list(workspace.jobs.values()):
+                        job['cancel'].set()
+                    self.send({'ok':True})
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
+                elif path == '/api/import':
                     if body.get('file'):
                         raw = base64.b64decode(body['file'], validate=True)
                         blocks = parse_file(s, body['name'], raw)
@@ -355,7 +360,7 @@ def main():
     args=parser.parse_args(); workspace=Workspace(data_dir()); token=secrets.token_urlsafe(32)
     server=ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(workspace,token))
     url=f'http://127.0.0.1:{server.server_port}/session?token={token}'
-    state=data_dir()/'workspace-session-v5.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v5'}),encoding='utf-8')
+    state=data_dir()/'workspace-session-v6.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v6'}),encoding='utf-8')
     if not args.headless:
         from .capture_bridge import start_on_launch
         start_on_launch()

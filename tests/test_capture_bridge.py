@@ -41,6 +41,11 @@ class CaptureBridgeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '重新安装'):
                 bridge.ensure_started()
 
+    def test_close_waits_for_companion_startup_receiver(self):
+        with patch.object(bridge, 'running', side_effect=[True, True, False]), patch.object(bridge, 'stop_existing', side_effect=[False, True]) as stop, patch.object(bridge.time, 'sleep'):
+            self.assertTrue(bridge.stop_and_wait())
+            self.assertEqual(stop.call_count, 2)
+
     def test_stale_or_dead_process_never_claims_ready(self):
         status_file = self.root / 'capture-status.json'
         status_file.write_text(json.dumps({'ready': True, 'updated': time.time() - 10}))

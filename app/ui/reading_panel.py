@@ -635,9 +635,13 @@ class ReadingPanel(FloatingWindow):
         #: 右上角「×」：最右、最简洁的显式关闭入口（用户不再需要靠菜单退出面板）。
         #: 语义 = ``close_by_user``：连小方块一起收起并在后台继续，**绝不 quit**。
         self.btn_close = widgets.FlatButton(top, CLOSE_TEXT, self._on_close, font_size=9,
-                                            padx=6, pady=1)
+                                            padx=10, pady=5, width=34)
         self.btn_close.pack(side="right", padx=(theme.px(2), theme.px(geo.CONTENT_PAD)),
                             pady=(theme.px(6), theme.px(4)))
+        protocol = getattr(self.win, 'protocol', None)
+        if callable(protocol):
+            protocol('WM_DELETE_WINDOW', self.close_by_user)
+        self.win.bind('<Alt-F4>', lambda _event: self.close_by_user())
         self.btn_collapse = widgets.FlatButton(top, "折叠", self._on_collapse, font_size=8,
                                                padx=8, pady=2)
         self.btn_collapse.pack(side="right", padx=theme.px(2),

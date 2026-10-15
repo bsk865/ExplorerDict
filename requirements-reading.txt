@@ -1,0 +1,2 @@
+PySide6==6.10.3
+# Existing build environment also supplies Pillow, pymupdf and PyInstaller.

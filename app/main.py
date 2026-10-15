@@ -2121,7 +2121,8 @@ class App:
                 capture_bridge.poll(self)
             except Exception:
                 log.exception("更新悬浮取词状态失败")
-            opened = self._drain_activation()
+            if not self._closing:
+                opened = self._drain_activation()
         except Exception:  # pragma: no cover - 轮询绝不允许打断主循环
             log.exception("处理呼出请求失败")
         finally:

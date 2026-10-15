@@ -16,14 +16,33 @@ def event_name():
 
 
 def reveal_existing():
+    return signal_event(event_name())
+
+
+def signal_event(name):
     backend = ActivationBackend()
-    handle, _ = backend.open_event(event_name())
+    handle, _ = backend.open_event(name)
     if not handle:
         return False
     try:
         return backend.set_event(handle)
     finally:
         backend.close_handle(handle)
+
+
+def stop_existing():
+    return signal_event(event_name() + '.Quit')
+
+
+def stop_and_wait(timeout=8):
+    """Closing immediately after startup must also stop a still-initializing companion."""
+    deadline = time.monotonic() + timeout
+    while running():
+        stop_existing()
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(.1)
+    return True
 
 
 def start_on_launch():
@@ -83,8 +102,14 @@ def attach(app):
     receiver=ActivationReceiver(name=event_name())
     receiver.create()
     app._reading_capture_receiver=receiver
+    app._reading_quit_receiver = ActivationReceiver(name=event_name() + '.Quit')
+    app._reading_quit_receiver.create()
 
 def poll(app):
+    quit_receiver = getattr(app, '_reading_quit_receiver', None)
+    if quit_receiver and quit_receiver.poll():
+        app.quit()
+        return
     receiver=getattr(app,'_reading_capture_receiver',None)
     if receiver is None:
         return
@@ -109,6 +134,9 @@ def poll(app):
     temporary.replace(target)
 
 def close(app):
+    quit_receiver = getattr(app, '_reading_quit_receiver', None)
+    if quit_receiver:
+        quit_receiver.close()
     receiver=getattr(app,'_reading_capture_receiver',None)
     if receiver:
         receiver.close()
