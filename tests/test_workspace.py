@@ -11,7 +11,8 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer
 from PIL import Image
 from app.workspace_store import WorkspaceStore
-from app.workspace_server import Workspace, make_handler, parse_file, demo
+from app.workspace_server import Workspace, make_handler, parse_file
+from tests.workspace_fixtures import demo
 
 
 class WorkspaceTests(unittest.TestCase):

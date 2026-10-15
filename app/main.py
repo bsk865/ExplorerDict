@@ -1445,6 +1445,10 @@ class App:
         return shown
 
     # ---------------------------------------------------------- 供 UI 调用
+    def open_reading_workspace(self):
+        from .reading_launcher import open_workspace
+        open_workspace()
+
     def capture_enabled(self) -> bool:
         return self.config.capture_enabled
 
@@ -2112,6 +2116,11 @@ class App:
             return False
         opened = False
         try:
+            from . import capture_bridge
+            try:
+                capture_bridge.poll(self)
+            except Exception:
+                log.exception("更新悬浮取词状态失败")
             opened = self._drain_activation()
         except Exception:  # pragma: no cover - 轮询绝不允许打断主循环
             log.exception("处理呼出请求失败")
@@ -2181,6 +2190,8 @@ class App:
 
     def close_activation(self) -> bool:
         """收尾：停掉轮询并释放事件句柄（幂等；退出路径调用）。"""
+        from . import capture_bridge
+        capture_bridge.close(self)
         after_id, self._activation_after_id = self._activation_after_id, None
         if after_id is not None:
             cancel = getattr(self.root, "after_cancel", None)
@@ -2585,6 +2596,11 @@ def _run_ui(args) -> int:
     # 呼出通道：root 与 app 都建好之后才挂接收器（诊断路径根本不走这里）。
     # 轮询是 ``root.after(250ms)`` 的非阻塞检查 —— 没有请求时不碰任何窗口。
     _attach_activation(app)
+    from . import capture_bridge
+    try:
+        capture_bridge.attach(app)
+    except Exception:
+        log.exception("连接阅读工作区失败")
 
     # ``--open-main``（双击 exe）会把主界面显示到最前，前台随即变成我们自己的
     # 窗口 —— 之后 watcher 会跳过自身，回到同一阅读页只能靠 ``resume`` 事件。

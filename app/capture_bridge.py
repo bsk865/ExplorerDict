@@ -1,0 +1,114 @@
+"""Connect the reading window to the existing native selection companion."""
+import json
+import os
+import subprocess
+import threading
+import time
+from .paths import project_root, data_dir
+from .activation import ActivationBackend, ActivationReceiver
+from .single_instance import data_dir_digest, mutex_name_for
+
+_lock = threading.Lock()
+_launch = None
+
+def event_name():
+    return 'Local\\ExplorerDict.Float.' + data_dir_digest(data_dir())
+
+
+def reveal_existing():
+    backend = ActivationBackend()
+    handle, _ = backend.open_event(event_name())
+    if not handle:
+        return False
+    try:
+        return backend.set_event(handle)
+    finally:
+        backend.close_handle(handle)
+
+
+def start_on_launch():
+    # A capture failure must not prevent access to the user's reading materials.
+    try:
+        ensure_started()
+    except Exception:
+        from .logging_setup import get_logger
+        get_logger('capture_bridge').exception('启动悬浮取词失败')
+
+def running():
+    import ctypes
+    from ctypes import wintypes
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    kernel.OpenMutexW.argtypes=[wintypes.DWORD,wintypes.BOOL,wintypes.LPCWSTR]
+    kernel.OpenMutexW.restype=wintypes.HANDLE
+    kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+    handle=kernel.OpenMutexW(0x00100000,False,mutex_name_for(data_dir()))
+    if handle:
+        kernel.CloseHandle(handle)
+        return True
+    return ctypes.get_last_error()==5
+
+def status():
+    active=running()
+    result={'running':active,'ready':False,'label':'悬浮取词未开启'}
+    if active:
+        result['label']='悬浮取词正在启动'
+        try:
+            record=json.loads((data_dir()/'capture-status.json').read_text(encoding='utf-8'))
+            if time.time()-record['updated']<5:
+                result.update(record)
+        except (OSError,ValueError,KeyError):
+            pass
+    return result
+
+def ensure_started(*, reveal=False):
+    global _launch
+    with _lock:
+        if running():
+            if reveal:
+                if not reveal_existing():
+                    raise ValueError('取词组件需要更新。请从托盘退出探索词典，再重新打开应用。')
+            return status()
+        if _launch is not None and _launch.poll() is None:
+            return {'running':False,'ready':False,'label':'悬浮取词正在启动'}
+        executable=project_root()/'探索词典.exe'
+        if not executable.is_file():
+            raise ValueError('缺少悬浮取词组件，请重新安装应用。')
+        try:
+            _launch=subprocess.Popen([str(executable)],cwd=project_root(),creationflags=0x08000000)
+        except OSError as exc:
+            raise ValueError('悬浮取词未能启动，请稍后重试。') from exc
+        return {'running':False,'ready':False,'label':'悬浮取词正在启动'}
+
+def attach(app):
+    receiver=ActivationReceiver(name=event_name())
+    receiver.create()
+    app._reading_capture_receiver=receiver
+
+def poll(app):
+    receiver=getattr(app,'_reading_capture_receiver',None)
+    if receiver is None:
+        return
+    if receiver.poll():
+        if not app.capture_enabled():
+            app.toggle_capture()
+        app.recover_panel()
+    now=time.time()
+    if now-getattr(app,'_reading_capture_reported',0)<1:
+        return
+    app._reading_capture_reported=now
+    enabled=app.capture_enabled()
+    hook=bool(app.mouse_hook.running) if hasattr(app,'mouse_hook') else False
+    decision = getattr(app.gate_controller, 'last', None)
+    blocked = bool(decision and decision.hard_blocked)
+    ready=bool(app._uia_started and app.uia.pid() and hook and enabled and not blocked)
+    label='划选后自动弹出' if ready else '取词已暂停' if not enabled else decision.label if blocked else '回到原文中划选' if app._uia_started and app.uia.pid() else '取词组件正在准备'
+    record={'updated':now,'pid':os.getpid(),'ready':ready,'enabled':enabled,'hook':hook,'label':label}
+    target=data_dir()/'capture-status.json'
+    temporary=target.with_suffix('.tmp')
+    temporary.write_text(json.dumps(record,ensure_ascii=False),encoding='utf-8')
+    temporary.replace(target)
+
+def close(app):
+    receiver=getattr(app,'_reading_capture_receiver',None)
+    if receiver:
+        receiver.close()

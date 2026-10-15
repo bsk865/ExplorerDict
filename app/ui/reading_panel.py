@@ -36,7 +36,7 @@ token / 门控 / 幂等逻辑**一行都不用改**（``tests.test_unified_actio
   暂停取词 / 游戏模式 / 退出**全部归主界面**，浮窗一个都不放 ——
   旧版常驻的「菜单」（弹系统式 grab 菜单）、常驻「重新解释」「设置 API」
   三个按钮已按这条契约删除（不是隐藏：控件与对应代码一起删掉）；
-* **顶栏「主界面」**：**直接**调 ``App.open_main_window`` 打开词典主窗口，
+* **顶栏「主界面」**：**直接**打开阅读工作区 打开词典主窗口，
   **不再**弹 ``tk_popup`` 的抢占式菜单 —— 浮窗带 ``WS_EX_NOACTIVATE``，
   抓取式菜单在实机上拿不到焦点，用户点了像没反应；
 * **右上角「×」**：唯一的显式关闭入口，接 :meth:`close_by_user` —— 连小方块
@@ -797,8 +797,8 @@ class ReadingPanel(FloatingWindow):
         # 排在固定高度的宿主 Frame 里：placed 子控件不参与几何传播，所以行数
         # 变化只改宿主高度，不会把词卡区顶下去。
         self.topics_row = tk.Frame(self.list_page, bg=theme.PANEL)
-        self.topics_row.pack(fill="x", padx=theme.px(geo.CONTENT_PAD),
-                             pady=(theme.px(2), 0))
+        # Cross-article navigation belongs in the main workspace.
+        # Keep the optional source picker, without a permanent topic chip strip.
         self.topics_host = tk.Frame(self.topics_row, bg=theme.PANEL,
                                     height=theme.px(geo.CHIP_H))
         self.topics_host.pack(fill="x")
@@ -2187,6 +2187,16 @@ class ReadingPanel(FloatingWindow):
         if self.mode != MODE_PANEL:
             return False
         def_h, chat_h = self.detail_area_heights()
+        has_chat = self._chat_has_content()
+        if has_chat != getattr(self, '_chat_heading_visible', True):
+            if has_chat:
+                self.chat_divider.pack(side="bottom", fill="x", before=self.chat_area.frame)
+                self.chat_head.pack(side="bottom", fill="x", padx=theme.px(geo.CONTENT_PAD),
+                                    before=self.chat_area.frame)
+            else:
+                self.chat_divider.pack_forget()
+                self.chat_head.pack_forget()
+            self._chat_heading_visible = has_chat
         changed = False
         for area, value in ((self.def_area, def_h), (self.chat_area, chat_h)):
             canvas = getattr(area, "canvas", None)
@@ -3247,7 +3257,7 @@ class ReadingPanel(FloatingWindow):
         return self._on_open_main()
 
     def _on_open_main(self) -> bool:
-        """顶栏「主界面」/ 可点提示行：**直接**调 ``App.open_main_window``。
+        """顶栏「主界面」/ 可点提示行：**直接**打开阅读工作区。
 
         为什么不是菜单：浮窗是 ``WS_EX_NOACTIVATE`` 窗口，``tk_popup`` 那种
         抓取式菜单拿不到焦点，实机上点了像没反应（用户报告的「按钮没反馈」）。
@@ -3256,7 +3266,7 @@ class ReadingPanel(FloatingWindow):
         拿不到宿主方法 / 宿主抛异常时给一句**可见**反馈（:data:`NO_MAIN_HINT`），
         绝不静默返回。
         """
-        opener = getattr(self.app, "open_main_window", None)
+        opener = getattr(self.app, "open_reading_workspace", None) or getattr(self.app, "open_main_window", None)
         if not callable(opener):
             self._set_hint(NO_MAIN_HINT, action="main", guard=True)
             return False

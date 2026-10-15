@@ -1280,6 +1280,7 @@ class TestPanelMenuAndBackgroundStart(unittest.TestCase):
             for label in ("主界面", "折叠", CLOSE_TEXT):
                 self.assertIsNotNone(env.find_button(label), f"顶栏缺「{label}」入口")
             self.assertFalse(hasattr(panel, "_on_menu"), "菜单方法必须随控件一起删掉")
+            self.assertLess(env.pack_index(panel.topics_row), 0, "浮窗不常驻跨文章主题栏")
 
             # 宿主菜单仍在（主窗口菜单栏 = 「随时可明确退出」的兜底）
             ids = [item[0] for item in menu_items(app)]
@@ -1288,21 +1289,18 @@ class TestPanelMenuAndBackgroundStart(unittest.TestCase):
             self.assertIsNotNone(menu, "宿主菜单必须真的能建出来")
             menu.destroy()
 
-    def test_topbar_main_button_calls_app_open_main_window(self):
-        """顶栏「主界面」：**真实假 Tk 按钮** → 真实 ``App.open_main_window``。"""
+    def test_topbar_main_button_opens_reading_workspace(self):
+        """Floating window returns to the reading main window without launching in tests."""
+        from unittest.mock import patch
         with headless_app(overlays="panel", main_window="real") as app:
             panel = app.reading_panel
             panel.show_dock(explicit=True)
             panel.expand(explicit=True)
             button = app.fake_tk.find_button("主界面")
             self.assertIsNotNone(button)
-            before = app.fake_root.deiconify_calls
-            before_lift = app.fake_root.lift_calls
-            self.assertTrue(button.invoke(), "「主界面」按钮必须走通 App.open_main_window")
-            self.assertEqual(app.fake_root.deiconify_calls, before + 1,
-                             "打开主界面 = 真实 App.open_main_window（deiconify + lift）")
-            self.assertEqual(app.fake_root.lift_calls, before_lift + 1,
-                             "打开主界面必须把主窗抬到最前")
+            with patch('app.reading_launcher.open_workspace') as launch:
+                self.assertTrue(button.invoke())
+                launch.assert_called_once()
 
     def test_background_start_shows_dock_and_never_auto_expands_panel(self):
         with headless_app(overlays="panel", main_window="real") as app:
