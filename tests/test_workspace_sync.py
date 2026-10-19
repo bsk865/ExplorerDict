@@ -263,3 +263,17 @@ class SharedReadingTests(unittest.TestCase):
         current=self.store.article(article['id'])
         self.assertEqual(current['text'],target['text'])
         self.assertEqual(len(current['objects']),2)
+
+    def test_native_group_rename_updates_existing_article_without_duplication(self):
+        eid=self.capture();synchronize(self.store)
+        old,obj,key=self.session()
+        self.store.update_session(key,{'draft':'刷新保留'})
+        batch=self.native.get_entry(eid)['batch_id']
+        self.native.execute('UPDATE batches SET name=? WHERE id=?',('多模态RAG',batch))
+        synchronize(self.store)
+        article=self.store.article(old['id'])
+        self.assertEqual(article['title'],'多模态RAG')
+        self.assertEqual(article['version'],old['version'])
+        self.assertEqual(article['objects'][0]['id'],obj['id'])
+        self.assertEqual(self.store.get('sessions',key)['draft'],'刷新保留')
+        self.assertEqual(synchronize(self.store),0)

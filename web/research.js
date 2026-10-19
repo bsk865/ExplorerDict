@@ -188,35 +188,58 @@ document.addEventListener('click', event => {
   };
 });
 
-// Refresh shared records without replacing an in-progress selection or draft.
+// Both manual and automatic refresh share the same state-preserving path.
 let sharedRefreshBusy = false;
-setInterval(async () => {
-  if (sharedRefreshBusy || document.hidden || state.job || $('#dialog')?.open ||
-      document.activeElement?.matches('input,textarea,[contenteditable="true"]') ||
-      window.getSelection()?.toString()) return;
-  sharedRefreshBusy = true;
-  try {
-    const oldArticles = JSON.stringify(state.articles);
-    const page = state.page;
-    const articleId = state.article?.id;
+const refreshControl=document.createElement('button');
+refreshControl.id='refresh-workspace';refreshControl.type='button';refreshControl.className='secondary';
+refreshControl.textContent='刷新';refreshControl.title='同步浮窗记录并刷新当前页面';
+$('#capture-toggle').before(refreshControl);
+const syncLabel=document.createElement('span');syncLabel.id='workspace-sync-status';syncLabel.setAttribute('role','status');syncLabel.setAttribute('aria-live','polite');refreshControl.after(syncLabel);
+async function refreshWorkspace(manual=false){
+  if(sharedRefreshBusy)return;
+  if(state.job){if(manual)toast('正在处理当前任务，完成后再刷新。');return;}
+  if($('#dialog')?.open){if(manual)toast('请先完成或关闭当前对话框。');return;}
+  if(!manual&&(document.hidden||document.activeElement?.matches('input,textarea,[contenteditable="true"]')||window.getSelection()?.toString()))return;
+  sharedRefreshBusy=true;refreshControl.disabled=true;
+  if(manual){refreshControl.textContent='同步中…';syncLabel.textContent='';}
+  const page=state.page,articleId=state.article?.id;
+  try{
+    await saveDraft();
+    await api('sync',{});
+    const oldArticles=JSON.stringify(state.articles);
     await refresh();
-    if (page !== state.page || articleId !== state.article?.id) return;
-    if (state.page === 'shelf' && oldArticles !== JSON.stringify(state.articles)) {
-      await shelf();
-    } else if (state.page === 'work' && state.article) {
-      const key = sessionKey();
-      const [article, session] = await Promise.all([api('article/'+articleId),api('session/'+encodeURIComponent(key))]);
-      if (state.page !== 'work' || sessionKey() !== key || state.job ||
-          document.activeElement?.matches('input,textarea,[contenteditable="true"]')) return;
-      if (JSON.stringify(article.objects) !== JSON.stringify(state.article.objects) ||
-          JSON.stringify(session.messages) !== JSON.stringify(state.session.messages)) {
+    if(state.syncError)throw Error(state.syncError);
+    if(page!==state.page||articleId!==state.article?.id)return;
+    if(page==='shelf'){
+      if(manual||oldArticles!==JSON.stringify(state.articles)){
+        const query=$('#book-search')?.value||'';
+        await shelf();$('#book-search').value=query;renderBooks(query);
+      }
+    }else if(page==='work'&&articleId){
+      let article=await api('article/'+articleId);
+      const seen=new Set();
+      while(article.superseded_by&&!seen.has(article.id)){seen.add(article.id);article=await api('article/'+article.superseded_by);}
+      const object=article.objects.find(o=>o.id===state.object?.id)||null;
+      const key=article.id+':'+article.version+':'+(object?.id||'');
+      const session=await api('session/'+encodeURIComponent(key));
+      if(page!==state.page||articleId!==state.article?.id||state.job)return;
+      if(!manual&&document.activeElement?.matches('input,textarea,[contenteditable="true"]'))return;
+      if(manual||JSON.stringify(article)!==JSON.stringify(state.article)||JSON.stringify(session.messages)!==JSON.stringify(state.session.messages)){
         preserveScroll();
-        state.article = article;
-        state.object = article.objects.find(o=>o.id===state.object?.id) || null;
-        state.session.messages = session.messages || [];
+        const draft=$('#question')?.value??state.session.draft??'';
+        state.article=article;state.object=object;state.session={...session,draft};drafts.set(key,draft);
         renderWork();
       }
-    }
-  } catch (_) { /* Existing controls expose connection errors on interaction. */ }
-  finally { sharedRefreshBusy = false; }
-},3000);
+    }else if(page==='saved'){await savedPage();}
+    const time=new Date().toLocaleTimeString('zh-CN',{hour12:false});
+    syncLabel.textContent='已同步';syncLabel.dataset.error='false';syncLabel.title='最近同步：'+time;
+    refreshControl.title='最近同步：'+time;
+    if(manual)toast('已同步浮窗记录并刷新页面。');
+  }catch(error){
+    syncLabel.textContent='同步失败';syncLabel.dataset.error='true';syncLabel.title=error.message;
+    if(manual)toast('刷新失败：'+error.message);
+  }finally{sharedRefreshBusy=false;refreshControl.disabled=false;refreshControl.textContent='刷新';}
+}
+refreshControl.addEventListener('click',()=>refreshWorkspace(true));
+setInterval(()=>refreshWorkspace(false),3000);
+window.addEventListener('focus',()=>refreshWorkspace(false));

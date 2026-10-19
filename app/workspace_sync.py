@@ -87,6 +87,19 @@ def synchronize(store):
                 db.execute('INSERT OR REPLACE INTO capture_links VALUES(?,?,?)',
                     (eid,obj['id'],json.dumps(links[eid],ensure_ascii=False)))
             changed += 1
+        # A native article group's edited title is shared by the reading workspace.
+        for eid, link in links.items():
+            entry=entries.get(eid)
+            obj=store.get('objects',link['object_id'])
+            if not entry or not obj:continue
+            article=store.article(obj['article_id'])
+            if article.get('origin')!='capture' and not article.get('capture_document'):continue
+            batch=native.get_batch(entry['batch_id'])
+            title=str(batch['name'] or '').strip() if batch else ''
+            if title and article['title']!=title:
+                article['title']=title
+                store.update_article(article)
+                changed+=1
         # Export saved words using a deterministic identity. Repeating a sync
         # never increments the capture count or duplicates an entry.
         linked = {link['object_id'] for link in links.values()}
