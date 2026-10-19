@@ -112,10 +112,11 @@ class SourceIndex:
                 break
             if any(r['article_id']==row['article_id'] and r['block']==row['block'] and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
                 continue
-            if used + len(row['quote']) > budget:
+            cost = len(row['quote']) + len(row.get('visual_description',''))
+            if used + cost > budget:
                 continue
             chosen.append({k:v for k,v in row.items() if k!='terms'} | {'score':round(score, 4)})
-            used += len(row['quote'])
+            used += cost
             if len(chosen) >= limit:
                 break
         # Pair retrieved PDF text with its actual page image; never claim to see it until sent.

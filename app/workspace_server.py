@@ -21,6 +21,7 @@ from .paths import data_dir, project_root, resource_root
 from .api_client import DeepSeekClient, ApiError
 from . import article_map
 from .retrieval import SourceIndex, referenced_evidence
+from .visual_index import VisualIndex
 
 
 def parse_file(store, name, raw):
@@ -76,6 +77,8 @@ class Workspace:
     def __init__(self, directory):
         self.store = WorkspaceStore(directory)
         self.index = SourceIndex(self.store)
+        self.visual_index = VisualIndex(self.store)
+        self.visual_lock = threading.Lock()
         self.jobs = {}
         self.lock = threading.Lock()
         self.last_seen = time.monotonic()
@@ -98,6 +101,28 @@ class Workspace:
         if not c.get('key'):
             raise ValueError('尚未配置 API Key，请打开设置。')
         return DeepSeekClient(c['base_url'], c['model'], c['key'], timeout=120)
+
+    def prepare_images(self, articles, client, job, focus=None, required=False):
+        if not any(b['type']=='image' for a in articles for b in a['blocks']):
+            return articles
+        while not self.visual_lock.acquire(timeout=.2):
+            job['message'] = '正在等待图片识别任务…'
+            if job['cancel'].is_set():
+                raise ValueError('已停止识别图片。')
+        try:
+            vision = self.config()['vision'].get('status')
+            if vision not in {'supported','unsupported'}:
+                job['message'] = '正在检测当前模型的图片理解能力…'
+                self.work({'cancel':job['cancel']}, 'detect', {})
+                vision = self.config()['vision'].get('status')
+            if vision != 'supported':
+                if required or not any(b['type']=='text' and b.get('text','').strip() for a in articles for b in a['blocks']):
+                    raise ValueError('当前模型未通过图片理解检测，请在设置中检查模型或重新检测。')
+                return articles
+            return self.visual_index.enrich(articles,client,self.config()['signature'],job['cancel'],
+                lambda message: job.update(message=message),focus=focus)
+        finally:
+            self.visual_lock.release()
 
     def config(self):
         c = self.store.model_config()
@@ -154,15 +179,22 @@ class Workspace:
                 words = list(dict.fromkeys(o['title'] for o in a['objects'] if o['type'] == 'term'))
                 job['message'] = '正在阅读全文、生成并复核；可能需要数分钟…'
                 def attempt(round_no, draft, issues, review):
-                    with self.store.connect() as db:
+                    with self.store.lock, self.store.connect() as db:
+                        if job['cancel'].is_set():
+                            return
                         db.execute('INSERT INTO attempts VALUES(?,?,?)', (uid(), a['id'], json.dumps({'round': round_no, 'draft': draft, 'issues': issues, 'review': review}, ensure_ascii=False)))
                     job['message'] = f'第 {round_no} 轮复核' + ('，正在纠正问题…' if issues else '完成')
                 graph, quality = article_map.run(client, text=a['text'], selected_words=words, on_attempt=attempt)
                 graph['selected_words'] = words
-                if not job['cancel'].is_set():
-                    a['map'], a['quality'] = graph, quality
-                    self.store.update_article(a)
+                with self.store.lock:
+                    if not job['cancel'].is_set():
+                        a['map'], a['quality'] = graph, quality
+                        self.store.update_article(a)
                 job['result'] = graph
+            elif kind == 'index-images':
+                a = self.store.article(body['article_id'])
+                self.prepare_images([a],client,job,required=True)
+                job['result'] = {'ok':True}
             elif kind == 'chat':
                 a = self.store.article(body['article_id'])
                 oid = body.get('object_id') or ''
@@ -178,6 +210,8 @@ class Workspace:
                 if scope not in {'article', 'library'}:
                     raise ValueError('请选择本文或资料书架作为问答范围。')
                 articles = [a] if scope == 'article' or obj else [self.store.article(row['id']) for row in self.store.summaries()]
+                articles = self.prepare_images(articles,client,job,
+                    focus=obj if obj and obj['type']!='term' else None,required=bool(obj and obj['type']!='term'))
                 job['message'] = '正在查找相关原文与图表…'
                 evidence = self.index.search(articles, question + (' ' + obj['title'] if obj else ''), focus=obj)
                 vision = self.config()['vision'].get('status')
@@ -192,6 +226,7 @@ class Workspace:
                 if needs_image and vision == 'unsupported':
                     raise ValueError('当前模型不支持图片理解，请在设置中更换模型。')
                 image_hits = [e for e in evidence if e['type']=='image'][:3] if vision=='supported' else []
+                evidence = [e for e in evidence if e['type']!='image' or e in image_hits]
                 for e in evidence:
                     e['image_sent'] = e in image_hits
                 passages = []
@@ -199,6 +234,8 @@ class Workspace:
                     location = f"第{e['page']}页" if e['page'] else '原文片段'
                     modality = '图片已随本次请求提供' if e['image_sent'] else '仅有图注，未提供图像' if e['type']=='image' else '原文正文'
                     passages.append(f"[{e['citation']}] 《{e['article_title']}》 {location}（{modality}）\n{e['quote']}")
+                    if e.get('visual_description'):
+                        passages.append('图片检索描述（模型生成，可能有误，不是原文；涉及图片的结论须核对本次提供的原图）：\n'+e['visual_description'])
                 prompt = '本次检索范围：' + ('资料书架' if scope=='library' and not obj else '当前文章') + '\n以下是根据问题查找的材料，不代表全文。\n' + '\n\n'.join(passages) + '\n当前对象：' + (obj['title'] if obj else a['title']) + '\n问题：' + question
                 if evidence and all(e['score']==0 for e in evidence):
                     prompt += '\n未找到关键词匹配，以上为分散抽取的片段；不能据此断言全文没有某项内容。'
@@ -236,6 +273,9 @@ class Workspace:
                     evidence = cited
                 if not job['cancel'].is_set():
                     with self.store.lock:
+                        if job['cancel'].is_set():
+                            job['status'] = 'cancelled'
+                            return
                         # Draft changes and response commits must not overwrite each other.
                         latest = self.store.get('sessions', key, {})
                         session['messages'] = latest.get('messages', session['messages']) + [{'role': 'user', 'content': question}, {'role': 'assistant', 'content': answer, 'evidence': evidence, 'model': client.model}]
@@ -379,6 +419,15 @@ def make_handler(workspace, token):
                     if workspace.sync_error:
                         raise ValueError(workspace.sync_error)
                     self.send({'count':count})
+                elif path == '/api/article/delete':
+                    with s.lock:
+                        ids = s.related_versions(body['article_id'])
+                        with workspace.lock:
+                            for job in workspace.jobs.values():
+                                if job['scope'].split(':')[1] in ids:
+                                    job['cancel'].set()
+                        s.delete_articles(ids)
+                    self.send({'ok':True})
                 elif path == '/api/object':
                     self.send(s.object(body['article_id'], body))
                 elif path == '/api/object/update':
@@ -388,7 +437,7 @@ def make_handler(workspace, token):
                     self.send({'ok':True})
                 elif path == '/api/settings':
                     s.save_config(body); self.send(workspace.config())
-                elif path in {'/api/chat','/api/map','/api/detect'}:
+                elif path in {'/api/chat','/api/map','/api/detect','/api/index-images'}:
                     self.send(workspace.start(path.rsplit('/',1)[1],body))
                 elif path == '/api/cancel':
                     job = workspace.jobs.get(body.get('job')); job and job['cancel'].set(); self.send({'ok':True})

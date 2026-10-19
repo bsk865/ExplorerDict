@@ -1,6 +1,36 @@
 /* Source-grounded reading: scope choice and verifiable citation previews. */
 state.researchScope = 'article';
 let referenceReturn = null;
+const researchDispatch = dispatch;
+dispatch = async function(action) {
+  if (action === 'delete-article') {
+    const article = state.article;
+    modal('删除资料',`<p>删除《${esc(article.title)}》及其历史版本、词语、笔记、导图与问答。此操作无法撤销。</p><div class="actions"><button class="secondary" data-action="close">保留资料</button><button class="primary" id="confirm-delete-article">删除</button></div>`);
+    $('#confirm-delete-article').onclick = async () => {
+      const control = $('#confirm-delete-article'); control.disabled = true;
+      try {
+        await api('article/delete',{article_id:article.id});
+        $('#dialog').close();
+        for (const key of drafts.keys()) if (key.startsWith(article.id+':')) drafts.delete(key);
+        state.article=null; state.object=null; state.session={messages:[],draft:''};
+        await shelf(); toast('资料已删除');
+      } catch(error) {control.disabled=false;toast(error.message);}
+    };
+    return;
+  }
+  if (action === 'index-images') {
+    const articleId = state.article.id;
+    $('#dialog').close();
+    await runJob('index-images',{article_id:articleId},async()=>toast('图片内容已识别，可以直接提问查找。'));
+    return;
+  }
+  await researchDispatch(action);
+  if (action === 'article-info') $('#dialog .actions').insertAdjacentHTML('beforeend',button('delete-article','删除资料'));
+  if (action === 'article-info' && state.article.blocks.some(b=>b.type==='image')) {
+    $('#dialog .actions').insertAdjacentHTML('beforeend',button('index-images','识别图文内容'));
+    $('#dialog .actions').insertAdjacentHTML('afterend','<p class="modal-note">首次提问会识别相关资料中的图片，也可以提前识别。结果保存在本机，可随时停止。</p>');
+  }
+};
 const researchRender = renderWork;
 renderWork = function () {
   researchRender();
@@ -29,7 +59,7 @@ document.addEventListener('click', event => {
   const source = message?.evidence?.find(e => (e.citation || e.block) === button.dataset.ragCite);
   if (!source) { toast('这条引用暂时无法打开，请重新提问。'); return; }
   const title = source.article_title || state.article.title;
-  const image = source.image_sent && source.asset ? `<img class="reference-image" src="${asset(source.asset)}" alt="引用的原图">` : '';
+  const image = source.image_sent && source.asset ? `<div class="reference-picture"><img class="reference-image" src="${asset(source.asset)}" alt="引用的原图">${source.region?`<span class="reference-region" style="left:${source.region[0]*100}%;top:${source.region[1]*100}%;width:${source.region[2]*100}%;height:${source.region[3]*100}%"></span>`:''}</div>` : '';
   modal('原文依据', `<h3>${esc(title)}</h3><p class="modal-note">${source.page ? '第 '+source.page+' 页' : '原文片段'}${source.region?' · 回答依据为所选图片局部':''}</p><blockquote class="reference-quote">${esc(source.quote)}</blockquote>${image}<div class="actions"><button class="primary" id="open-reference-source">在原文中定位</button></div>`);
   $('#open-reference-source').onclick = async () => {
     try {

@@ -98,6 +98,19 @@ class SharedReadingTests(unittest.TestCase):
         self.native.set_setting('api.model','updated-model')
         self.assertEqual(self.store.model_config()['model'],'updated-model')
 
+    def test_remove_article_clears_linked_capture_and_keeps_other_material(self):
+        self.capture(); synchronize(self.store)
+        article,obj,key=self.session()
+        other=self.store.import_article('保留资料',[{'type':'text','text':'另一份原文'}])
+        newer=self.store.import_article('新版本',[{'type':'text','text':'补充后的原文'}])
+        newer['previous_id']=article['id'];self.store.update_article(newer)
+        self.store.delete_articles(self.store.related_versions(newer['id']))
+        synchronize(self.store)
+        self.assertEqual([a['id'] for a in self.store.summaries()],[other['id']])
+        self.assertIsNone(self.store.get('sessions',key))
+        self.assertIsNone(self.store.get('objects',obj['id']))
+        self.assertEqual(self.native.query('SELECT * FROM entries'),[])
+
     def test_docx_without_relationship_part(self):
         out=io.BytesIO()
         with zipfile.ZipFile(out,'w') as z:

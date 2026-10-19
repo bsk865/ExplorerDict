@@ -190,6 +190,53 @@ class WorkspaceStore:
             articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles ORDER BY rowid DESC')]
         return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map')), 'cover': next((b.get('asset') for b in a['blocks'] if b['type']=='image'), None)} for a in articles if not a.get('superseded_by') and a.get('origin') != 'demo']
 
+    def related_versions(self, aid):
+        self.article(aid)
+        with self.connect() as db:
+            articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles')]
+        ids = {aid}
+        while True:
+            expanded = ids | {a['id'] for a in articles if a.get('previous_id') in ids or a.get('superseded_by') in ids}
+            expanded |= {a[k] for a in articles if a['id'] in ids for k in ('previous_id','superseded_by') if a.get(k)}
+            if expanded == ids:
+                return ids
+            ids = expanded
+
+    def delete_articles(self, ids):
+        from .db import Database
+        with self.lock:
+            with self.connect() as db:
+                tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                objects = [r[0] for r in db.execute('SELECT id,article_id FROM objects') if r[1] in ids]
+                links = list(db.execute('SELECT entry_id,object_id FROM capture_links')) if 'capture_links' in tables else []
+            native_path = self.directory/'explorer_dict.sqlite3'
+            if native_path.exists():
+                with closing(Database(native_path)) as native:
+                    for eid, oid in links:
+                        if oid in objects:
+                            entry = native.get_entry(eid)
+                            native.delete_entry(eid)
+                            if entry:
+                                if not native.query_one('SELECT 1 FROM entries WHERE batch_id=?',(entry['batch_id'],)):
+                                    native.delete_batch(entry['batch_id'])
+                                if entry['doc_key'] and not native.query_one('SELECT 1 FROM entries WHERE doc_key=?',(entry['doc_key'],)):
+                                    native.execute('DELETE FROM articles WHERE doc_key=?',(entry['doc_key'],))
+            with self.connect() as db:
+                for aid in ids:
+                    for table in ('objects','attempts','source_chunks','source_indexes'):
+                        if table in tables:
+                            db.execute(f'DELETE FROM {table} WHERE article_id=?',(aid,))
+                    db.execute('DELETE FROM sessions WHERE id LIKE ?', (aid+':%',))
+                    db.execute('DELETE FROM articles WHERE id=?',(aid,))
+                if 'capture_links' in tables:
+                    db.executemany('DELETE FROM capture_links WHERE object_id=?',[(oid,) for oid in objects])
+                used = {b['asset'] for r in db.execute('SELECT payload FROM articles') for b in json.loads(r[0])['blocks'] if b.get('asset')}
+                for row in list(db.execute('SELECT id FROM assets')):
+                    if row[0] not in used:
+                        db.execute('DELETE FROM assets WHERE id=?',(row[0],))
+                        if 'visual_index' in tables:
+                            db.execute('DELETE FROM visual_index WHERE asset=?',(row[0],))
+
     def model_config(self):
         config = self.get('settings', 'model', {})
         if config and not config.get('shared'):
