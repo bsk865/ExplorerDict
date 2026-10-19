@@ -905,7 +905,7 @@ class CaptureService:
         if self.db.has_article(key):
             return False
         with self._lock:
-            if key in self._article_pending:
+            if key in self._article_pending or self.db.has_article(key):
                 return False
             self._article_pending.add(key)
         thread = threading.Thread(

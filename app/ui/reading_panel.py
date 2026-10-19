@@ -1317,6 +1317,8 @@ class ReadingPanel(FloatingWindow):
         self.mode = mode
         self._render_mode()
         rect = self.rect_for(mode, from_mode=previous)
+        if mode == MODE_PANEL:
+            self._panel_w, self._panel_h = rect[2], rect[3]
         ok = self.show_at((rect[0], rect[1]), token=self._token_value(), explicit=explicit)
         if ok:
             self._after_show()
@@ -2353,8 +2355,6 @@ class ReadingPanel(FloatingWindow):
         options: list[tuple[int | None, str]] = [(None, FOLLOW_TEXT)]
         for batch_id, label, _count in self._batch_choices():
             options.append((batch_id, label))
-            if len(options) > TOPIC_MAX_ITEMS:
-                break
         return options
 
     def strip_topic_options(self) -> list[tuple[int, str]]:
@@ -2622,16 +2622,21 @@ class ReadingPanel(FloatingWindow):
         widgets.clear_children(self.topic_picker)
         current = self.browse_scope()
         options = self.topic_options()
+        area = ScrollArea(self.topic_picker, bg=theme.PANEL_ALT, height=theme.px(140))
+        self._article_options_area = area
+        area.pack(fill="x")
+        area.inner.bind('<Configure>', lambda _e: area.canvas.configure(scrollregion=area.canvas.bbox('all')))
         for batch_id, label in options:
             active = (batch_id is None and current is None) or \
                 (batch_id is not None and current == int(batch_id))
             item = tk.Label(
-                self.topic_picker, text=("· " if active else "   ") + str(label),
+                area.inner, text=("· " if active else "   ") + str(label),
                 bg=theme.PANEL_ALT, fg=theme.TEXT if active else theme.TEXT_MUTED,
                 font=theme.font(8), anchor="w", cursor="hand2", justify="left",
                 wraplength=max(theme.px(80), self._content_width()),
             )
             item.pack(fill="x", padx=theme.px(geo.CONTENT_PAD), pady=theme.px(1))
+            area.bind_wheel(item)
             item.bind("<Button-1>", lambda _e, b=batch_id: self._on_topic_pick(b))
         return len(options)
 
@@ -2888,13 +2893,13 @@ class ReadingPanel(FloatingWindow):
         """
         browsed = self.browse_topic_name()
         if browsed:
-            return clip_text(browsed, TOPIC_MAX_CHARS)
+            return "文章 · " + clip_text(browsed, TOPIC_MAX_CHARS)
         getter = getattr(self.app, "panel_topic_line", None) or \
             getattr(self.app, "panel_context_line", None)
         if not callable(getter):
             return ""
         try:
-            return clip_text(str(getter() or ""), TOPIC_MAX_CHARS)
+            return "文章 · " + clip_text(str(getter() or "选择文章"), TOPIC_MAX_CHARS)
         except Exception:  # pragma: no cover
             return ""
 
@@ -2904,9 +2909,7 @@ class ReadingPanel(FloatingWindow):
         列表页与详情页在同一个窗口里切换，所以这一行会跟着 :meth:`_render_pages`
         显隐；判断集中在这里，两条路径永远一致。
         """
-        if self.page == PAGE_LIST:
-            return False
-        return bool(self._topic_line() if line is None else line)
+        return True
 
     def _sync_source_row(self, want: bool) -> None:
         """顶部来源行（标签 + 分隔线）按需显隐：没有主题时**整块**消失。"""

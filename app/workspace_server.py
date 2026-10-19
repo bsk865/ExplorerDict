@@ -382,6 +382,11 @@ def make_handler(workspace, token):
                         blocks = [{'type':'text','text':p} for p in str(body.get('text','')).split('\n\n') if p.strip()]
                     if body.get('article_id'):
                         old = s.article(body['article_id'])
+                        if old.get('source_status')=='pending_source':
+                            from .capture_documents import attach_full_source
+                            article=s.import_article(old['title'],blocks)
+                            self.send(attach_full_source(s,old,article))
+                            return
                         # Adding content creates a version snapshot; never silently rebind old citations.
                         clean = [{k:v for k,v in b.items() if k != 'id'} for b in old['blocks']]
                         index = int(body.get('after', len(clean)-1))+1
@@ -407,6 +412,10 @@ def make_handler(workspace, token):
                     from .reader_source import capture_source
                     old = s.article(body['article_id']) if body.get('article_id') else None
                     article = capture_source(s, str(body.get('url') or (old or {}).get('source_url') or ''))
+                    if old and old.get('source_status')=='pending_source' and old['id']!=article['id']:
+                        from .capture_documents import attach_full_source
+                        self.send(attach_full_source(s,old,article))
+                        return
                     if old and old['id'] != article['id']:
                         old['superseded_by'] = article['id']
                         s.update_article(old)

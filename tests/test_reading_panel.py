@@ -3512,16 +3512,16 @@ class TestPanelPaddingAndWrap(unittest.TestCase):
             probe.close()
 
     def test_list_top_row_shows_only_the_short_topic(self):
-        """列表页的主题归到 chip 条，顶栏来源行只在详情页出现。"""
+        """文章选择入口在词表和详情页都保持可见。"""
         probe = PanelProbe()
         try:
             probe.stub.panel_topic_line = lambda: "默认批次"
             probe.stub.panel_context_line = lambda: "示例文档 · 《默认批次》"
             probe.panel._render_context()
-            self.assertEqual(str(probe.panel.source_label.cget("text")), "默认批次",
+            self.assertEqual(str(probe.panel.source_label.cget("text")), "文章 · 默认批次",
                              "列表顶栏只放当前页的短主题名，不拼浏览器窗口标题")
-            self.assertFalse(probe.panel._source_packed,
-                             "列表页的来源行让位给主题 chip 条（同一个主题不显示两遍）")
+            self.assertTrue(probe.panel._source_packed,
+                             "列表页保留文章选择入口")
 
             probe.panel.show_detail(set_geometry=False)   # 详情页仍然显示来源行
             probe.panel._render_context()
@@ -3530,13 +3530,13 @@ class TestPanelPaddingAndWrap(unittest.TestCase):
 
             probe.stub.panel_topic_line = lambda: ""
             probe.panel._render_context()
-            self.assertEqual(str(probe.panel.source_label.cget("text")), "")
-            self.assertFalse(probe.panel._source_packed, "没有主题时整行 + 分隔线一起隐藏")
+            self.assertEqual(str(probe.panel.source_label.cget("text")), "文章 · 选择文章")
+            self.assertTrue(probe.panel._source_packed, "没有当前文章时仍可打开文章清单")
 
             del probe.stub.panel_topic_line       # 旧宿主只有 panel_context_line
             probe.panel._render_context()
-            self.assertFalse(probe.panel._source_packed,
-                             "列表页始终隐藏来源行（旧宿主也一样，不再回退显示）")
+            self.assertTrue(probe.panel._source_packed,
+                             "旧宿主也保留文章选择入口")
         finally:
             probe.close()
 
@@ -4435,13 +4435,13 @@ class TestTopicPickerInline(unittest.TestCase):
                 panel._on_drag_start(FakeEvent(10, 10, widget=panel.source_label))
                 panel._on_drag_end(FakeEvent(10, 10, widget=panel.source_label))
                 self.assertTrue(panel._topic_open, "点短主题必须展开内联清单")
-                labels = [str(w.cget("text")) for w in panel.topic_picker.winfo_children()]
+                labels = [str(w.cget("text")) for w in panel._article_options_area.inner.winfo_children()]
                 self.assertTrue(any("跟随当前阅读页" in t for t in labels))
                 self.assertTrue(any("主题甲" in t for t in labels))
                 self.assertTrue(any("主题乙" in t for t in labels))
                 self.assertEqual(popups, [], "绝不使用 tk_popup / grab 菜单（NOACTIVATE 下失效）")
 
-                row = [w for w in panel.topic_picker.winfo_children()
+                row = [w for w in panel._article_options_area.inner.winfo_children()
                        if "主题甲" in str(w.cget("text"))][0]
                 row.binds["<Button-1>"](None)
                 self.assertFalse(panel._topic_open, "选完自动收起")
@@ -4453,7 +4453,7 @@ class TestTopicPickerInline(unittest.TestCase):
 
                 # 再点开 → 选「跟随当前阅读页」回到当前页
                 panel.toggle_topic_picker(True)
-                first = [w for w in panel.topic_picker.winfo_children()
+                first = [w for w in panel._article_options_area.inner.winfo_children()
                          if "跟随当前阅读页" in str(w.cget("text"))][0]
                 first.binds["<Button-1>"](None)
                 self.assertIsNone(probe.browse["id"])
@@ -4505,7 +4505,7 @@ class TestTopicPickerInline(unittest.TestCase):
             panel.show_dock()
             panel.toggle()
             self.assertTrue(panel.toggle_topic_picker(True))
-            row = [w for w in panel.topic_picker.winfo_children()
+            row = [w for w in panel._article_options_area.inner.winfo_children()
                    if "历史主题" in str(w.cget("text"))]
             self.assertTrue(row, "清单里必须能看到历史主题")
             row[0].binds["<Button-1>"](None)
@@ -4537,7 +4537,7 @@ class TestTopicPickerInline(unittest.TestCase):
                 hides = probe.withdraw_count()
                 geometry = probe.geometry_specs()
                 self.assertTrue(panel.toggle_topic_picker(True))
-                row = [w for w in panel.topic_picker.winfo_children()
+                row = [w for w in panel._article_options_area.inner.winfo_children()
                        if "主题甲" in str(w.cget("text"))]
                 self.assertTrue(row, "清单里必须能看到主题甲")
                 row[0].binds["<Button-1>"](None)
@@ -4574,7 +4574,7 @@ class TestTopicPickerInline(unittest.TestCase):
 
             panel.refresh_terms(force=True)
             self.assertTrue(panel.toggle_topic_picker(True))
-            row = [w for w in panel.topic_picker.winfo_children()
+            row = [w for w in panel._article_options_area.inner.winfo_children()
                    if "别的主题" in str(w.cget("text"))]
             self.assertTrue(row, "清单里必须能看到别的主题")
             row[0].binds["<Button-1>"](None)

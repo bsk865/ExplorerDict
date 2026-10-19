@@ -75,6 +75,14 @@ class SourceIndex:
             return []
         with self.store.connect() as db:
             rows = [json.loads(r[0]) for r in db.execute('SELECT payload FROM source_chunks WHERE article_id IN ('+','.join('?' for _ in ids)+') ORDER BY rowid', ids)]
+        rows=[r for r in rows if r['type']!='text' or r['quote'].strip()]
+        if focus and focus.get('capture_context') and focus.get('block') is None:
+            a=next(a for a in articles if a['id']==focus['article_id'])
+            quote=focus['capture_context']
+            rows.append({'article_id':a['id'],'version':a['version'],'article_title':a['title'],
+                'block':None,'object_id':focus['id'],'start':0,'end':len(quote),'quote':quote,
+                'page':None,'type':'text','asset':None,'visual_description':'',
+                'terms':dict(Counter(tokens(quote)))})
         query = set(tokens(question))
         frequencies = Counter(t for row in rows for t in row['terms'] if t in query)
         avg = sum(sum(r['terms'].values()) for r in rows) / max(len(rows), 1) or 1

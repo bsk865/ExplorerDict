@@ -38,7 +38,7 @@ class SharedReadingTests(unittest.TestCase):
         eid = self.capture()
         synchronize(self.store)
         article,obj,key = self.session()
-        self.assertEqual(article['source_status'],'selection_fragment')
+        self.assertEqual(article['source_status'],'pending_source')
         self.assertEqual(obj['note'],'')
         self.assertEqual([m['content'] for m in self.store.get('sessions',key)['messages']],['模型解释','追问','回答'])
         version = self.native.query_one('PRAGMA data_version')[0]
@@ -149,14 +149,20 @@ class SharedReadingTests(unittest.TestCase):
     def test_eight_selections_share_one_document_without_fulltext(self):
         batch = self.native.create_batch('同一文档')
         ids=[]
+        identity=None
         for i in range(8):
             ids.append(self.native.add_entry(batch_id=batch,term=f'词语{i}',context=f'这是第{i}处的词语{i}上下文。',doc_key='same-document',source_title='测试文章'))
             synchronize(self.store)
             self.assertEqual(len(self.store.summaries()),1)
+            current=self.store.article(self.store.summaries()[0]['id'])
+            if identity is None:identity=(current['id'],current['version'],current['text'])
+            self.assertEqual((current['id'],current['version'],current['text']),identity)
         article=self.store.article(self.store.summaries()[0]['id'])
         self.assertEqual(len(article['objects']),8)
-        self.assertEqual(len(article['blocks']),8)
-        self.assertEqual(article['source_status'],'selection_fragment')
+        self.assertEqual(article['text'],'')
+        self.assertEqual(len(article['blocks']),1)
+        self.assertEqual(len({o['capture_context'] for o in article['objects']}),8)
+        self.assertEqual(article['source_status'],'pending_source')
         self.assertEqual(synchronize(self.store),0)
         self.assertEqual(len(self.native.query('SELECT * FROM entries')),8)
         from app.article_source import Article
@@ -236,3 +242,24 @@ class SharedReadingTests(unittest.TestCase):
             self.assertTrue(self.store.article(old['id']).get('superseded_by'))
         self.assertEqual(len(self.store.summaries()),1)
         self.assertEqual(synchronize(self.store),0)
+
+    def test_manual_full_source_reuses_words_and_accepts_later_capture(self):
+        from app.capture_documents import attach_full_source
+        from app.retrieval import SourceIndex
+        eid=self.capture();synchronize(self.store)
+        old,obj,key=self.session()
+        self.store.update_session(key,{'draft':'保留草稿'})
+        evidence=SourceIndex(self.store).search([old],'术语',focus=obj)
+        self.assertEqual(evidence[0]['quote'],'原文中的术语含义。')
+        self.assertEqual(SourceIndex(self.store).search([old],'全文概括'),[])
+        target=self.store.import_article(old['title'],[{'type':'text','text':'原文中的术语含义。后续词语也在原文中。'}])
+        article=attach_full_source(self.store,old,target)
+        self.assertEqual(article['objects'][0]['id'],obj['id'])
+        self.assertEqual(self.store.get('sessions',article['id']+':'+article['version']+':'+obj['id'])['draft'],'保留草稿')
+        entry=self.native.get_entry(eid)
+        self.native.add_entry(batch_id=entry['batch_id'],term='后续词语',context='后续词语也在原文中。',doc_key=entry['doc_key'],source_title='外部文章')
+        synchronize(self.store)
+        self.assertEqual(len(self.store.summaries()),1)
+        current=self.store.article(article['id'])
+        self.assertEqual(current['text'],target['text'])
+        self.assertEqual(len(current['objects']),2)

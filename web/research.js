@@ -2,6 +2,7 @@
 state.researchScope = 'article';
 const fragmentSource = sourceHTML;
 sourceHTML = function () {
+  if(state.article?.source_status === 'pending_source') return `<section class="reading-paper"><div class="paper-tools"><span>原文待补充</span></div><div class="source-body"><div class="source-repair"><h2>已收录这篇文章的词语</h2><p>尚未取得完整原文。划选内容保存在对应词条中，不会重复拼接到这里。</p><div class="actions">${button('append-text','添加原文','primary')}${button('append','导入原文件')}${state.article.source_url?button('reextract','读取原网页'):''}</div></div></div></section>`;
   const html = fragmentSource();
   return state.article?.source_status === 'selection_fragment'
     ? html.replace('<div class="paper-tools">','<p class="source-fragment-note">以下内容来自同一篇文章的划选片段，尚未取得完整原文。</p><div class="paper-tools">')
@@ -168,6 +169,7 @@ document.addEventListener('click', event => {
         referenceReturn = {article:state.article.id, object:state.object?.id || null};
         await openArticle(articleId);
       }
+      if(source.object_id){await openArticle(articleId,source.object_id);return;}
       await locate(source.block);
       // A block can be a whole PDF page or a long imported paragraph.
       // Locate the quoted characters, rather than leaving the reader at its start.

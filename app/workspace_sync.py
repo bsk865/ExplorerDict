@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from .db import Database
-from .capture_documents import document_identity, consolidate
+from .capture_documents import document_identity, pending_article, captured_object, migrate_fragments
 
 
 def _upgrade_source(store, native, entry, link):
@@ -16,14 +16,14 @@ def _upgrade_source(store, native, entry, link):
     if not obj:
         return False
     old = store.article(obj['article_id'])
-    if old.get('source_status') != 'selection_fragment':
+    if old.get('source_status') not in {'selection_fragment','pending_source'}:
         return False
     source = native.query_one('SELECT * FROM articles WHERE doc_key=?', (entry['doc_key'],))
     if not source or not source['text'] or obj['title'] not in source['text'] or source['text'] == old['text']:
         return False
     article = store.import_article(source['title'] or entry['source_title'],
         [{'type':'text','text':source['text'],'capture_document':document_identity(entry)}], origin='capture')
-    article.update(source_url=entry['source_url'], source_status='legacy_text')
+    article.update(source_url=entry['source_url'], source_status='legacy_text', capture_document=document_identity(entry), capture_history=old.get('capture_history',[]))
     old_prefix = old['id'] + ':' + old['version'] + ':'
     new_prefix = article['id'] + ':' + article['version'] + ':'
     # Keep object identity, saved status and personal notes. Historical citations
@@ -63,6 +63,7 @@ def synchronize(store):
                 del links[eid]
                 with store.connect() as db:
                     db.execute('DELETE FROM capture_links WHERE entry_id=?',(eid,))
+        changed += migrate_fragments(store, entries, links)
         # Import captures. A capture without archived full text is explicitly a
         # fragment and is never presented to retrieval as the complete article.
         for eid, entry in entries.items():
@@ -72,21 +73,20 @@ def synchronize(store):
             source = native.query_one('SELECT * FROM articles WHERE doc_key=?', (entry['doc_key'],))
             text = source['text'] if source and source['text'] and entry['term'] in source['text'] else ''
             full = bool(text)
-            text = text or entry['context'] or entry['term']
-            if entry['term'] not in text:
-                text = entry['term'] + '\n' + text
-            title = (source['title'] if full else entry['source_title']) or '划选片段'
-            article = store.import_article(title if full else title + ' · 划选片段', [{'type':'text','text':text,'capture_document':document_identity(entry)}], origin='capture')
-            article.update(source_url=entry['source_url'], source_status='legacy_text' if full else 'selection_fragment')
-            store.update_article(article)
-            obj = store.object(article['id'], {'type':'term','title':entry['term'],'block':'b0'})
+            if full:
+                article = store.import_article(source['title'] or entry['source_title'],
+                    [{'type':'text','text':text,'capture_document':document_identity(entry)}],origin='capture')
+                article.update(source_url=entry['source_url'],source_status='legacy_text')
+                store.update_article(article)
+            else:
+                article = pending_article(store, entry)
+            obj = captured_object(store, article, entry)
             store.update_object(obj['id'], {'saved':True})
             links[eid] = {'object_id':obj['id'], 'saved':True, 'turns':{}, 'explanation':''}
             with store.connect() as db:
                 db.execute('INSERT OR REPLACE INTO capture_links VALUES(?,?,?)',
                     (eid,obj['id'],json.dumps(links[eid],ensure_ascii=False)))
             changed += 1
-        changed += consolidate(store, entries, links)
         # Export saved words using a deterministic identity. Repeating a sync
         # never increments the capture count or duplicates an entry.
         linked = {link['object_id'] for link in links.values()}
@@ -101,7 +101,7 @@ def synchronize(store):
             doc_key = 'workspace:' + article['id']
             batch = native.find_batch_by_source(doc_key)
             bid = batch['id'] if batch else native.create_batch(article['title'], source_key=doc_key, source_kind='workspace')
-            context = next(b.get('text','') for b in article['blocks'] if b['id']==obj['block'])
+            context = obj.get('capture_context') or next((b.get('text','') for b in article['blocks'] if b['id']==obj['block']), obj['title'])
             row = native.find_entry(bid, obj['title'], doc_key, context)
             eid = row['id'] if row else native.add_entry(batch_id=bid, term=obj['title'], context=context,
                 doc_key=doc_key, source_title=article['title'], source_url=article.get('source_url',''), capture_method='workspace')
