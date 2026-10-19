@@ -54,6 +54,6 @@ dispatch=async function(action){
 const previousSaved=savedPage; savedPage=async function(){document.body.dataset.page="shelf";await previousSaved();};
 
 const originalMapHTML=mapHTML;
-mapHTML=function(){const html=originalMapHTML();return state.article.text.length>30000?'<p class="source-limit">这篇长文可以完整阅读。目前全文导图支持 3 万字以内的文章；本篇尚不能生成完整导图。</p>'+html:html;};
+mapHTML=function(){return originalMapHTML();};
 const originalChatHTML=chatHTML;
 chatHTML=function(){let html=originalChatHTML();if(!state.object&&state.assistantTab==='understand'&&state.article.text.length>26000)html=html.replace('<div class="chat-body"','<p class="context-limit">长文提问建议先选中相关段落，回答会更准确。</p><div class="chat-body"');return html;};

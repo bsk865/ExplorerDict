@@ -172,8 +172,6 @@ class Workspace:
                 job['result'] = result
             elif kind == 'map':
                 a = self.store.article(body['article_id'])
-                if len(a['text']) > article_map.MAX_TEXT_CHARS:
-                    raise ValueError('原文超过30000字，请拆分文章后生成，当前不会截断全文冒充完整导图。')
                 if not any(b['type'] == 'text' and b.get('text', '').strip() for b in a['blocks']):
                     raise ValueError('这份资料只有图片。请先补充可提取的正文，再生成全文导图。')
                 words = list(dict.fromkeys(o['title'] for o in a['objects'] if o['type'] == 'term'))
@@ -184,7 +182,10 @@ class Workspace:
                             return
                         db.execute('INSERT INTO attempts VALUES(?,?,?)', (uid(), a['id'], json.dumps({'round': round_no, 'draft': draft, 'issues': issues, 'review': review}, ensure_ascii=False)))
                     job['message'] = f'第 {round_no} 轮复核' + ('，正在纠正问题…' if issues else '完成')
-                graph, quality = article_map.run(client, text=a['text'], selected_words=words, on_attempt=attempt)
+                from . import long_article_map
+                graph, quality = long_article_map.run(self.store,client,text=a['text'],title=a['title'],version=a['version'],
+                    signature=self.config()['signature'],selected_words=words,cancel=job['cancel'],
+                    progress=lambda message:job.update(message=message),on_attempt=attempt)
                 graph['selected_words'] = words
                 with self.store.lock:
                     if not job['cancel'].is_set():

@@ -90,10 +90,6 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-art
 
 const readingMap=mapHTML;
 mapHTML=function(){
-    if(state.article.text.length>30000&&!state.article.map){
-        const headings=state.article.blocks.filter(b=>b.heading>1);
-        return `<section class="article-outline"><h2>文章目录</h2><p>这篇文章较长，暂不支持全文导图。可从目录跳到对应章节。</p>${headings.length?headings.map(b=>`<button data-cite="${b.id}" style="padding-left:${16+Math.min(b.heading-2,3)*18}px">${esc(b.text)}</button>`).join(''):button('reader-source','返回原文')}</section>`;
-    }
     if(!state.article.map)return `<section class="map-empty"><h2>梳理文章脉络</h2><p>生成导图后，点击节点可回到原文。</p>${button('generate','生成导图','primary')}</section>`;
     return readingMap().replace(/<p class="map-foot">[\s\S]*?<\/p>/,'<p class="map-foot">点击节点查看原文 · 拖动空白移动 · Ctrl + 滚轮缩放</p>').replace('已通过模型复核 · 仍需结合原文判断','文章导图').replace('自编示例图 · 用于体验布局','示例导图');
 };

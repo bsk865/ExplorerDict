@@ -208,6 +208,7 @@ class WorkspaceStore:
             with self.connect() as db:
                 tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 objects = [r[0] for r in db.execute('SELECT id,article_id FROM objects') if r[1] in ids]
+                versions = {json.loads(r[0])['version'] for r in db.execute('SELECT payload FROM articles') if json.loads(r[0])['id'] in ids}
                 links = list(db.execute('SELECT entry_id,object_id FROM capture_links')) if 'capture_links' in tables else []
             native_path = self.directory/'explorer_dict.sqlite3'
             if native_path.exists():
@@ -230,6 +231,8 @@ class WorkspaceStore:
                     db.execute('DELETE FROM articles WHERE id=?',(aid,))
                 if 'capture_links' in tables:
                     db.executemany('DELETE FROM capture_links WHERE object_id=?',[(oid,) for oid in objects])
+                if 'map_parts' in tables:
+                    db.executemany('DELETE FROM map_parts WHERE version=?',[(version,) for version in versions])
                 used = {b['asset'] for r in db.execute('SELECT payload FROM articles') for b in json.loads(r[0])['blocks'] if b.get('asset')}
                 for row in list(db.execute('SELECT id FROM assets')):
                     if row[0] not in used:

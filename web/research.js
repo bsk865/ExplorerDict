@@ -1,8 +1,47 @@
 /* Source-grounded reading: scope choice and verifiable citation previews. */
 state.researchScope = 'article';
+function quoteBlock(quote) {
+  const blocks=state.article.blocks;
+  const exact=blocks.find(b=>(b.text||b.caption||'').includes(quote));
+  if (exact) return exact;
+  const start=state.article.text.indexOf(quote);
+  if (start<0) return null;
+  let offset=0;
+  for (const block of blocks) {
+    const end=offset+(block.text||block.caption||'').length;
+    if (start<end) return block;
+    offset=end+2;
+  }
+  return null;
+}
 let referenceReturn = null;
+const researchDrawMap = drawMap;
+drawMap = function() {
+  researchDrawMap();
+  const view = $('#map-viewport');
+  if (!view || !state.layout || !state.article.map) return;
+  const key = state.article.id+':'+state.depth+':'+state.zoom+':'+state.article.map.nodes.length;
+  if (view.dataset.layout !== key) {
+    view.dataset.layout = key;
+    const root=state.layout.positions.get(state.article.map.root);
+    if (root) view.scrollTop=Math.max(0,root.y*state.zoom-view.clientHeight/2);
+  }
+};
+const researchMapAside = renderMapAside;
+renderMapAside = function() {
+  researchMapAside();
+  if (state.article.map?.segments) $('#map-aside').insertAdjacentHTML('afterbegin',`<p class="modal-note">全文分 ${state.article.map.segments} 段研读 · 按原文顺序展开</p>`);
+};
 const researchDispatch = dispatch;
 dispatch = async function(action) {
+  if (action === 'map-fit') {
+    const view=$('#map-viewport');
+    if (view && state.layout) {
+      state.zoom=Math.max(.04,Math.min(1,(view.clientWidth-20)/state.layout.width,(view.clientHeight-20)/state.layout.height));
+      drawMap();
+    }
+    return;
+  }
   if (action === 'delete-article') {
     const article = state.article;
     modal('删除资料',`<p>删除《${esc(article.title)}》及其历史版本、词语、笔记、导图与问答。此操作无法撤销。</p><div class="actions"><button class="secondary" data-action="close">保留资料</button><button class="primary" id="confirm-delete-article">删除</button></div>`);
@@ -34,6 +73,8 @@ dispatch = async function(action) {
 const researchRender = renderWork;
 renderWork = function () {
   researchRender();
+  const mapActions=document.querySelector('.map-toolbar .actions');
+  if (mapActions) mapActions.insertAdjacentHTML('afterbegin',button('map-fit','适应窗口'));
   const composer = document.querySelector('.assistant-conversation .composer');
   if (composer && !state.object) {
     composer.insertAdjacentHTML('afterbegin', `<label class="research-scope">查阅范围 <select id="research-scope" aria-label="问答查阅范围"><option value="article">当前文章</option><option value="library">整个资料书架</option></select></label>`);
