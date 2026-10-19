@@ -754,6 +754,7 @@ SPEC_PATH = Path(__file__).resolve().parent.parent / "ExplorerDict.spec"
 
 #: 允许出现的第三方顶层模块；每一个都必须出现在 spec 的 HIDDEN_IMPORTS 里。
 THIRD_PARTY_ALLOWED = ("PIL", "pystray", "six")
+READING_DEPENDENCIES = {'bs4': {'reader_source.py'}, 'PySide6': {'reading_shell.py'}, 'pymupdf': {'workspace_server.py'}}
 
 
 class TestPackagingKeepsUpWithTheSource(unittest.TestCase):
@@ -798,6 +799,10 @@ class TestPackagingKeepsUpWithTheSource(unittest.TestCase):
                 if name in sys.stdlib_module_names or name in local:
                     continue
                 if name in THIRD_PARTY_ALLOWED:
+                    continue
+                if path.name in READING_DEPENDENCIES.get(name, set()):
+                    reading_spec = (APP_DIR.parent / 'ReadingWorkspace.spec').read_text(encoding='utf-8')
+                    self.assertIn(repr(name), reading_spec)
                     continue
                 offenders.setdefault(name, []).append(
                     str(path.relative_to(root)).replace("\\", "/"))

@@ -2123,6 +2123,15 @@ class App:
                 log.exception("更新悬浮取词状态失败")
             if not self._closing:
                 opened = self._drain_activation()
+                panel = getattr(self, 'reading_panel', None)
+                if panel is not None:
+                    version = self.db.query_one('PRAGMA data_version')[0]
+                    if version != getattr(self, '_reading_data_version', None):
+                        self._reading_data_version = version
+                        panel.refresh_terms()
+                        if panel.entry_id and not panel._chat_busy:
+                            panel._reload_chat()
+                            panel._render_detail()
         except Exception:  # pragma: no cover - 轮询绝不允许打断主循环
             log.exception("处理呼出请求失败")
         finally:

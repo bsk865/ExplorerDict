@@ -377,7 +377,7 @@ class Database:
                 self._migrate()
                 self.conn.execute(
                     "INSERT INTO settings(k, v) VALUES('schema_version', ?) "
-                    "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                    "ON CONFLICT(k) DO UPDATE SET v=excluded.v WHERE settings.v<>excluded.v",
                     (str(SCHEMA_VERSION),),
                 )
                 self.conn.commit()

@@ -61,9 +61,9 @@ messagesHTML=function(){
     return (state.session.messages||[]).map(m=>{
         let content=m.content;
         if(m.role==='user'&&/^请结合本文，解释当前(?:关键词|图片选区|整张图片)。请引用原文依据，区分补充理解与不确定之处。$/.test(content))content='解释这一处';
-        if(m.role==='assistant')content=content.replace(/\[b\d+\]/g,'');
-        const refs=(m.evidence||[]).filter(e=>m.content.includes('['+e.block+']'));
-        return `<div class="message ${m.role}">${m.role==='assistant'?'<small>小探</small>':''}${esc(content).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')}${refs.length?`<div class="citations">${refs.map((e,i)=>`<button data-cite="${e.block}" title="${esc(e.quote)}">原文 ${i+1}</button>`).join('')}</div>`:''}</div>`;
+        if(m.role==='assistant')content=content.replace(/\[(?:b|S)\d+\]/g,'');
+        const refs=(m.evidence||[]).filter(e=>m.content.includes('['+(e.citation||e.block)+']'));
+        return `<div class="message ${m.role}">${m.role==='assistant'?'<small>小探</small>':''}${esc(content).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')}${refs.length?`<div class="citations">${refs.map((e,i)=>`<button data-rag-cite="${e.citation||e.block}" data-rag-message="${state.session.messages.indexOf(m)}" title="${esc(e.article_title||e.quote)}">${e.page?'第 '+e.page+' 页':'原文 '+(i+1)}</button>`).join('')}</div>`:''}</div>`;
     }).join('');
 };
 const sendQuestion=send;
@@ -72,7 +72,6 @@ send=async function(question){
     if(!text){$('#question')?.focus();return;}
     if(state.job||activity.get(sessionKey())?.pending) {toast('请等待当前回答完成，或点击停止。');return;}
     if(!state.config.has_key){settings();toast('先填写模型设置，再开始提问。');return;}
-    if(state.object?.type&&state.object.type!=='term'&&state.config.vision?.status!=='supported'){settings();toast('请先检测图片理解，完成后返回图片提问。');return;}
     await saveDraft();
     const key=sessionKey();activity.set(key,{pending:true,question:text});renderWork();
     try {await sendQuestion(text);activity.delete(key);}

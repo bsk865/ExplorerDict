@@ -1,4 +1,4 @@
-"""Versioned local reading workspace. Legacy database is strictly read-only."""
+"""Versioned local reading workspace with shared native model configuration."""
 from __future__ import annotations
 import base64
 import hashlib
@@ -144,6 +144,10 @@ class WorkspaceStore:
         return record
 
     def update_object(self, oid, changes):
+        with self.lock:
+            return self._update_object(oid, changes)
+
+    def _update_object(self, oid, changes):
         obj = self.get('objects', oid)
         if not obj:
             raise ValueError('对象不存在。')
@@ -188,7 +192,7 @@ class WorkspaceStore:
 
     def model_config(self):
         config = self.get('settings', 'model', {})
-        if config:
+        if config and not config.get('shared'):
             config = dict(config)
             config['key'] = crypto_dpapi.unprotect(base64.b64decode(config['key'])) if config.get('key') else ''
             return config
@@ -211,44 +215,14 @@ class WorkspaceStore:
         if not model:
             raise ValueError('请输入模型名称。')
         key = str(body.get('key') or self.model_config().get('key', ''))
-        self.put('settings', 'model', {'base_url': base, 'model': model, 'key': base64.b64encode(crypto_dpapi.protect(key)).decode() if key else ''})
+        from .db import Database
+        with closing(Database(self.directory / 'explorer_dict.sqlite3')) as native:
+            native.set_setting('api.base_url', base)
+            native.set_setting('api.model', model)
+            native.set_secret('api_key', key)
+        self.put('settings', 'model', {'shared':True})
         self.put('settings', 'vision', {})
 
     def sync_legacy(self):
-        legacy = self.directory / 'explorer_dict.sqlite3'
-        if not legacy.exists():
-            return 0
-        count = 0
-        with closing(sqlite3.connect(legacy.as_uri() + '?mode=ro', uri=True)) as db:
-            db.row_factory = sqlite3.Row
-            for row in db.execute("SELECT * FROM articles WHERE text<>''"):
-                # Preserve the exact archived text for existing map fingerprints.
-                blocks = [{'type': 'text', 'text': row['text']}]
-                article = self.import_article(row['title'], blocks, origin='legacy')
-                if not article.get('source_url'):
-                    article['source_url'] = row['url']
-                    article['source_status'] = 'legacy_text'
-                    self.update_article(article)
-                count += 1
-                entries = list(db.execute('SELECT * FROM entries WHERE doc_key=?', (row['doc_key'],)))
-                for e in entries:
-                    b = next((b for b in article['blocks'] if e['term'] in b.get('text', '')), None)
-                    if b:
-                        existed = any(o['type'] == 'term' and o['title'] == e['term'] and o['block'] == b['id'] for o in article['objects'])
-                        obj = self.object(article['id'], {'type': 'term', 'title': e['term'], 'block': b['id']})
-                        if not existed:
-                            self.update_object(obj['id'], {'saved': True, 'note': e['detail'] or e['one_line']})
-                if not article.get('map'):
-                    topics = sorted({e['batch_id'] for e in entries})
-                    for tid in topics:
-                        for cached in db.execute('SELECT raw FROM map_graphs WHERE topic_id=? ORDER BY id DESC', (tid,)):
-                            try:
-                                raw = json.loads(cached[0])
-                                graph = raw.get('article_map', {})
-                                if graph.get('source_sha256') == hashlib.sha256(article['text'].encode()).hexdigest() and raw.get('quality', {}).get('approved'):
-                                    article['map'], article['quality'] = graph, raw['quality']
-                                    self.update_article(article)
-                                    break
-                            except (ValueError, AttributeError):
-                                continue
-        return count
+        from .workspace_sync import synchronize
+        return synchronize(self)

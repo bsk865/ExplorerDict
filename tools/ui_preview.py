@@ -159,6 +159,12 @@ def measure_ink_center(image: Image.Image, box, *, primary: bool, label: str = "
     x, y, w, h = box
     rgba = image.convert("RGBA")
     pixels, alpha = rgba.load(), rgba.getchannel("A").load()
+    # Measure antialiased ink relative to the active palette's contrast.
+    # A fixed dark-ink threshold drops thin strokes in the warm reading theme.
+    from PIL import ImageColor
+    foreground = _luma(ImageColor.getrgb(theme.BG if primary else theme.TEXT))
+    background = _luma(ImageColor.getrgb(theme.ACCENT if primary else theme.PANEL))
+    threshold = (foreground + background) / 2
     xs: list[int] = []
     ys: list[int] = []
     for yy in range(y + 1, y + h - 1):            # 去掉 1px 细线外框
@@ -166,7 +172,7 @@ def measure_ink_center(image: Image.Image, box, *, primary: bool, label: str = "
             if alpha[xx, yy] < 200:
                 continue
             value = _luma(pixels[xx, yy])
-            if (value > 150) if primary else (value < 110):
+            if (value > threshold) if foreground > background else (value < threshold):
                 xs.append(xx)
                 ys.append(yy)
     if not xs:

@@ -118,7 +118,7 @@ class WorkspaceTests(unittest.TestCase):
             model = 'test'
             def chat(inner, messages):
                 workspace.store.put('sessions',key,{'draft':'等待时输入的新问题','note':'等待时保存的笔记','messages':[]})
-                return '细研磨增加表面积。[b0]'
+                return '细研磨增加表面积。[S1]'
         workspace.client = lambda: Client()
         job={'cancel':threading.Event()}
         workspace.work(job,'chat',{'article_id':article['id'],'object_id':obj['id'],'question':'为什么？'})

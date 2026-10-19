@@ -1,0 +1,105 @@
+from contextlib import closing
+from pathlib import Path
+import io
+import tempfile
+import unittest
+import zipfile
+from app.db import Database
+from app.workspace_store import WorkspaceStore
+from app.workspace_sync import synchronize
+from app.workspace_server import parse_file
+
+
+class SharedReadingTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = WorkspaceStore(Path(self.temp.name))
+        self.native = Database(Path(self.temp.name)/'explorer_dict.sqlite3')
+
+    def tearDown(self):
+        self.native.close()
+        self.temp.cleanup()
+
+    def capture(self):
+        batch = self.native.create_batch('来源')
+        eid = self.native.add_entry(batch_id=batch,term='术语',context='原文中的术语含义。',source_title='外部文章')
+        self.native.update_entry(eid,explain_status='ok',detail='模型解释',one_line='解释摘要')
+        self.native.add_chat_turn(entry_id=eid,role='user',content='追问')
+        self.native.add_chat_turn(entry_id=eid,role='assistant',content='回答')
+        return eid
+
+    def session(self):
+        article = self.store.article(self.store.summaries()[0]['id'])
+        obj = article['objects'][0]
+        key = article['id']+':'+article['version']+':'+obj['id']
+        return article,obj,key
+
+    def test_capture_import_has_source_and_no_generated_personal_note(self):
+        eid = self.capture()
+        synchronize(self.store)
+        article,obj,key = self.session()
+        self.assertEqual(article['source_status'],'selection_fragment')
+        self.assertEqual(obj['note'],'')
+        self.assertEqual([m['content'] for m in self.store.get('sessions',key)['messages']],['模型解释','追问','回答'])
+        version = self.native.query_one('PRAGMA data_version')[0]
+        self.assertEqual(synchronize(self.store),0)
+        self.assertEqual(self.native.query_one('PRAGMA data_version')[0],version)
+        self.assertEqual(len(self.native.list_chat_turns(eid)),2)
+
+    def test_main_save_answer_and_chat_reach_float_without_duplicates(self):
+        article=self.store.import_article('本机文章',[{'type':'text','text':'一个术语。'}])
+        obj=self.store.object(article['id'],{'type':'term','title':'术语','block':'b0'})
+        self.store.update_object(obj['id'],{'saved':True,'note':'我的笔记'})
+        key=article['id']+':'+article['version']+':'+obj['id']
+        self.store.put('sessions',key,{'messages':[{'role':'user','content':'解释'},{'role':'assistant','content':'正文依据 [S1]','evidence':[{'citation':'S1'}]}],'draft':'草稿'})
+        synchronize(self.store)
+        synchronize(self.store)
+        self.assertEqual(len(self.store.summaries()),1)
+        entries=self.native.query('SELECT * FROM entries')
+        self.assertEqual(len(entries),1)
+        self.assertEqual(entries[0]['detail'],'正文依据 [S1]')
+        self.assertEqual(len(self.native.list_chat_turns(entries[0]['id'])),2)
+        result=self.store.get('sessions',key)
+        self.assertEqual(result['draft'],'草稿')
+        self.assertEqual(len(result['messages']),2)
+        self.assertEqual(result['messages'][1]['evidence'],[{'citation':'S1'}])
+        self.assertEqual(self.store.get('objects',obj['id'])['note'],'我的笔记')
+
+    def test_deletion_does_not_resurrect_and_can_save_again(self):
+        eid=self.capture(); synchronize(self.store)
+        _,obj,_=self.session()
+        self.native.delete_entry(eid)
+        synchronize(self.store); synchronize(self.store)
+        self.assertFalse(self.store.get('objects',obj['id'])['saved'])
+        self.assertEqual(self.native.query('SELECT * FROM entries'),[])
+        self.store.update_object(obj['id'],{'saved':True})
+        synchronize(self.store)
+        self.assertEqual(len(self.native.query('SELECT * FROM entries')),1)
+        self.store.update_object(obj['id'],{'saved':False})
+        synchronize(self.store); synchronize(self.store)
+        self.assertEqual(self.native.query('SELECT * FROM entries'),[])
+
+    def test_updates_keep_draft_and_note(self):
+        eid=self.capture(); synchronize(self.store)
+        _,obj,key=self.session()
+        self.store.update_session(key,{'draft':'未发送','note':'个人笔记'})
+        self.native.update_entry(eid,detail='新解释')
+        self.native.add_chat_turn(entry_id=eid,role='assistant',content='补充回答')
+        synchronize(self.store)
+        result=self.store.get('sessions',key)
+        self.assertEqual(result['draft'],'未发送')
+        self.assertEqual(result['note'],'个人笔记')
+        self.assertEqual(result['messages'][0]['content'],'新解释')
+        self.assertEqual(result['messages'][-1]['content'],'补充回答')
+
+    def test_model_configuration_is_shared(self):
+        self.store.save_config({'base_url':'https://example.com/v1','model':'test-model','key':'isolated-key'})
+        self.assertEqual(self.native.get_secret('api_key'),'isolated-key')
+        self.native.set_setting('api.model','updated-model')
+        self.assertEqual(self.store.model_config()['model'],'updated-model')
+
+    def test_docx_without_relationship_part(self):
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,'w') as z:
+            z.writestr('word/document.xml','<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>正文</w:t></w:r></w:p></w:body></w:document>')
+        self.assertEqual(parse_file(self.store,'text.docx',out.getvalue()),[{'type':'text','text':'正文'}])
