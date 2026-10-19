@@ -22,6 +22,7 @@ from .api_client import DeepSeekClient, ApiError
 from . import article_map
 from .retrieval import SourceIndex, referenced_evidence
 from .visual_index import VisualIndex
+from . import reading_preferences
 
 
 def parse_file(store, name, raw):
@@ -333,7 +334,7 @@ def make_handler(workspace, token):
             workspace.last_seen = time.monotonic()
             try:
                 if path == '/api/state':
-                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'build': '2026.10.15-reading-6'})
+                    self.send({'articles': workspace.store.summaries(), 'config': workspace.config(), 'preferences':reading_preferences.load(workspace.store.directory), 'sync_error':workspace.sync_error, 'build': '2026.10.19-initial'})
                 elif path == '/api/capture/status':
                     from .capture_bridge import status
                     self.send(status())
@@ -444,6 +445,8 @@ def make_handler(workspace, token):
                     self.send({'ok':True})
                 elif path == '/api/settings':
                     s.save_config(body); self.send(workspace.config())
+                elif path == '/api/preferences':
+                    self.send(reading_preferences.save(s.directory,body))
                 elif path in {'/api/chat','/api/map','/api/detect','/api/index-images'}:
                     self.send(workspace.start(path.rsplit('/',1)[1],body))
                 elif path == '/api/cancel':

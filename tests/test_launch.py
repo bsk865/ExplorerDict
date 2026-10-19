@@ -39,8 +39,8 @@ class TestRealLaunch(unittest.TestCase):
                              f"启动自检失败\nSTDOUT:\n{out}\nSTDERR:\n{err}")
             self.assertNotIn("[FAIL]", out)
             # 关键：呼出热键必须单独通过（不能因为其它热键成功就算通过）
-            required_checks = ["数据库", "主窗口", "操作浮条", "浮条不抢焦点", "浮条默认置顶",
-                               "解释结果窗", "前台门控", "鼠标钩子",
+            required_checks = ["数据库", "主窗口", "阅读面板（小方块 + 浮窗同一窗口）", "面板不抢焦点", "浮窗默认置顶",
+                               "面板折叠为小方块", "追问发送", "前台门控", "鼠标钩子",
                                "呼出热键 Ctrl+Alt+Shift+D", "UIA helper", "前台监视"]
             for name in required_checks:
                 line = next((l for l in out.splitlines() if name in l), "")

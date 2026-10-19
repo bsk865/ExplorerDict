@@ -21,3 +21,4 @@ body[data-page=work] main{display:flex;flex-direction:column;height:calc(100vh -
 @media(max-width:720px){.assistant-welcome .sample-suggestions button:nth-child(n+2){display:none}}
 .reference-highlight{background:var(--accent-soft,#f2dfce);color:inherit;border-radius:2px;box-shadow:0 1px 0 var(--accent,#a36143)}
 .reference-picture{position:relative;display:inline-block;max-width:100%;line-height:0}.reference-picture .reference-image{display:block;margin:0;width:100%;max-height:none}.reference-region{position:absolute;border:2px solid var(--accent,#a36143);background:#a3614320;pointer-events:none}
+.reference-quote{background:var(--quiet);color:var(--ink);border-left-color:var(--accent-line)}

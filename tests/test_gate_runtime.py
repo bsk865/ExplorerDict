@@ -94,6 +94,7 @@ class TestGateRuntime(unittest.TestCase):
                 theme.init(root, 96)
                 db = Database(paths.db_path())
                 config = Config(db)
+                config.set_overlay_topmost_consent(True)  # 本用例验证用户选择置顶后的门控
                 bid = db.create_batch("【测试数据】门控用例", "url:https://t.example.com/x",
                                       "url_document")
                 db.add_entry(batch_id=bid, term="【测试数据】术语", context="测试上下文",

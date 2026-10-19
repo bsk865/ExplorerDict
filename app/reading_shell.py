@@ -26,6 +26,7 @@ from .paths import data_dir, project_root
 from .activation import ActivationReceiver
 from .single_instance import SingleInstance, data_dir_digest
 from . import capture_bridge
+from . import reading_preferences
 from .workspace_server import Workspace, make_handler
 
 
@@ -94,6 +95,23 @@ class ReadingWindow(QWidget):
         self.shortcut = QShortcut(QKeySequence('Alt+F4'), self)
         self.shortcut.activated.connect(self.close)
         self.view.load(QUrl(url))
+        self._appearance = None
+        self.appearance_timer = QTimer(self)
+        self.appearance_timer.timeout.connect(self.refresh_appearance)
+        self.appearance_timer.start(1000)
+        self.refresh_appearance()
+
+    def refresh_appearance(self):
+        if self.closed:
+            return
+        appearance = reading_preferences.load(data_dir())
+        if appearance == self._appearance:
+            return
+        colors = reading_preferences.colors(appearance['palette'],appearance['mode'])
+        bg,ink,hover,accent = (colors.get(k,fallback) for k,fallback in
+                              [('bg','#f7f2ea'),('ink','#40342d'),('soft','#f1e6d9'),('accent','#9d5c43')])
+        self.setStyleSheet(f'QWidget{{background:{bg};color:{ink};font-family:"Microsoft YaHei UI";}} QLabel{{font-size:12px;}} QPushButton{{border:0;border-radius:6px;font-size:19px;}} QPushButton:hover{{background:{hover};}} QPushButton#close:hover{{background:{accent};color:{bg};}}')
+        self._appearance = appearance
 
     def open_source(self, request):
         if request.isUserInitiated() and request.requestedUrl().scheme() in {'https', 'http'}:

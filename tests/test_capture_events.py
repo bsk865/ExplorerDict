@@ -172,7 +172,7 @@ class TestSelectionOnlyClassContract(_AppCase):
             self.assertEqual(self.db.count_entries(), 0, "划选绝不落库")
             self.assertEqual(self.db.list_batches(), [], "划选绝不建批次")
             self.assertTrue(self.app.selection_bar.visible, "划选后必须弹出浮条")
-            self.assertEqual(self.app.selection_bar.term_label.cget("text"), "alpha")
+            self.assertEqual(self.app.selection_bar.quote_label.cget("text"), "「alpha」")
             self.assertEqual(self.app.selection_bar.btn_action.cget("text"), "解释并记录")
             self.assertFalse(hasattr(self.app.selection_bar, "btn_record"),
                              "浮条不得再有独立的「记录」按钮")
@@ -187,7 +187,8 @@ class TestSelectionOnlyClassContract(_AppCase):
 
             self.press(900, 900, overlay=False)
             self.pump_events()
-            self.assertFalse(self.app.selection_bar.visible, "点别处必须收起浮条")
+            self.assertTrue(self.app.selection_bar.visible, "外部点击只作废选区，不改变浮窗显隐")
+            self.assertIsNone(self.app.current_selection(), "外部点击必须作废待处理选区")
             self.assertEqual(self.db.count_entries(), 0, "收起浮条不得保存")
             self.assertEqual(MOUSE_HOOK_INSTALLS, [], "不得安装真实全局鼠标钩子")
 
@@ -216,7 +217,8 @@ class TestUnifiedButtonIntegration(_AppCase):
         self.assertEqual(self.db.list_entries()[0]["term"], "alpha")
         self.assertEqual(calls, [(int(entry_id), False)], "随后必须解释同一个 entry_id")
         self.assertEqual(self.app.explain_window.entry_id, int(entry_id))
-        self.assertFalse(self.app.selection_bar.visible, "点按钮后浮条收起")
+        self.assertTrue(self.app.selection_bar.visible, "解释在同一个阅读浮窗显示")
+        self.assertIs(self.app.selection_bar, self.app.explain_window)
 
     def test_no_key_records_and_shows_pending_entry(self):
         with foreground(app="msedge.exe"):

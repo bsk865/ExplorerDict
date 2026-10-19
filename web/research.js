@@ -1,5 +1,19 @@
 /* Source-grounded reading: scope choice and verifiable citation previews. */
 state.researchScope = 'article';
+function acceptPreferences(value) {
+  if (!value || state.preferenceSaving) return;
+  if (theme()===value.palette && (localStorage.getItem('reading-theme')||'light')===value.mode) return;
+  localStorage.setItem('reading-palette',value.palette);
+  localStorage.setItem('reading-theme',value.mode);
+  applyTheme();
+}
+async function savePreferences(value) {
+  state.preferenceSaving=true;
+  let saved;
+  try {saved=await api('preferences',value);}
+  finally {state.preferenceSaving=false;}
+  acceptPreferences(saved);
+}
 function quoteBlock(quote) {
   const blocks=state.article.blocks;
   const exact=blocks.find(b=>(b.text||b.caption||'').includes(quote));
@@ -55,6 +69,11 @@ document.addEventListener('click',event=>{
 });
 const researchDispatch = dispatch;
 dispatch = async function(action) {
+  if (action === 'night') {
+    await savePreferences({palette:theme(),mode:document.documentElement.dataset.theme==='dark'?'light':'dark'});
+    settings();
+    return;
+  }
   if (action === 'map-fit') {
     const view=$('#map-viewport');
     if (view && state.layout) {

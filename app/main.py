@@ -2128,6 +2128,12 @@ class App:
                     version = self.db.query_one('PRAGMA data_version')[0]
                     if version != getattr(self, '_reading_data_version', None):
                         self._reading_data_version = version
+                        from . import reading_preferences
+                        appearance=reading_preferences.from_database(self.db)
+                        if appearance != getattr(self,'_reading_appearance',None):
+                            from .ui import reading_style
+                            reading_style.apply(self.root,panel,reading_preferences.colors(appearance['palette'],appearance['mode']))
+                            self._reading_appearance=appearance
                         panel.refresh_terms()
                         if panel.entry_id and not panel._chat_busy:
                             panel._reload_chat()
@@ -2491,7 +2497,12 @@ def build_app(root: tk.Tk, window_title: str | None = None) -> App:
     theme.init(root, w32.get_system_dpi())
     db = Database(paths.db_path())
     config = Config(db)
+    from . import reading_preferences
+    from .ui import reading_style
+    appearance=reading_preferences.from_database(db)
+    reading_style.palette(reading_preferences.colors(appearance['palette'],appearance['mode']))
     app = App(root, db, config)
+    app._reading_appearance=appearance
     # 主界面**不再挂原生菜单栏**：功能键只在自绘工具条里出现一组，
     # 「退出」也只有工具条右端那一个入口（见 MainWindow._build_toolbar）。
     # 词典主窗口默认 **withdraw**：阅读时只留小方块在屏幕上；

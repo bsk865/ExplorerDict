@@ -102,11 +102,11 @@ class TestExplainResultScoping(_AppCase):
     def test_result_for_other_entry_does_not_touch_window(self):
         """窗口展示 B；A 的结果回来 → 窗口归属不变、内容不变，A 的卡片刷新。"""
         self.show_entry(self.eid_b, "beta")
-        body_before = self.app.explain_window._body_text()
+        body_before = self.app.explain_window.def_text.get("1.0", "end-1c")
         self._deliver_ok(self.eid_a, "A 的一句话")
 
         self.assertEqual(self.app.explain_window.entry_id, self.eid_b, "窗口归属不得被改写")
-        self.assertEqual(self.app.explain_window._body_text(), body_before,
+        self.assertEqual(self.app.explain_window.def_text.get("1.0", "end-1c"), body_before,
                          "别的词条的结果不得改写窗口内容")
         row_a = self.db.get_entry(self.eid_a)
         self.assertEqual(row_a["one_line"], "A 的一句话", "结果必须写进它自己的词条")
@@ -115,7 +115,7 @@ class TestExplainResultScoping(_AppCase):
     def test_result_for_own_entry_updates_window(self):
         self.show_entry(self.eid_a, "alpha")
         self._deliver_ok(self.eid_a, "alpha 的一句话")
-        self.assertIn("alpha 的一句话", self.app.explain_window._body_text())
+        self.assertIn("alpha 的一句话", self.app.explain_window.def_text.get("1.0", "end-1c"))
         self.assertEqual(self.app.explain_window.status, "ok")
 
     def test_error_result_refreshes_card_and_window(self):
@@ -125,7 +125,7 @@ class TestExplainResultScoping(_AppCase):
         err = ApiError("auth", "Key 无效")
         self.app._ui_q.put(("explain_result", (self.eid_a, "error", None, err)))
         self.pump()
-        self.assertIn("解释失败", self.app.explain_window._body_text())
+        self.assertIn("解释失败", self.app.explain_window.def_text.get("1.0", "end-1c"))
         self.assertIn("解释失败", self.app.main.status_label.cget("text"))
 
     def test_hidden_window_is_not_reopened_by_late_result(self):
@@ -140,7 +140,7 @@ class TestExplainResultScoping(_AppCase):
     def test_switching_window_entry_clears_previous_explanation(self):
         self.show_entry(self.eid_a, "alpha")
         self._deliver_ok(self.eid_a, "A 的释义")
-        self.assertIn("A 的释义", self.app.explain_window._body_text())
+        self.assertIn("A 的释义", self.app.explain_window.def_text.get("1.0", "end-1c"))
 
         from tests.support import visibility_gate
 
@@ -149,7 +149,7 @@ class TestExplainResultScoping(_AppCase):
                                                   token=2, status="pending",
                                                   explicit=True)
         self.assertEqual(self.app.explain_window.entry_id, self.eid_b)
-        self.assertNotIn("A 的释义", self.app.explain_window._body_text(),
+        self.assertNotIn("A 的释义", self.app.explain_window.def_text.get("1.0", "end-1c"),
                          "切换词条后不得残留上一条的解释")
 
 
