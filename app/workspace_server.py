@@ -172,8 +172,10 @@ class Workspace:
                 job['result'] = result
             elif kind == 'map':
                 a = self.store.article(body['article_id'])
-                if not any(b['type'] == 'text' and b.get('text', '').strip() for b in a['blocks']):
-                    raise ValueError('这份资料只有图片。请先补充可提取的正文，再生成全文导图。')
+                has_images=any(b['type']=='image' for b in a['blocks'])
+                material=self.prepare_images([a],client,job,required=has_images)[0] if has_images else a
+                from . import multimodal_map
+                map_text,spans=multimodal_map.source_material(material)
                 words = list(dict.fromkeys(o['title'] for o in a['objects'] if o['type'] == 'term'))
                 job['message'] = '正在阅读全文、生成并复核；可能需要数分钟…'
                 def attempt(round_no, draft, issues, review):
@@ -183,10 +185,14 @@ class Workspace:
                         db.execute('INSERT INTO attempts VALUES(?,?,?)', (uid(), a['id'], json.dumps({'round': round_no, 'draft': draft, 'issues': issues, 'review': review}, ensure_ascii=False)))
                     job['message'] = f'第 {round_no} 轮复核' + ('，正在纠正问题…' if issues else '完成')
                 from . import long_article_map
-                graph, quality = long_article_map.run(self.store,client,text=a['text'],title=a['title'],version=a['version'],
+                graph, quality = long_article_map.run(self.store,client,text=map_text,title=a['title'],version=a['version'],
                     signature=self.config()['signature'],selected_words=words,cancel=job['cancel'],
                     progress=lambda message:job.update(message=message),on_attempt=attempt)
                 graph['selected_words'] = words
+                multimodal_map.attach_evidence(graph,map_text,spans)
+                if has_images:
+                    quality['image_review']=multimodal_map.review_images(self.store,client,material,graph,job['cancel'],lambda message:job.update(message=message))
+                    quality['evidence_kind']='text_and_reviewed_images'
                 with self.store.lock:
                     if not job['cancel'].is_set():
                         a['map'], a['quality'] = graph, quality

@@ -31,7 +31,28 @@ const researchMapAside = renderMapAside;
 renderMapAside = function() {
   researchMapAside();
   if (state.article.map?.segments) $('#map-aside').insertAdjacentHTML('afterbegin',`<p class="modal-note">全文分 ${state.article.map.segments} 段研读 · 按原文顺序展开</p>`);
+  const graph=state.article.map;
+  if (graph?.visual_sources) {
+    $('#map-aside').insertAdjacentHTML('afterbegin','<p class="modal-note">含图片内容 · 已对照原图核对</p>');
+    for (const button of document.querySelectorAll('#map-aside [data-quote]')) {
+      const item=[...graph.nodes,...graph.relations].find(n=>n.quote===button.dataset.quote && n.evidence?.some(e=>e.kind==='image'));
+      if (!item) continue;
+      button.removeAttribute('data-quote');button.dataset.mapEvidence=item.id;button.textContent='查看原图依据';
+    }
+  }
 };
+document.addEventListener('click',event=>{
+  const button=event.target.closest('[data-map-evidence]');
+  if (!button) return;
+  const graph=state.article.map;
+  const item=[...graph.nodes,...graph.relations].find(n=>n.id===button.dataset.mapEvidence);
+  if (!item) return;
+  const images=item.evidence.filter(e=>e.kind==='image');
+  modal('图片依据',`<h3>${esc(state.article.title)}</h3><p class="modal-note">以下内容由图片识别生成，并经过原图核对。</p><blockquote class="reference-quote">${esc(item.quote)}</blockquote>${images.map(e=>`<p>${e.page?'第 '+e.page+' 页':'原文图片'}</p><img class="reference-image" src="${asset(e.asset)}" alt="导图依据的原图"><button data-cite="${e.block}" data-close-map-evidence>在原文中定位</button>`).join('')}`);
+});
+document.addEventListener('click',event=>{
+  if(event.target.closest('[data-close-map-evidence]')) $('#dialog').close();
+});
 const researchDispatch = dispatch;
 dispatch = async function(action) {
   if (action === 'map-fit') {
