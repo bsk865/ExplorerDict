@@ -1,5 +1,12 @@
 /* Source-grounded reading: scope choice and verifiable citation previews. */
 state.researchScope = 'article';
+const fragmentSource = sourceHTML;
+sourceHTML = function () {
+  const html = fragmentSource();
+  return state.article?.source_status === 'selection_fragment'
+    ? html.replace('<div class="paper-tools">','<p class="source-fragment-note">以下内容来自同一篇文章的划选片段，尚未取得完整原文。</p><div class="paper-tools">')
+    : html;
+};
 function acceptPreferences(value) {
   if (!value || state.preferenceSaving) return;
   if (theme()===value.palette && (localStorage.getItem('reading-theme')||'light')===value.mode) return;
@@ -104,7 +111,11 @@ dispatch = async function(action) {
     return;
   }
   await researchDispatch(action);
-  if (action === 'article-info') $('#dialog .actions').insertAdjacentHTML('beforeend',button('delete-article','删除资料'));
+  if (action === 'article-info') {
+    $('#dialog .actions').insertAdjacentHTML('beforeend',button('delete-article','删除资料'));
+    const history=state.article.capture_history || [];
+    if(history.length) $('#dialog-body').insertAdjacentHTML('beforeend',`<details class="capture-history"><summary>此前片段与导图 · ${history.length}</summary><p>归并前的原文依据与导图保留在这里。</p>${history.map((item,i)=>`<button type="button" data-history-source="${esc(item.id)}">片段 ${i+1}${item.has_map?' · 含导图':''}</button>`).join('')}</details>`);
+  }
   if (action === 'article-info' && state.article.blocks.some(b=>b.type==='image')) {
     $('#dialog .actions').insertAdjacentHTML('beforeend',button('index-images','识别图文内容'));
     $('#dialog .actions').insertAdjacentHTML('afterend','<p class="modal-note">首次提问会识别相关资料中的图片，也可以提前识别。结果保存在本机，可随时停止。</p>');
@@ -134,6 +145,13 @@ renderWork = function () {
 };
 
 document.addEventListener('click', event => {
+  const history = event.target.closest('[data-history-source]');
+  if(history){
+    referenceReturn={article:state.article.id,object:state.object?.id || null};
+    $('#dialog').close();
+    openArticle(history.dataset.historySource).catch(error=>toast(error.message));
+    return;
+  }
   const button = event.target.closest('[data-rag-cite]');
   if (!button) return;
   const message = state.session.messages[Number(button.dataset.ragMessage)];

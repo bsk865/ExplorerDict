@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from contextlib import closing
 from .db import Database
+from .capture_documents import document_identity, consolidate
 
 
 def _upgrade_source(store, native, entry, link):
@@ -21,7 +22,7 @@ def _upgrade_source(store, native, entry, link):
     if not source or not source['text'] or obj['title'] not in source['text'] or source['text'] == old['text']:
         return False
     article = store.import_article(source['title'] or entry['source_title'],
-        [{'type':'text','text':source['text']}], origin='capture')
+        [{'type':'text','text':source['text'],'capture_document':document_identity(entry)}], origin='capture')
     article.update(source_url=entry['source_url'], source_status='legacy_text')
     old_prefix = old['id'] + ':' + old['version'] + ':'
     new_prefix = article['id'] + ':' + article['version'] + ':'
@@ -75,7 +76,7 @@ def synchronize(store):
             if entry['term'] not in text:
                 text = entry['term'] + '\n' + text
             title = (source['title'] if full else entry['source_title']) or '划选片段'
-            article = store.import_article(title if full else title + ' · 划选片段', [{'type':'text','text':text}], origin='capture')
+            article = store.import_article(title if full else title + ' · 划选片段', [{'type':'text','text':text,'capture_document':document_identity(entry)}], origin='capture')
             article.update(source_url=entry['source_url'], source_status='legacy_text' if full else 'selection_fragment')
             store.update_article(article)
             obj = store.object(article['id'], {'type':'term','title':entry['term'],'block':'b0'})
@@ -85,6 +86,7 @@ def synchronize(store):
                 db.execute('INSERT OR REPLACE INTO capture_links VALUES(?,?,?)',
                     (eid,obj['id'],json.dumps(links[eid],ensure_ascii=False)))
             changed += 1
+        changed += consolidate(store, entries, links)
         # Export saved words using a deterministic identity. Repeating a sync
         # never increments the capture count or duplicates an entry.
         linked = {link['object_id'] for link in links.values()}

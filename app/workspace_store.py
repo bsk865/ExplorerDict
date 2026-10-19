@@ -65,6 +65,11 @@ class WorkspaceStore:
     def update_article(self, article):
         article = {k: v for k, v in article.items() if k != 'objects'}
         with self.connect() as db:
+            current = db.execute('SELECT payload FROM articles WHERE id=?',(article['id'],)).fetchone()
+            if current:
+                archived = json.loads(current[0]).get('superseded_by')
+                if archived:
+                    article['superseded_by'] = archived
             db.execute('UPDATE articles SET payload=? WHERE id=?', (json.dumps(article, ensure_ascii=False), article['id']))
 
     def image(self, raw):
