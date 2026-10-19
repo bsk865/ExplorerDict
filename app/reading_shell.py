@@ -144,6 +144,9 @@ class ReadingWindow(QWidget):
 
 
 def main():
+    verify = '--verify-window' in sys.argv
+    if verify and not os.environ.get('EXPLORER_DICT_DATA_DIR'):
+        raise RuntimeError('Window verification requires an isolated data directory')
     directory = data_dir()
     identity = 'Local\\ExplorerDict.Reader.' + data_dir_digest(directory)
     guard = SingleInstance(name=identity)
@@ -151,16 +154,16 @@ def main():
         capture_bridge.signal_event(identity + '.Show')
         return
     receiver = ActivationReceiver(name=identity + '.Show'); receiver.create()
-    session = directory / 'workspace-session-v6.json'
+    session = directory / 'workspace-session-v7.json'
     session.unlink(missing_ok=True)
     command = [sys.executable, '--headless'] if getattr(sys, 'frozen', False) else [sys.executable, str(project_root() / 'reading_desktop.py'), '--headless']
     server_process = subprocess.Popen(command, cwd=project_root(), env={**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT':'1'}, creationflags=0x08000000)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     try:
-        for _ in range(80):
+        for _ in range(200):
             try:
                 record = json.loads(session.read_text(encoding='utf-8'))
-                if record['pid'] != server_process.pid:
+                if getattr(sys, 'frozen', False) and record['pid'] != server_process.pid:
                     raise ValueError('Stale server')
                 url = record['url']
                 opener.open(url, timeout=1).close()
@@ -185,6 +188,9 @@ def main():
             window.showNormal(); window.raise_(); window.activateWindow()
     timer.timeout.connect(show_requested); timer.start(200)
     capture_bridge.start_on_launch()
+    if verify:
+        from .reading_verify import verify_window
+        verify_window(window, directory)
     window.show()
     try:
         qt.exec()

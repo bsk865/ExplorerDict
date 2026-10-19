@@ -37,7 +37,7 @@ def stop_existing():
 def stop_and_wait(timeout=8):
     """Closing immediately after startup must also stop a still-initializing companion."""
     deadline = time.monotonic() + timeout
-    while running():
+    while running() or (_launch is not None and _launch.poll() is None):
         stop_existing()
         if time.monotonic() >= deadline:
             return False

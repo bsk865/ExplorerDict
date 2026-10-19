@@ -22,7 +22,7 @@ class SharedReadingTests(unittest.TestCase):
 
     def capture(self):
         batch = self.native.create_batch('来源')
-        eid = self.native.add_entry(batch_id=batch,term='术语',context='原文中的术语含义。',source_title='外部文章')
+        eid = self.native.add_entry(batch_id=batch,term='术语',context='原文中的术语含义。',source_title='外部文章',doc_key='test-document')
         self.native.update_entry(eid,explain_status='ok',detail='模型解释',one_line='解释摘要')
         self.native.add_chat_turn(entry_id=eid,role='user',content='追问')
         self.native.add_chat_turn(entry_id=eid,role='assistant',content='回答')
@@ -97,6 +97,35 @@ class SharedReadingTests(unittest.TestCase):
         self.assertEqual(self.native.get_secret('api_key'),'isolated-key')
         self.native.set_setting('api.model','updated-model')
         self.assertEqual(self.store.model_config()['model'],'updated-model')
+
+    def test_late_full_source_preserves_identity_notes_draft_and_citations(self):
+        from app.article_source import Article
+        eid = self.capture()
+        synchronize(self.store)
+        old, obj, key = self.session()
+        self.store.update_object(obj['id'], {'note':'我的批注','understood':True})
+        session = self.store.get('sessions',key)
+        session['draft'] = '尚未发送'
+        session['messages'][-1]['evidence'] = [{'article_id':old['id'],'quote':'术语'}]
+        self.store.put('sessions',key,session)
+        self.store.update_session(old['id']+':'+old['version']+':', {'note':'全文笔记'})
+        entry = self.native.get_entry(eid)
+        self.native.put_article(entry['doc_key'], Article(ok=True,title='完整原文',text='前言。原文中的术语含义。后续完整段落。'))
+        synchronize(self.store)
+        article, current, new_key = self.session()
+        self.assertEqual(article['source_status'],'legacy_text')
+        self.assertEqual(current['id'],obj['id'])
+        self.assertEqual(current['note'],'我的批注')
+        self.assertTrue(current['understood'])
+        self.assertEqual(self.store.get('sessions',new_key),session)
+        self.assertEqual(self.store.get('sessions',article['id']+':'+article['version']+':')['note'],'全文笔记')
+        self.assertEqual(self.store.article(old['id'])['text'],old['text'])
+        self.assertEqual(synchronize(self.store),0)
+        self.assertEqual(len(self.native.query('SELECT * FROM entries')),1)
+        self.store.delete_articles(self.store.related_versions(article['id']))
+        synchronize(self.store)
+        self.assertEqual(self.store.summaries(),[])
+        self.assertEqual(self.native.query('SELECT * FROM entries'),[])
 
     def test_remove_article_clears_linked_capture_and_keeps_other_material(self):
         self.capture(); synchronize(self.store)

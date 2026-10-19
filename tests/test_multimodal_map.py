@@ -73,4 +73,6 @@ class MultimodalMapTests(unittest.TestCase):
             self.w.work(job,'map',{'article_id':self.a['id']})
         self.assertEqual(job['status'],'error')
         self.assertEqual(self.store.article(self.a['id'])['map'],{'old':'keep'})
-        with self.store.connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM visual_index').fetchone()[0],0)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM visual_index').fetchone()[0],0)
+            self.assertIn('不能确认形状',db.execute('SELECT payload FROM attempts').fetchone()[0])

@@ -9,6 +9,40 @@ from contextlib import closing
 from .db import Database
 
 
+def _upgrade_source(store, native, entry, link):
+    """Rebind a captured object when full text arrives, retaining evidence snapshots."""
+    obj = store.get('objects', link['object_id'])
+    if not obj:
+        return False
+    old = store.article(obj['article_id'])
+    if old.get('source_status') != 'selection_fragment':
+        return False
+    source = native.query_one('SELECT * FROM articles WHERE doc_key=?', (entry['doc_key'],))
+    if not source or not source['text'] or obj['title'] not in source['text'] or source['text'] == old['text']:
+        return False
+    article = store.import_article(source['title'] or entry['source_title'],
+        [{'type':'text','text':source['text']}], origin='capture')
+    article.update(source_url=entry['source_url'], source_status='legacy_text')
+    old_prefix = old['id'] + ':' + old['version'] + ':'
+    new_prefix = article['id'] + ':' + article['version'] + ':'
+    # Keep object identity, saved status and personal notes. Historical citations
+    # still point to the archived immutable fragment they actually used.
+    obj.update(article_id=article['id'], version=article['version'], block='b0')
+    session = store.get('sessions', old_prefix + obj['id'])
+    if session is not None:
+        store.put('sessions', new_prefix + obj['id'], session)
+    article_session = store.get('sessions', old_prefix)
+    if article_session and not store.get('sessions', new_prefix):
+        store.put('sessions', new_prefix, article_session)
+    store.update_article(article)
+    with store.connect() as db:
+        db.execute('UPDATE objects SET article_id=?,payload=? WHERE id=?',
+            (article['id'], json.dumps(obj, ensure_ascii=False), obj['id']))
+    old['superseded_by'] = article['id']
+    store.update_article(old)
+    return True
+
+
 def synchronize(store):
     config = store.get('settings','model',{})
     if config and not config.get('shared'):
@@ -32,6 +66,7 @@ def synchronize(store):
         # fragment and is never presented to retrieval as the complete article.
         for eid, entry in entries.items():
             if eid in links:
+                changed += int(_upgrade_source(store, native, entry, links[eid]))
                 continue
             source = native.query_one('SELECT * FROM articles WHERE doc_key=?', (entry['doc_key'],))
             text = source['text'] if source and source['text'] and entry['term'] in source['text'] else ''
@@ -59,6 +94,8 @@ def synchronize(store):
             if obj['type'] != 'term' or not obj.get('saved') or obj['id'] in linked:
                 continue
             article = store.article(obj['article_id'])
+            if article.get('superseded_by'):
+                continue
             doc_key = 'workspace:' + article['id']
             batch = native.find_batch_by_source(doc_key)
             bid = batch['id'] if batch else native.create_batch(article['title'], source_key=doc_key, source_kind='workspace')

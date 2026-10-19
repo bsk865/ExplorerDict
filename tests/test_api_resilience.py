@@ -183,6 +183,8 @@ class TestClassifications(unittest.TestCase):
     def test_network_stages_and_retryability(self):
         for reason, proxy, kind, retry in [
             (ssl.SSLCertVerificationError('certificate'), False, 'tls', False),
+            (ssl.SSLEOFError('unexpected EOF'), False, 'network', True),
+            (ssl.SSLError('handshake'), False, 'tls', False),
             (socket.gaierror(socket.EAI_NONAME, 'no name'), False, 'dns', False),
             (socket.gaierror(socket.EAI_AGAIN, 'try again'), False, 'dns', True),
             (ConnectionRefusedError(), True, 'proxy', False),

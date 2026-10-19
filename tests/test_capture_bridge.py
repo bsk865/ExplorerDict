@@ -55,6 +55,12 @@ class CaptureBridgeTests(unittest.TestCase):
         with patch.object(bridge, 'running', return_value=False):
             self.assertFalse(bridge.status()['ready'])
 
+    def test_close_waits_even_before_child_creates_mutex(self):
+        child = Mock(); child.poll.side_effect = [None, 0]
+        with patch.object(bridge, '_launch', child), patch.object(bridge, 'running', return_value=False), patch.object(bridge, 'stop_existing') as stop, patch.object(bridge.time, 'sleep'):
+            self.assertTrue(bridge.stop_and_wait())
+            stop.assert_called_once()
+
     def test_reveal_closes_event_even_on_failure(self):
         backend = Mock(); backend.open_event.return_value = (123, 0)
         backend.set_event.side_effect = OSError('unavailable')

@@ -161,6 +161,8 @@ def http_error(status: int | None, detail: str, *, retry_after: float | None = N
 
 def network_error(reason, *, using_proxy: bool, timeout: float) -> ApiError:
     # Don't put opaque exception strings (which may include credentials) in the UI.
+    if isinstance(reason, ssl.SSLEOFError):
+        return ApiError("network", "安全连接提前中断，请稍后重试", retryable=True, stage="tls")
     if isinstance(reason, ssl.SSLError):
         return ApiError("tls", "证书验证或安全连接失败，请检查系统时间和证书", stage="tls")
     if isinstance(reason, socket.gaierror):

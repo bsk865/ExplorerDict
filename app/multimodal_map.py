@@ -58,7 +58,11 @@ def review_images(store,client,article,graph,cancel,progress):
         result=article_map.parse_object(response)
         if result.get('approved') is not True or result.get('issues')!=[]:
             # A fresh retry must reread the actual image, not reuse a disputed description.
-            with store.connect() as db:db.execute('DELETE FROM visual_index WHERE asset=?',(block['asset'],))
+            with store.connect() as db:
+                db.execute('DELETE FROM visual_index WHERE asset=?',(block['asset'],))
+                from .workspace_store import uid
+                db.execute('INSERT INTO attempts VALUES(?,?,?)',(uid(),article['id'],json.dumps(
+                    {'stage':'image_review','block':block['id'],'review':result},ensure_ascii=False)))
             raise ValueError('导图与原图未能核对一致，原有导图已保留，请重试。')
         reports.append({'block':block['id'],'approved':True})
     return reports
