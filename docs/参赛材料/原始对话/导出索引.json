@@ -1,0 +1,1202 @@
+[
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-004",
+    "role": "user",
+    "timestamp": "2026-10-20T11:05:34.457Z",
+    "source_text_sha256": "fc9eadab53ca46ce447678fd119ee1fec64cd3f0a79c89dfe342b0568098d304",
+    "public_text_sha256": "e09f515e1a08fe5b693059e83c95a057aa4265e38be947d901588598b0fdd295"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-005",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:06:20.179Z",
+    "source_text_sha256": "3b6d7fb69d6ae94b2ea3ac3ee2aace46b8ae01ddfbe6462024d261345694fe54",
+    "public_text_sha256": "3b6d7fb69d6ae94b2ea3ac3ee2aace46b8ae01ddfbe6462024d261345694fe54"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-118",
+    "role": "user",
+    "timestamp": "2026-10-21T00:47:24.062Z",
+    "source_text_sha256": "828622ac5f80c7a5b212c9bcb40b497102b80e84551996e89c25ecd3e725509b",
+    "public_text_sha256": "7485527966588cd33375e1a074e81d0573f6c618a6231a3eb7b4e0991655bca7"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-119",
+    "role": "assistant",
+    "timestamp": "2026-10-21T00:47:33.378Z",
+    "source_text_sha256": "0f6ffd0f545e9efbe29e110c258cc775046a42cabeae9c4e92d8e93a4698919d",
+    "public_text_sha256": "08c40bcd2761d3d6b7d7a0f74c5bf9d075384ec0ba8c5a1a06f00d98cf19f416"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-120",
+    "role": "assistant",
+    "timestamp": "2026-10-21T00:53:38.887Z",
+    "source_text_sha256": "b7edcabbc9049ab8d58f1ed6d134aa559f71e5181b098918ffca7c39a9e99c4b",
+    "public_text_sha256": "59c4c16fdf6848712f394558cceec983f465a780448d5c3035f01e0c6eea74c0"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-121",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:01:22.009Z",
+    "source_text_sha256": "355f203b4956d0cbb140f27ffe879672e20e0025e50621fab08abe140a135ec3",
+    "public_text_sha256": "c3fe195c188528cc12afafc0caa12a6825837d2b5e007e552b3a366447455115"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-122",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:01:38.587Z",
+    "source_text_sha256": "d28591ad9b9da17e8362ebc57d724bfe00a662b70d903a88265449cff71e56f7",
+    "public_text_sha256": "50e70bb6be9a2d95ec15f26a559421553a156a970f8fa9ce7ab23f2301a263ad"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-123",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:03:14.420Z",
+    "source_text_sha256": "63f86e64102491b29612e40acf90fe6d5f0aafcff54023b3c63771c13059f7a0",
+    "public_text_sha256": "5f666b6750677b447009d632db68150ff4775cbafbbbbaa06a25b334389afef9"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-124",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:05:13.726Z",
+    "source_text_sha256": "999e17f9e91272b57d25720ebca9eedfe4166b97b50cf14873aa706ff3464cfd",
+    "public_text_sha256": "fb1c9f0a4b7faf09f9660cb04cde42c6a968d23dd2bf942f895e9973046884a2"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-125",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:08:29.833Z",
+    "source_text_sha256": "3c9a4d31d7cbe9ad1594ebb0b75fb4c11556080bee020174c1f8ccc89847b287",
+    "public_text_sha256": "5ce1627832ac6e9dd45883673636987d2b0fceff4597fe6158262739d52b5a88"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-126",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:09:26.364Z",
+    "source_text_sha256": "a8159c918a068f2edce7f8837ca2445142a4a6cf5f04a7a8e88942370c8c0dec",
+    "public_text_sha256": "ff10e12704c0671c258b58e5355cf29d81571ff7c3dfb46db6b3d38ba58211c0"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-127",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:11:01.883Z",
+    "source_text_sha256": "40583a855215d57dade3a323da4862350e3e2446670050955c23a9f6a21ac24e",
+    "public_text_sha256": "32821d6b01fa827e10870d84539cc5b947be94c7f89151a2f6ff811ccb49a668"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-128",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:13:32.284Z",
+    "source_text_sha256": "023bc733737cffb3d6825a6fbfbdaaba1c2c503a3ce27a54135e772650845af8",
+    "public_text_sha256": "7b85a81226afb98f566f997dde86b231ba3246fb15c363dfad681c249dc83531"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-129",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:16:08.794Z",
+    "source_text_sha256": "89cf4c3b6245ea898ab9ebe5be12381124b1c6f3e53d04b49cd380a74410deb4",
+    "public_text_sha256": "61d07a0ba17a8742de03cc0ceca430296782db8674cea43c68d268017b4ddcbe"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-130",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:17:56.448Z",
+    "source_text_sha256": "b1046d69b22dc62b5b45696bd742f3fac2325bb34350855e161fe1ace66f26bf",
+    "public_text_sha256": "cb406e3fbbe8fe433dcf50fe713d7ab09e0f51ee953ecae9db4a7245b3483d49"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-131",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:19:45.913Z",
+    "source_text_sha256": "44279c1c6e208dd1ed1c13d2fd0c9e4b0a1cf4c180588da04bdab0d8c944f0b2",
+    "public_text_sha256": "a3987805669f95afe580dcdb1a4c32ff8cc1fed8c79277c886237a391f624ed2"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-132",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:22:26.150Z",
+    "source_text_sha256": "d41992276b06c8bff0ef866f1a692bdef60e33a0ca8b1b32883649ef9dc53cb9",
+    "public_text_sha256": "6db9491b666b5bb8755909cd9b18be08145be305ec240d9c25d1cc61786ce5da"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-133",
+    "role": "user",
+    "timestamp": "2026-10-21T01:45:27.959Z",
+    "source_text_sha256": "75e84647a7700c44647778e88c0004793a68b457737c094a8528b972b1111a72",
+    "public_text_sha256": "0eae90ea9ef04b354d87ae14a994bdce654fbcb9aefcff18b977c741904da35b"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-134",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:45:38.473Z",
+    "source_text_sha256": "09df5c38efa26d8afcf6d3af1953810ef4a9f3e578fa9f59552487f56fafc9be",
+    "public_text_sha256": "f3b5bfab26411295e8dd85b7318a6e1320c1b63e4a38e8dae8846aa6dc3b544c"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-135",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:46:50.044Z",
+    "source_text_sha256": "fb0ac77094d64a06c84581749233d9c2452053c4e05bba858b194c5c605e8706",
+    "public_text_sha256": "fb0ac77094d64a06c84581749233d9c2452053c4e05bba858b194c5c605e8706"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "early-136",
+    "role": "user",
+    "timestamp": "2026-10-21T01:49:58.807Z",
+    "source_text_sha256": "f3626712bded9f18dc0f3a34a3060e0cb58ee0af0158cf6912c08dbd895eb27e",
+    "public_text_sha256": "035aadf3c6fae3c77831817528f42ff430d36e98a74794b4d2a9f71acc035f7c"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-000",
+    "role": "user",
+    "timestamp": "2026-10-21T01:50:14.467Z",
+    "source_text_sha256": "b0c0d338ddbd90c0ea6e47ab1fa80e0548f2d52fbe1884deaf7336aabe4f2b33",
+    "public_text_sha256": "b0c0d338ddbd90c0ea6e47ab1fa80e0548f2d52fbe1884deaf7336aabe4f2b33"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-001",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:50:23.030Z",
+    "source_text_sha256": "752ea3f3785f4a4e61b7e5dbf1c0728e8edfc05cb7300e514a8953076691537e",
+    "public_text_sha256": "c1358208471835385e46d9e0803f97ef9bef1a7d5ec745da980ce1d7b7881012"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-002",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:51:08.022Z",
+    "source_text_sha256": "ca068b782c1ab62e0fd721ab407606653df13f0f817b87d9ed58e230877406cf",
+    "public_text_sha256": "b4c5ebb1313487094494c924a66d7e3ded59cd7239283ac7ac33925f968f00ef"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-003",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:51:50.276Z",
+    "source_text_sha256": "b51e213416e9ca0dc9197c56a16cfcd323bb299790c0f3b81c9dcc0404510677",
+    "public_text_sha256": "c74f72112cb1dd919b15dd61e935988e8f25e0b7ac60130b745f11868d9c5d6d"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-004",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:53:50.675Z",
+    "source_text_sha256": "85e2639145c12eae7b467599ea83a4bc25e6e77c6ff3c3b8efbdc298b489cbcc",
+    "public_text_sha256": "1249aacc1351ed801b0fc23ad15f7327cd9b781cbb90053ef4ee6465f94e004a"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-005",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:55:16.630Z",
+    "source_text_sha256": "6f170414e274bca582131b9a8161fbf37a099e1f0528085d75193917baa65846",
+    "public_text_sha256": "192826e118378a23ba2fe2984ea1ff4f5f15ffcb5f2f7bc5c20099fd2a736f27"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-006",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:57:23.350Z",
+    "source_text_sha256": "6adbd81f756f90a402be3eb04ba037ee2982a921dcf8df7c4ff479ce6621638a",
+    "public_text_sha256": "0e675406cdd2cd5ac24af39ddba255874a96fa285fa66e60e3437ce72603c8a4"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-007",
+    "role": "user",
+    "timestamp": "2026-10-21T01:57:42.532Z",
+    "source_text_sha256": "94630157a3f8ec2fecfde527a443d7924487f339fe0669d3cfae821e85e20b7e",
+    "public_text_sha256": "63caa18daa3369bf6d6c2bc2ad45e06d7cd4e9f641dd755f69f37e37be46cdc6"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-008",
+    "role": "assistant",
+    "timestamp": "2026-10-21T01:58:07.524Z",
+    "source_text_sha256": "8afdd2aba25dc47364dff1d9ebbd6d348e40cfbf2818bd8b0b431e2d5a4c415f",
+    "public_text_sha256": "c5d8bbaa08cd13a91f3b5fc7f0439507c8cf1f3235f0def85f401080b51ea2c6"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-009",
+    "role": "assistant",
+    "timestamp": "2026-10-21T02:00:07.433Z",
+    "source_text_sha256": "0a9544c0c5bffceffe7286c9dab4e1d15ff7fbac3b9fd91bc8e35e0597614971",
+    "public_text_sha256": "5f1cc31b9ef84f4b91c663d4df8c18316a0febf835bf85d698159fb0c82f8403"
+  },
+  {
+    "chain": "A-本地RAG与本机分类",
+    "entry": "late-010",
+    "role": "assistant",
+    "timestamp": "2026-10-21T02:00:52.779Z",
+    "source_text_sha256": "269939c2a8fa90417c390ef8e8b70850a90b4ee4aa66a091b195d7a96d483ef2",
+    "public_text_sha256": "269939c2a8fa90417c390ef8e8b70850a90b4ee4aa66a091b195d7a96d483ef2"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-029",
+    "role": "user",
+    "timestamp": "2026-10-21T05:29:41.637Z",
+    "source_text_sha256": "f546fbe46a46c38de098ba110d8695b0fe1d1a39c478d11255060842530a7078",
+    "public_text_sha256": "a95313e24d4b7434bfe50fd83ea6f7c8af4eaa4e420d95bc8900aef5ee103dc4"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-030",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:29:56.802Z",
+    "source_text_sha256": "1c9cd72f049f673d77da865601f23b85664b22a6ec43ac060d4e89dc69a02bdc",
+    "public_text_sha256": "5212984fe2a3b6e9ba73a93e0de5508aeac378fff7687ceb8f191efc468e9608"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-031",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:31:26.646Z",
+    "source_text_sha256": "fbaabea2d11ac846f2a85a6c044d84ba18e91562032d6dd0498e0fd8bcba07f8",
+    "public_text_sha256": "ea2a4b4e62a39e8a11da877d6a577d8a139ea00ff02833862d9f1ef5c73bb6ea"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-032",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:34:55.105Z",
+    "source_text_sha256": "13f5833f8d802dace576df22554da8730eb6cc04eb137037662852bfb52115b3",
+    "public_text_sha256": "98c3601df6359bef3c75282512f1743b1d6d9247bf648bc022918c0cf700a8df"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-033",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:38:06.361Z",
+    "source_text_sha256": "56fadd3dad6a5bab9150a612422d36519efc82ec97864c7e5d719aafb2dba54f",
+    "public_text_sha256": "d19431e39c3213912e1de93fdc5472db95afd65b04e6d1ddb828078591793ddc"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-034",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:43:58.347Z",
+    "source_text_sha256": "988ddb9653f9f81d874724975ee8ca2008377f31a9ee13a212c52c357a91faac",
+    "public_text_sha256": "e8f4bf2a7359efd84ccd0f9a53866278ed12ef6723994e82d672e9cdbecafea4"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-035",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:45:38.010Z",
+    "source_text_sha256": "a993c1110bf07092770bb1f5bdc07d3cd59026afbf4d6134379e28828c1334e4",
+    "public_text_sha256": "14754708bf9994aebbfeccded929a74d50b3838d190979b98573bca3421a1ec5"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-036",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:48:32.568Z",
+    "source_text_sha256": "814f0ff34048640e02e46ea83cccaa1e1ea3da649de8e98bdba9a68ba48dda33",
+    "public_text_sha256": "1f132c0101feebe301beed76d49eae959c80a71246f9616e90bf490294990267"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-037",
+    "role": "assistant",
+    "timestamp": "2026-10-21T05:57:49.210Z",
+    "source_text_sha256": "e18fef25eee76fb8bfde80fff489b0befb8bd8a80f94ac36159c3a3eeb22db6f",
+    "public_text_sha256": "e18fef25eee76fb8bfde80fff489b0befb8bd8a80f94ac36159c3a3eeb22db6f"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-038",
+    "role": "user",
+    "timestamp": "2026-10-21T06:15:41.190Z",
+    "source_text_sha256": "e5dbc65ab4ed6caac33dea8528ed53b0e52af329253aff4eeac0b6bef61a55df",
+    "public_text_sha256": "927afb005699213157c67ca2f63a56e3a0adfd7c01c704c22611f0f0d505cf87"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-039",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:15:51.675Z",
+    "source_text_sha256": "75fb288f3b796cff369716016638acb34555aedf9f5cc1f693a6850845df0c06",
+    "public_text_sha256": "dd57558660102a6c9a9c703d2ac79a9bd495a5b7bb74e37cf5e289207d0b45ae"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-040",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:17:04.459Z",
+    "source_text_sha256": "1276ffec95bd1e9082444ac59e1322f70fc4adcbe6f8ee0b47c4f1d1416f41a2",
+    "public_text_sha256": "1276ffec95bd1e9082444ac59e1322f70fc4adcbe6f8ee0b47c4f1d1416f41a2"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-041",
+    "role": "user",
+    "timestamp": "2026-10-21T06:27:45.722Z",
+    "source_text_sha256": "41e479e732c1b8439c9244f25d3eafed404bdc750c2ad97f3ef9f4cd9e13584c",
+    "public_text_sha256": "a351e26cf1cb07482caf2c56ad3ae0b9f625f67d3dfa5c854c2478a21e0b4033"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-042",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:27:57.339Z",
+    "source_text_sha256": "8336ecc0425c6d28cae0d82ac657ea2b0cd0c435f45cc57598b62ce357bc8e8e",
+    "public_text_sha256": "bd4137516befed545d2a7d956596cd845719feec021a3ebbf5b491f73505d429"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-043",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:30:32.336Z",
+    "source_text_sha256": "991fbf8367953175d89362bf346f56044b22391692066ca1e5db460e7a2742e5",
+    "public_text_sha256": "e408de393ccd643dcf793c5791752ba7257811e75c02f84f6319b05ccb3a2108"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-044",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:39:33.646Z",
+    "source_text_sha256": "8633f26a2eb6fff56c6d579fb715c1ada848a1fb9b055df1c0425499ddb90234",
+    "public_text_sha256": "32f8b82a73d96441ce92906cb8ad2440ba1332d45b862c40187655598044a0a0"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-045",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:55:30.662Z",
+    "source_text_sha256": "b21e60ff8ec9a054ede5c91ad5fa5d826f5a85ce9142c900e815695e97368a37",
+    "public_text_sha256": "99208e47b16642beecbcd7316070f73e703e0e4dd39d5162cbbd9ff243d1b8b8"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-046",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:56:28.774Z",
+    "source_text_sha256": "16c781e83445c99d133b807dc8bab93f193e15e224dbdf5003a2d06e6eaabf38",
+    "public_text_sha256": "67296aaa2c136a8f5add97a6e8678f63f62eafd833152186b07817cd09b48eb2"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-047",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:57:06.334Z",
+    "source_text_sha256": "b2280a400683ded889d3cbba80528367a135a0f3a0cbacf363f694151b3e9c8e",
+    "public_text_sha256": "90af306d677ef7fc5012c0eebe7fec6e542d007ab10a74ae873627f6b763ac1a"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-048",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:58:08.759Z",
+    "source_text_sha256": "59b505d1f142aea798cca6c3b4f59fe3362d90232bbcadaf695742f300088327",
+    "public_text_sha256": "f8bbe9ce512e3595f54d5a5b0bce9f5060aa4728ecf1ece3c935156474f35ddd"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-049",
+    "role": "assistant",
+    "timestamp": "2026-10-21T06:58:56.222Z",
+    "source_text_sha256": "d895ab6b39ca910ae61ed61b25b162a84fcdeabf5554e6549bbb3d215d4a53fa",
+    "public_text_sha256": "ab329610d245abe64d23749a9352095d9a8c0b52f639b4fc1ae37d08caa9766f"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-050",
+    "role": "assistant",
+    "timestamp": "2026-10-21T07:01:19.062Z",
+    "source_text_sha256": "4e9e121d9aa4efa5c9ddc784071112f7de2929f639de3e026aa33f581149c65e",
+    "public_text_sha256": "83acd01da40a357120cb10f271be8a4c25e5e7b59accf2abb1dd3ba223bca29f"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-051",
+    "role": "assistant",
+    "timestamp": "2026-10-21T07:02:08.362Z",
+    "source_text_sha256": "e01d8df1cf1fd717e1a4c524beedc3633d0852a2f338e5ad70cf0358747c25be",
+    "public_text_sha256": "80a0ac8dee6657d8c78436c86e82ff6135945bcad9bc87ee16dc91ac26af9c7d"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-052",
+    "role": "assistant",
+    "timestamp": "2026-10-21T07:03:21.501Z",
+    "source_text_sha256": "bc935f7d6ecb01590405b117593448d0689c9ca6dfecca16dc521d323e42c2f2",
+    "public_text_sha256": "6a8eddb542271577fa3728875636e37f184ac630f65aa89eedcfa7bd5f120c84"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-053",
+    "role": "assistant",
+    "timestamp": "2026-10-21T07:09:02.568Z",
+    "source_text_sha256": "ed94075310ab56cb4459e80cbcae6a035507f35fcf1f85d0c87e2964969b47a3",
+    "public_text_sha256": "7ebefa52df617148f73f34ef8e63a668d01656535ca96d701c8b752499a4dac3"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-054",
+    "role": "assistant",
+    "timestamp": "2026-10-21T07:09:30.238Z",
+    "source_text_sha256": "6a30aff9a69b21255156a68503bf1c8ca2c40840c523ac0fff3ae6c7a654291e",
+    "public_text_sha256": "6a30aff9a69b21255156a68503bf1c8ca2c40840c523ac0fff3ae6c7a654291e"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-062",
+    "role": "user",
+    "timestamp": "2026-10-21T09:52:02.261Z",
+    "source_text_sha256": "3941f04460a0d64b3c14d2dd1d6bded82d72454e6390e5761d1700fbb4c45e6e",
+    "public_text_sha256": "eadbc31756b751da4637c92767c8127ece52c74673251d3e2eaed30389cfe74c"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-063",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:52:13.754Z",
+    "source_text_sha256": "4f8fae1731ff8bc46304b8ddf03b1e4043a33d9242fd53419234601128d46acf",
+    "public_text_sha256": "108c9c81b32c50df90ca294c5e1241cb0d9f050837f261222cd8a0f7ec207b6f"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-064",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:53:33.118Z",
+    "source_text_sha256": "61f304afd630f11a0480229032d3b615a8fde8ca4976019287ea896150d50bef",
+    "public_text_sha256": "733452b30855848a890b23932fbba465b9c1000a0ba9fe5f1614eed04f7b9558"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-065",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:55:44.700Z",
+    "source_text_sha256": "9a7e2168402be7a160db4311258e9956a45866e0e90927fee7abf018311a1b2a",
+    "public_text_sha256": "08ab5a0f5e898facb47b50c5b33bf137d7bdf2c960f878b2577860197a509a3a"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-066",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:57:02.209Z",
+    "source_text_sha256": "c6ca4b84007c21d212d66961d2cb6918392b5816eba79be3e3ebd396bb3d64bd",
+    "public_text_sha256": "2caaab1977f6d01cf41ffb4863cf22741af58dd10d5660c3ddba3519b5d7283e"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-067",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:57:52.424Z",
+    "source_text_sha256": "040223370b44c16698bfeee665945cbcbafb270c15f0fe05d07aad45030d874f",
+    "public_text_sha256": "4ee0b5c082db1a4904824f32d25b1fcdaf3efdb81aed48a6923478d78d142f38"
+  },
+  {
+    "chain": "B-后台预读与请求重试",
+    "entry": "late-068",
+    "role": "assistant",
+    "timestamp": "2026-10-21T09:59:16.599Z",
+    "source_text_sha256": "df3f25669e9f968a4436453d87377ecea0f1d681d65c8a2e6258377102b39753",
+    "public_text_sha256": "df3f25669e9f968a4436453d87377ecea0f1d681d65c8a2e6258377102b39753"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-006",
+    "role": "user",
+    "timestamp": "2026-10-20T11:10:45.316Z",
+    "source_text_sha256": "d58cb964c0b1876f7dacb64d6c29fb2ef97746092694217c446070b257b85b79",
+    "public_text_sha256": "9adf60ede479aa72027117f61ffff40632322405da50c673e0ec45ee504d5d5c"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-007",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:12:41.137Z",
+    "source_text_sha256": "5cb453b666ea8ea9aef8dfc2961978c58cc1d3c4ae670b6efc0e58715cc3303a",
+    "public_text_sha256": "5cb453b666ea8ea9aef8dfc2961978c58cc1d3c4ae670b6efc0e58715cc3303a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-008",
+    "role": "user",
+    "timestamp": "2026-10-20T11:20:57.881Z",
+    "source_text_sha256": "c8a7616076eb3eb0d172292fb478ec9336d2c2716c3ffb2e6ace81a3eda410e8",
+    "public_text_sha256": "c8a7616076eb3eb0d172292fb478ec9336d2c2716c3ffb2e6ace81a3eda410e8"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-009",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:21:03.890Z",
+    "source_text_sha256": "a0e0230786ef4bb82f3105ff309272a893d0015b36f658ff9d3260822c27639a",
+    "public_text_sha256": "b9fe59a795717b0a91430503df59befcd268f36a3fbb1e07554957f2a54d522c"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-010",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:21:26.132Z",
+    "source_text_sha256": "7f6a24cea94284648f85be1e900801373be150d2a012893c597155fc3df872c5",
+    "public_text_sha256": "53c963537d81b1d4bc4c55dbd0fee2690ac6db15d62286980dd55c35ed020de0"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-011",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:21:43.233Z",
+    "source_text_sha256": "00723ee1247ca18bcf2c1f4a90d9177e390ef9a91e1286a94002a59eeddb11e7",
+    "public_text_sha256": "ecc4034ff9970f8d822b72ce7bdda9591ddd3e9da4abe1cc0cede15ab659c4f6"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-012",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:23:27.798Z",
+    "source_text_sha256": "e5dc83db065aca8a3f9247262307bd35993b4e74f26af9fc1d8924db1ca10865",
+    "public_text_sha256": "778884a74ae73d94ab75c0598a5ec90272e2f0b3a35d725fea612ef9229878a0"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-013",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:25:35.369Z",
+    "source_text_sha256": "c06fa7f8ed07b77324c5a75c9b85f78bfaf0515b154fb86b291c4d7cbc4d59cf",
+    "public_text_sha256": "c06fa7f8ed07b77324c5a75c9b85f78bfaf0515b154fb86b291c4d7cbc4d59cf"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-014",
+    "role": "user",
+    "timestamp": "2026-10-20T11:25:35.785Z",
+    "source_text_sha256": "eeb3299db0d81110014954353caa8d0acc93d8b10e688af675bfaf05a0ceec9d",
+    "public_text_sha256": "eeb3299db0d81110014954353caa8d0acc93d8b10e688af675bfaf05a0ceec9d"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-015",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:25:44.457Z",
+    "source_text_sha256": "313323e74fca845ff7a539ca878e6d09c6daa4b3fa6d9909781ae1d509b44598",
+    "public_text_sha256": "e4280291bfd2c3ace5708eb82d7b82e4058eb67aef0f2d1ae7bac849d947abf7"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-016",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:26:21.195Z",
+    "source_text_sha256": "680afd9b683728543656249908149e0c9cb952f1d1f35828d6f9ee0f717c3794",
+    "public_text_sha256": "ab24902ffb2b091cba5c3496518e87ad156538d078fdbc4463507f78ba2638b0"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-017",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:28:40.830Z",
+    "source_text_sha256": "ecca967054a5fc32b0a4bdeae263b9a48cde70625e7f0f1b43f0d8675ccf1c8b",
+    "public_text_sha256": "198babf676e8bcc9dfb631e3366b2e36697fb1e0a60fb8fc5b46438c6621909a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-018",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:29:36.059Z",
+    "source_text_sha256": "3262789c80272891c82b3ddf3a2f180cf2c7a6f512f688150714baf859b037e1",
+    "public_text_sha256": "160aa65e14b4357b87e63d36ff5615e4c8f13722f8c8dd0c89c0541e1fb7138a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-019",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:30:47.829Z",
+    "source_text_sha256": "58b94a49c309e15578e76205abc601379a0583d40a88dc9eb4637a21747ef69b",
+    "public_text_sha256": "0cb30866d476812a28d9ddc2500e71945b1892e96c2010aea21f196edf0fa1ac"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-020",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:33:28.667Z",
+    "source_text_sha256": "cb31ddf57b4878728b16819a58c9232dd3d9fc76cd43d0e46416a34165629849",
+    "public_text_sha256": "cfe6b60706ecc29b7b9186240f446fda0e822144c79d2deeb01aae5862f9f98f"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-021",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:35:54.590Z",
+    "source_text_sha256": "e8f99cdb4e1d3fc8298816d0cdba24f5e74cccf763b330cb664fdedaf44356dd",
+    "public_text_sha256": "9a6de448c0e071f5267407dbe8ee3f111d82c4145d77e251d22e84e2a53fd89f"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-022",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:37:17.547Z",
+    "source_text_sha256": "7cfedadc00ea668cb5274325f6e74d37483ea6c839a5aeac7874dab94767a656",
+    "public_text_sha256": "7cfedadc00ea668cb5274325f6e74d37483ea6c839a5aeac7874dab94767a656"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-023",
+    "role": "user",
+    "timestamp": "2026-10-20T11:37:18.000Z",
+    "source_text_sha256": "25af8066462834f29a97cc7dd87b9e84e0728b80692e1ce40f8f1005893e8190",
+    "public_text_sha256": "25af8066462834f29a97cc7dd87b9e84e0728b80692e1ce40f8f1005893e8190"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-024",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:37:23.770Z",
+    "source_text_sha256": "776651e6028e01d89269dddf93fd4ed376401fe32ab28394613696708ed4dbfa",
+    "public_text_sha256": "15924a864f8f32a95eaccc16fbac1f87fa6ee1f0c08c1ea41d2f9ea5b645a2b5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-025",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:37:48.263Z",
+    "source_text_sha256": "52ae910b92b34138e48fe4568f7556a8416df655f10c0d683c9ee6d87066adfb",
+    "public_text_sha256": "f8d266a4f774a50ba037f3c63792b28fbeec0255fc37b0e7a933be9a0849460c"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-026",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:40:29.142Z",
+    "source_text_sha256": "853ecf4aecf6242c46bc9c584168f7fbf6ecd25b52d2934948cf3e3a2374d965",
+    "public_text_sha256": "59f16ca321ba775b80b75a12da913c9c34a902c4f16674fb06abb156e88a2f24"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-027",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:41:15.773Z",
+    "source_text_sha256": "92926f0d5244545bc8c9b00e9e868fd92fa1abb4530df67e9689c293220f0ea2",
+    "public_text_sha256": "7fa166ee3d5bb5d3ec464ba856604ecd01ae2fcca737c76182a3f733fbdcb43c"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-028",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:43:28.281Z",
+    "source_text_sha256": "7de2dfb59cff3b80c0b942b7939a4ef0c32e3ae8918d1a781763332e8f50fd3c",
+    "public_text_sha256": "4f9a1d4fbc48571bacdf1f805a41d18cca5b14e366fb15d105f7c6db82983817"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-029",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:44:09.782Z",
+    "source_text_sha256": "07a911a6445a14602e2d69342fabe6b8adb5a1b191f25e082138c38ffb90a201",
+    "public_text_sha256": "07a911a6445a14602e2d69342fabe6b8adb5a1b191f25e082138c38ffb90a201"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-030",
+    "role": "user",
+    "timestamp": "2026-10-20T11:44:10.138Z",
+    "source_text_sha256": "252a2975fec7c195bca7b95286bffd1641b75841819e99e252fa8e8c68b9b473",
+    "public_text_sha256": "252a2975fec7c195bca7b95286bffd1641b75841819e99e252fa8e8c68b9b473"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-031",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:44:19.577Z",
+    "source_text_sha256": "e63aece0ffb6389a56d989ce308d2d131f945e35a5d12e214ce07acb0e0d1cc5",
+    "public_text_sha256": "b4631dc3a1976fe46d024ec4c5456a76d7870d9b953a311c698641634af5c3c5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-032",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:44:44.053Z",
+    "source_text_sha256": "485b5e4552d89129b4b2259eb2a01776ae80824fb21ae8a69e08bde8f68cede9",
+    "public_text_sha256": "c971268ebcf889257cbe181c2a5ab1fe3994c25d3eba94e44e90229a920857c5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-033",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:49:12.509Z",
+    "source_text_sha256": "fff9a233894390172f61b82bc1d71546318225227dc9c821beaea6dce76942ba",
+    "public_text_sha256": "7ec13a93b6439a1a1a47103506df689e851a3d785a9d57b2bc49fa6918e2f890"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-034",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:51:20.891Z",
+    "source_text_sha256": "bcc9fcd11f20b7d12e7e1c8adb818a44cfb31d94b5293d3a8739969be630f04e",
+    "public_text_sha256": "2d18baeb08697e67cc4ab9d6c043cc3b6ca8605305e6dd326d3c77e968225b5b"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-035",
+    "role": "assistant",
+    "timestamp": "2026-10-20T11:53:08.952Z",
+    "source_text_sha256": "1476e479370864c16fe1b872d2a62b3ef471d8ff8143ea71bf1dbbdbad2dc160",
+    "public_text_sha256": "24b5d060d3925955e8dea3f9c5105195fd2160bb88c4a5eb030c9633e311953a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-036",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:02:16.486Z",
+    "source_text_sha256": "2f451664cc7dde2cfc6e15181ad1b4231b2b14dc57e6958bbc86ebbe2df2b0e3",
+    "public_text_sha256": "ff039898284612824ac922b220f11090ae4b425af9f67d53529b6b960780d361"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-037",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:04:51.269Z",
+    "source_text_sha256": "51613bda9660886bb89f5e1d8fb0b9d424ec179a5187d34042470eba7524cf44",
+    "public_text_sha256": "040dad0dfc9dba1bbcfaaf0d939efc6b92486c0317da929f6bdca75d3f572b28"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-038",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:06:08.219Z",
+    "source_text_sha256": "9f86ea06dd73d37e26f717a24d6789662c37e6e4a79e62ae8190fded9e8aed1e",
+    "public_text_sha256": "4f140d567fb9b25c15639295eadd1d1e2dae3aab994aa54561a207b82130d87b"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-039",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:07:13.616Z",
+    "source_text_sha256": "826932468d8f2554a2015809cf704dff38a76b159cc41f004fa8df64ed4b9c01",
+    "public_text_sha256": "d4d386ab0158edab1cc28cb9455cc3ee4146abcefa961ba0c4c4e535ab25b47a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-040",
+    "role": "user",
+    "timestamp": "2026-10-20T12:13:27.913Z",
+    "source_text_sha256": "605037b87b430039bf89e9309b7161401f1e2f583c230d1b7c69d7f70c03dbbd",
+    "public_text_sha256": "dfb32f6adba256fdbb552fa7c0ad3644015ea40680d18ab240f25ce14cf184c9"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-041",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:13:43.664Z",
+    "source_text_sha256": "804ec4b81710aa53d2ca6a0531a537e77cfc1a2fcb36565a3540d6058aa5ae55",
+    "public_text_sha256": "2e8b4f141c873b78ae8a6de32429c9f9252e183428cdde7d427295f2af2d92a0"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-042",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:15:14.391Z",
+    "source_text_sha256": "665e94f532092df4c1e3009086c33c9d46a41889d42d0e25367b1c4defa38494",
+    "public_text_sha256": "2e8fd7b94e1c901da67706c250bc7fa0fe1728a7639b0e5632be260287a04c9e"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-043",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:15:37.717Z",
+    "source_text_sha256": "38677c15cb9b46c51688a483120ba597bd8987164583c60a6413273a25324715",
+    "public_text_sha256": "5cea8cf2e68b5e6fdbb34865309028f7259493c9a9cce247a0ae7e01f1c7d487"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-044",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:18:01.226Z",
+    "source_text_sha256": "e4fb934000ee2ad24132808bdf7ad772906b94cf59e98d3084d086cfe4c0b254",
+    "public_text_sha256": "fa82c7cc10ee10145939326cedcac1304bca91b233e26875cb2071ab2d716475"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-045",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:20:38.277Z",
+    "source_text_sha256": "dcb7a303c30636b5f5e97301ee3b6687965ccb043286212a2a93d405b4f2979f",
+    "public_text_sha256": "093ef06be421bb91ca90a80e90364a6e4a2a93ab6af97b557166e19eb111fb92"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-046",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:22:11.541Z",
+    "source_text_sha256": "3244eca452e8c9633578ed75cba1cc7297a840a822a56ea8e7deabd180008b24",
+    "public_text_sha256": "4ef79e4926a7882536a55339abc36e5329b939ea23c3ee8fd0d29bd7366a48a2"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-047",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:22:32.405Z",
+    "source_text_sha256": "425891af27e4b3d463f0040e651aa222817640b1701d41e5e7ade4cfdda5eb60",
+    "public_text_sha256": "0f8cee20a4c58a9e88acfdeaaeaf11bf40118cdee2fbb3c52d95cfd3da88129d"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-048",
+    "role": "user",
+    "timestamp": "2026-10-20T12:24:34.079Z",
+    "source_text_sha256": "8cd2af3f33feb748316f5ffd4d935a02735133d1b21b265d467637da90e8267d",
+    "public_text_sha256": "899df7e244729296464ba59238d77ebc27963fa48eb0dd76d7a940ebb68a3126"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-049",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:24:39.624Z",
+    "source_text_sha256": "46c053c8fd55f1760a5f5290b13e7954c558e14f3ad92bf01be6c18628793f57",
+    "public_text_sha256": "ce298bcfcc7f084d3657dd00cb5933f370838570dca91f76a50e30826384c199"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-050",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:25:27.744Z",
+    "source_text_sha256": "281f66516803ec36bec42287f7262c7ae8bec43a4824285009d59de29f3b18ba",
+    "public_text_sha256": "065ed78b9e178301960dfa61be49a01847211236d3472cbf6fa3587791fe0371"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-051",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:26:31.930Z",
+    "source_text_sha256": "806c8e372e954bca473cd798f4ba894177171f529f360a5c80903a9bd6d8dbc5",
+    "public_text_sha256": "806c8e372e954bca473cd798f4ba894177171f529f360a5c80903a9bd6d8dbc5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-052",
+    "role": "user",
+    "timestamp": "2026-10-20T12:37:21.991Z",
+    "source_text_sha256": "6763a16dd071dc84c6fc9252ef40b24a830d333f424c7d9d3cb0abcb33ad74ab",
+    "public_text_sha256": "f772c79d26e6f4792e9a967ef91a2b5ca183e9f1a8a785136d3cbe28dd3f92e8"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-053",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:37:31.223Z",
+    "source_text_sha256": "026cb391861673f5f99e5fa5caa44e9a5881437400877ddf8fc8cd299f7fd93e",
+    "public_text_sha256": "8c0da647834c35e9166e328f256b35a49d4c26b93d6793c548cea4b1c0f932ad"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-054",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:37:44.326Z",
+    "source_text_sha256": "2f7767ba37d18936c1ad8cb0daec13d93d7bf6b2ee05e7748141d98d81c17906",
+    "public_text_sha256": "18f2bd0bff317bc4b7ed7566b954ad4722c604652fdebb19f59e3d86c476bcb5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-055",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:38:24.731Z",
+    "source_text_sha256": "c38f6950a4ee7b7442a783d429338ac7d7947e105d275f2a826ec2058d470bcc",
+    "public_text_sha256": "bb8ce8a1c5a0eb33761ed66c83747931c66a42bce1697fb5f9c8ff13daddc293"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-056",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:47:23.607Z",
+    "source_text_sha256": "f8866e271d075c40505233529afbccb9fdade56815770595de5afa30e35402cb",
+    "public_text_sha256": "72545d276c3538db2b7e1d88a4beb98c7b4436b8e71af6c59edbb8193cc07a6d"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-057",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:50:45.274Z",
+    "source_text_sha256": "ce5fb179476d1e572ca80245afef84af70a4b5f37e202e4cb11274057313e03d",
+    "public_text_sha256": "2d3e2199e77a81e8871ec0037d60129a61eac61a5c5b087c557fd8864b492781"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-058",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:52:32.694Z",
+    "source_text_sha256": "c5639a6e58d4379697723239bce22f934d2f702461a315d7db4d1999dae01d6d",
+    "public_text_sha256": "cb7ae5833831be47c98a4889b2609929f55bfa79050b16a4dbdb6f3dfd8a9d09"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-059",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:54:54.145Z",
+    "source_text_sha256": "213d7e7efe96d486b176972d4643000b39c1605f75ba84a43d497bb42d10365c",
+    "public_text_sha256": "97909ab81d55cb491fc05572ec8453efa886e7cce6c9b3164bccfd27097f2980"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-060",
+    "role": "assistant",
+    "timestamp": "2026-10-20T12:57:57.803Z",
+    "source_text_sha256": "7f84432cdac106d11cb5212a3b159f40f8618bd187eaa09509306024472061e0",
+    "public_text_sha256": "4dae80984f9f95d1d8fa0de5df1281653e6f5fadc7cb9c492f9fe17309c900dd"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-061",
+    "role": "user",
+    "timestamp": "2026-10-20T13:05:54.355Z",
+    "source_text_sha256": "6ce680c6f22beba3ba0135ac7cd5799c5b532286bff192bdc1587b66bb4c1114",
+    "public_text_sha256": "06b29bb318814108e94270528fe7994c096308b3692923723bf1ae6f98d50b4f"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-062",
+    "role": "assistant",
+    "timestamp": "2026-10-20T13:07:57.663Z",
+    "source_text_sha256": "de298c92bce6547f1186393104493bed177d0b4c40825ddf98666f3284258dc8",
+    "public_text_sha256": "26e97808dfda76fa04bbc7222ffc33aee9d1bc634ed15fde18ff5336971172da"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-063",
+    "role": "assistant",
+    "timestamp": "2026-10-20T13:08:24.076Z",
+    "source_text_sha256": "2292b548564b57b00ace85dfbb8f038ff7cee01772c94a7384e928e2afe92ee3",
+    "public_text_sha256": "2292b548564b57b00ace85dfbb8f038ff7cee01772c94a7384e928e2afe92ee3"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-064",
+    "role": "user",
+    "timestamp": "2026-10-20T14:49:52.749Z",
+    "source_text_sha256": "59c5ace5c7dff6d383aea1b6e036e2083de189e451b8f1f3e2006fe351209603",
+    "public_text_sha256": "b29ee33465751f86aad31a941e0d13be2fc3ca9664d14253b497b896f6dc3d69"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-065",
+    "role": "assistant",
+    "timestamp": "2026-10-20T14:49:59.991Z",
+    "source_text_sha256": "46bad3bf6c6a722ba32ccf7317361d3290ea18f6f6d9143052ab78428999c63c",
+    "public_text_sha256": "f9b76a8d413fabdee6d12de5443288e033058daf0c7d5b60364bb1e0937458f6"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-066",
+    "role": "assistant",
+    "timestamp": "2026-10-20T14:50:58.716Z",
+    "source_text_sha256": "cd76252a8fba00682d6e30fac3c712bd3a078373a402b656c8c03ab235cdd5a0",
+    "public_text_sha256": "03b364b9e2ac0511d20a2784dcdf808d37dd0dd8dbc3a3bfe3d76fa1091c063a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-067",
+    "role": "user",
+    "timestamp": "2026-10-20T14:51:34.057Z",
+    "source_text_sha256": "5a1d85258c03caf35436b176682750e6f8946002e90b79e0a382742295963b6e",
+    "public_text_sha256": "fd67bf2f44ec98728dde4703341e870e0ebb873e70fd2d5b17fae2e29064fcd2"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-068",
+    "role": "assistant",
+    "timestamp": "2026-10-20T14:52:11.370Z",
+    "source_text_sha256": "de60f72c379b1f9f3e426533946d7c2ec3a9c11a44b714baf6dd25b6dda6ac81",
+    "public_text_sha256": "3b440aa0c0e149c022f67fa85629cf01ed7dd9f39831d3cb4307e91460c5d840"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-069",
+    "role": "assistant",
+    "timestamp": "2026-10-20T14:56:34.652Z",
+    "source_text_sha256": "ac8fa935d4caa6d4699bf95d86fd69d75c011e85b045f2d1ea0e21062ca57dcb",
+    "public_text_sha256": "7989aacf3225e98ac202409c81ea4f605a28f2d44b3a0349c53d0caa79a365a9"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-070",
+    "role": "assistant",
+    "timestamp": "2026-10-20T14:59:06.152Z",
+    "source_text_sha256": "82aa574274bc4ff2dfbb3e1dfbbc3a61c3faca58da9f8bfd64cb631ebbba8042",
+    "public_text_sha256": "bd96c0c870c460463efe944b579c2819ef0831bbd51cdb6df73a57fe6a5d0ee1"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-071",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:02:51.281Z",
+    "source_text_sha256": "8d7477fc5e50cc79b8adf7c6d02119c1eb5f9b9ad7d63eb5271203379678aa0e",
+    "public_text_sha256": "64ed38ab7b43ba95bf668d8a393c09f901365ea60b841ad974581756d9b2b645"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-072",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:05:23.900Z",
+    "source_text_sha256": "b718921b4af4dbe5d211f603ce0ca697e2d9a68a18282166c02c94509acc6221",
+    "public_text_sha256": "0c709e5fe8b10e4175106a97c10d5b58d3eaa04ae57ebc9984cc4574949fe70c"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-073",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:35:55.603Z",
+    "source_text_sha256": "ae341f3c0513041badc6be457dbe34d3b068abbf8d32c93ae665cb9cf44432c5",
+    "public_text_sha256": "0836b1878305cfb2437051fa8e2018883d26bf23bed21459ec69f8dd700f8ccc"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-074",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:37:20.408Z",
+    "source_text_sha256": "1b7fb781251f4f62fa3c64bfa7797b1771028a8530cfa439af9d2eab9c50678f",
+    "public_text_sha256": "9ab90f040adab8629b4e2da7f2fd2133bc455455d9871ded421a89f7fa0814aa"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-075",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:38:35.087Z",
+    "source_text_sha256": "855056834434c0c0aabb7c1492b78db5d032dbea12614329426e68f18cd49d04",
+    "public_text_sha256": "e439b4004da94c6ab7cdd9bdd5f440206a40b47117355cf5599496b6a263ced5"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-076",
+    "role": "user",
+    "timestamp": "2026-10-20T15:38:47.522Z",
+    "source_text_sha256": "ffae01da9b9f1e2c7c5bd467701d26622deaa4f070ef922152a8c645bfd7abfa",
+    "public_text_sha256": "8dabf1df8ca75d05f6f7b9d5c9fbed80788044366ca843a53982f0d6c1872f1d"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-077",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:39:02.672Z",
+    "source_text_sha256": "48cb0091d8aa4b55e0a7640235355fa32103a608e17f60047619ecd47a4bc111",
+    "public_text_sha256": "da768e205860b57e8dc21b9528d7c092ffa733b17fb58fc8e9492030ecbbae7b"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-078",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:40:18.349Z",
+    "source_text_sha256": "b27ce2cf15ea18a41aa0613a40f06b86df8ee43257575c21dbe9cd123fcab1da",
+    "public_text_sha256": "763d95e81bfe9b404476f1e03f4304bb9d2afc68ef4b8df16b124e3e94bd7fca"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-079",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:40:23.675Z",
+    "source_text_sha256": "148967918126767742a470feed7ef33a9604d6ea0b0fcaa82f28c7767b230d6e",
+    "public_text_sha256": "fcc468e2c4f09e0d465d60400563278bfa0dff20b4a56ebabf9206f4f376da40"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-080",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:41:19.865Z",
+    "source_text_sha256": "f53443518a89ed96b6904939559125fc0a9760f3d4d27f7dfd598cf83087e63f",
+    "public_text_sha256": "f0c7f9be165558f1857798e418aed3cb3d8f8785f3dca9f542ff54b9ac956c93"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-081",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:41:37.405Z",
+    "source_text_sha256": "52a8d3bbe63bd37f1444d8eb0931bcd3794e982b309d76e5e0afb1edfba4bf3c",
+    "public_text_sha256": "a5651b1afe3e142d71e34aa1cdbe06e2574b3b40350cc7453ee9fa33fd775d65"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "early-082",
+    "role": "assistant",
+    "timestamp": "2026-10-20T15:42:01.365Z",
+    "source_text_sha256": "20cc9630a31667191ec3345c1abe8025073636d6fa4ded7810b3f8167603506d",
+    "public_text_sha256": "20cc9630a31667191ec3345c1abe8025073636d6fa4ded7810b3f8167603506d"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-069",
+    "role": "user",
+    "timestamp": "2026-10-21T10:01:49.385Z",
+    "source_text_sha256": "1ca19c4c47acae6d2d79bb71854b71995cbdf78bfdeff0e1eea0a5001be8ca00",
+    "public_text_sha256": "669a6dfbb3d418184d15a4dab2e87375f162ded7df971492bd5817d477b085ec"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-070",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:02:30.569Z",
+    "source_text_sha256": "50d64cfe3c4f078f0628a7e951a3c7f33b37ca0d06e5f855669b8acebb5b9f8d",
+    "public_text_sha256": "596bd95e6bfc3d88f2b3456ce713c5213dd9a2b27ab07e6b1de362af9950db90"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-071",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:02:44.055Z",
+    "source_text_sha256": "d931d83119f65e62e51c350a3c1cefc95ba44544e3341fd9940be062a8bc2a00",
+    "public_text_sha256": "2174a6e556875e54375048d0125ed96f1ad2654e31f349c79898bacf68fe8d98"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-072",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:03:27.009Z",
+    "source_text_sha256": "b2faa0017085cb16ca6a0628619bbf5d2f9e32afa1a60dea057ed70b728af033",
+    "public_text_sha256": "abc7eca241148a6e0fcb0b3a8a1601b39c70fb1236972766e16e2e8e16cdf9fc"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-073",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:05:30.074Z",
+    "source_text_sha256": "5f6db78fd6e4a800051a5df3fc79d2ee97e3ae72293cdaac9b68199a69466dc3",
+    "public_text_sha256": "368915bd35a8cd97f886a27634fa25fe208340550c9b5ef8bbccd7dd97c7139a"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-074",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:07:25.124Z",
+    "source_text_sha256": "27d5356e4879af81fbc9e3e3fd9290fd98b150cdbdce91edf9269b1a12614274",
+    "public_text_sha256": "4197f84be993bc7cc3e44ec32ae44e44a601ff28ccab77031c3426210cb5d565"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-075",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:08:41.865Z",
+    "source_text_sha256": "7aec7293fde6de2e3724c54b3d59cfcbf8f68dda7c9045e0c90a1d7933962484",
+    "public_text_sha256": "1066d682d68150cbb257a0c6e1919957348da21b97d10149c933bdfcddab541e"
+  },
+  {
+    "chain": "C-学习规划与任务进度",
+    "entry": "late-076",
+    "role": "assistant",
+    "timestamp": "2026-10-21T10:09:27.181Z",
+    "source_text_sha256": "8e53e947e621ce19d3f8c589081b6a09b8b8857909301aa3314cd6dbc3e9f7e5",
+    "public_text_sha256": "68fc2c5ebcefad89e628039ee8aa811993619202149bafab6b28a3f50d7fb8d3"
+  }
+]
