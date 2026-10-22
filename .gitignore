@@ -37,6 +37,7 @@ _err.txt
 _in.txt
 _out.txt
 _probe*.ps1
+reader-startup-*/
 *.lnk
 .pytest_cache/
 .mypy_cache/
