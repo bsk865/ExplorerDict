@@ -38,8 +38,9 @@ def split_text(text):
 
 
 class SourceIndex:
-    def __init__(self, store):
+    def __init__(self, store, semantic=None):
         self.store = store
+        self.semantic = semantic
         with store.connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS source_chunks (id TEXT PRIMARY KEY, article_id TEXT NOT NULL, payload TEXT NOT NULL)')
             db.execute('CREATE INDEX IF NOT EXISTS source_chunks_article ON source_chunks(article_id)')
@@ -67,7 +68,7 @@ class SourceIndex:
                     db.execute('INSERT INTO source_chunks VALUES(?,?,?)', (key, article['id'], json.dumps(payload, ensure_ascii=False)))
             db.execute('INSERT INTO source_indexes VALUES(?,?) ON CONFLICT(article_id) DO UPDATE SET fingerprint=excluded.fingerprint', (article['id'],fingerprint))
 
-    def search(self, articles, question, *, focus=None, limit=10, budget=18000):
+    def search(self, articles, question, *, focus=None, limit=10, budget=18000, text_only=False, extra_rows=None, diagnostics=None):
         for article in articles:
             self.ensure(article)
         ids = [a['id'] for a in articles]
@@ -76,6 +77,9 @@ class SourceIndex:
         with self.store.connect() as db:
             rows = [json.loads(r[0]) for r in db.execute('SELECT payload FROM source_chunks WHERE article_id IN ('+','.join('?' for _ in ids)+') ORDER BY rowid', ids)]
         rows=[r for r in rows if r['type']!='text' or r['quote'].strip()]
+        if text_only:
+            rows = [r for r in rows if r['type']=='text']
+        rows.extend(extra_rows or [])
         if focus and focus.get('capture_context') and focus.get('block') is None:
             a=next(a for a in articles if a['id']==focus['article_id'])
             quote=focus['capture_context']
@@ -107,6 +111,39 @@ class SourceIndex:
                 score += 2
             scored.append((score, -ordinal, row))
         ranked = sorted(scored, key=lambda r:(r[0],r[1]), reverse=True)
+        semantic_hits = []
+        if self.semantic:
+            try:
+                semantic_hits = self.semantic.retrieve(articles, question, extra_rows)
+                self.semantic.query_error = ''
+            except Exception as exc:
+                self.semantic.query_error = str(exc)
+                if diagnostics is not None:
+                    diagnostics['semantic_error'] = str(exc)
+        if semantic_hits:
+            # Reciprocal-rank fusion avoids comparing BM25's unbounded scores with cosine scores.
+            lexical = [(score, ordinal, row) for score, ordinal, row in ranked if score > 0]
+            fused = [[1/(60+i+1), ordinal, dict(row, keyword_score=score, retrieval=['keyword'])]
+                     for i, (score, ordinal, row) in enumerate(lexical)]
+            for rank, hit in enumerate(semantic_hits):
+                match = next((entry for entry in fused if entry[2]['article_id'] == hit['article_id'] and
+                              entry[2]['block'] == hit['block'] and entry[2].get('note_id') == hit.get('note_id') and
+                              min(entry[2]['end'], hit['end'])-max(entry[2]['start'], hit['start']) >
+                              .5*min(entry[2]['end']-entry[2]['start'], hit['end']-hit['start'])), None)
+                if match:
+                    if 'semantic' not in match[2]['retrieval']:
+                        match[0] += 1/(60+rank+1)
+                        match[2].update(semantic_score=hit['semantic_score'], retrieval=['keyword', 'semantic'])
+                else:
+                    fused.append([1/(60+rank+1), -len(rows)-rank, dict(hit, retrieval=['semantic'])])
+            if focus:
+                for entry in fused:
+                    if entry[2]['article_id'] == focus['article_id'] and entry[2]['block'] == focus['block']:
+                        entry[0] += 1
+            ranked = sorted(fused, key=lambda r:(r[0],r[1]), reverse=True)
+        if diagnostics is not None:
+            diagnostics.update(matched=sum(score > 0 for score, _, _ in ranked), budget=budget,
+                               mode='hybrid' if semantic_hits else 'keyword', semantic_hits=len(semantic_hits))
         if ranked and ranked[0][0] == 0:
             # General overview or no lexical match: disclose sampling to the model.
             count = min(limit, len(rows))
@@ -118,11 +155,21 @@ class SourceIndex:
             # If there are relevant hits, do not pad them with unrelated passages.
             if score <= 0 and chosen and ranked[0][0] > 0:
                 break
-            if any(r['article_id']==row['article_id'] and r['block']==row['block'] and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
+            if any(r['article_id']==row['article_id'] and r['block']==row['block'] and r.get('note_id')==row.get('note_id') and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
                 continue
             cost = len(row['quote']) + len(row.get('visual_description',''))
             if used + cost > budget:
-                continue
+                remaining = max(0, budget-used)
+                if row['type'] not in {'text', 'note'} or remaining < 80:
+                    continue
+                # Preserve an exact substring around a query match when space is tight.
+                quote = row['quote']
+                positions = [quote.casefold().find(t) for t in query if t in quote.casefold()]
+                offset = max(0, min(positions, default=0)-remaining//4)
+                offset = min(offset, max(0, len(quote)-remaining))
+                row = dict(row, quote=quote[offset:offset+remaining], start=row['start']+offset,
+                           end=row['start']+offset+len(quote[offset:offset+remaining]))
+                cost = len(row['quote'])
             chosen.append({k:v for k,v in row.items() if k!='terms'} | {'score':round(score, 4)})
             used += cost
             if len(chosen) >= limit:

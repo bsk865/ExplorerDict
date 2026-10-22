@@ -754,7 +754,9 @@ SPEC_PATH = Path(__file__).resolve().parent.parent / "ExplorerDict.spec"
 
 #: 允许出现的第三方顶层模块；每一个都必须出现在 spec 的 HIDDEN_IMPORTS 里。
 THIRD_PARTY_ALLOWED = ("PIL", "pystray", "six")
-READING_DEPENDENCIES = {'bs4': {'reader_source.py'}, 'PySide6': {'reading_shell.py'}, 'pymupdf': {'workspace_server.py'}}
+READING_DEPENDENCIES = {'bs4': {'reader_source.py'}, 'PySide6': {'reading_shell.py', 'reading_verify.py'}, 'pymupdf': {'workspace_server.py'},
+                        'onnxruntime': {'local_embeddings.py'}, 'tokenizers': {'local_embeddings.py'},
+                        'numpy': {'local_embeddings.py', 'semantic_library.py'}}
 
 
 class TestPackagingKeepsUpWithTheSource(unittest.TestCase):

@@ -1,0 +1,126 @@
+import tempfile
+import threading
+import unittest
+from pathlib import Path
+from unittest.mock import Mock
+from app.workspace_server import Workspace
+from app.library_assistant import session, search
+
+
+class LibraryAssistantTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.w = Workspace(Path(self.temp.name))
+        self.a = self.w.store.import_article('甲实验', [{'type':'text','text':'钙钛矿失效阈值为83摄氏度。'}])
+        self.b = self.w.store.import_article('乙实验', [{'type':'text','text':'私人密码材料不应出现在甲实验的回答中。'}])
+        self.body = {'article_ids':[self.a['id']], 'question':'钙钛矿失效阈值是多少？'}
+        self.body['session_key'] = session(self.w, self.body)['key']
+        self.client = Mock(model='test', base_url='https://test.invalid')
+        self.client.chat.return_value = '阈值为83摄氏度。[S1]'
+        self.w.client = Mock(return_value=self.client)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def run_chat(self):
+        job = {'cancel':threading.Event()}
+        self.w.work(job, 'library-chat', self.body)
+        return job
+
+    def test_scope_and_separate_session(self):
+        j = self.run_chat()
+        self.assertEqual(j['status'], 'done')
+        prompt = str(self.client.chat.call_args)
+        self.assertIn('83摄氏度', prompt)
+        self.assertNotIn('私人密码', prompt)
+        self.assertEqual(j['result']['messages'][-1]['evidence'][0]['article_id'], self.a['id'])
+
+    def test_greeting_does_not_call_model_even_when_matching_material(self):
+        self.body['question'] = '你好！'
+        result = self.run_chat()
+        self.assertEqual(result['status'], 'done')
+        self.assertIn('你好', result['result']['messages'][-1]['content'])
+        self.assertEqual(result['result']['messages'][-1]['evidence'], [])
+        self.w.client.assert_not_called()
+
+    def test_greeting_prefix_does_not_hide_question(self):
+        self.body['question'] = '你好，钙钛矿失效阈值是多少？'
+        self.assertEqual(self.run_chat()['status'], 'done')
+        self.w.client.assert_called_once()
+        other = session(self.w, {'article_ids':[self.b['id']]})
+        self.assertEqual(other['session']['messages'], [])
+        self.assertNotEqual(other['key'], self.body['session_key'])
+
+    def test_no_match_does_not_call_api(self):
+        self.body['question'] = 'ZXQVVV'
+        j = self.run_chat()
+        self.assertEqual(j['status'], 'done')
+        self.w.client.assert_not_called()
+        self.assertIn('没找到相关段落', j['result']['messages'][-1]['content'])
+
+    def test_preview_is_local_and_text_only(self):
+        _, _, _, hits = search(self.w, self.body)
+        self.assertTrue(hits)
+        self.assertTrue(all(e['type']=='text' for e in hits))
+        self.w.client.assert_not_called()
+
+    def test_cancellation_does_not_save_answer(self):
+        j = {'cancel':threading.Event()}
+        self.client.chat.side_effect = lambda _: (j['cancel'].set() or '阈值83摄氏度。[S1]')
+        self.w.work(j, 'library-chat', self.body)
+        self.assertEqual(j['status'], 'cancelled')
+        self.assertEqual(session(self.w, self.body)['session']['messages'], [])
+
+    def test_deleting_article_removes_library_conversation(self):
+        self.run_chat()
+        self.w.store.delete_articles({self.a['id']})
+        self.assertIsNone(self.w.store.get('sessions', self.body['session_key']))
+        with self.assertRaises(ValueError):
+            search(self.w, self.body)
+
+    def test_deleted_during_response_cannot_resurrect(self):
+        self.client.chat.side_effect = lambda _: (self.w.store.delete_articles({self.a['id']}) or '阈值83摄氏度。[S1]')
+        self.assertEqual(self.run_chat()['status'], 'error')
+        self.assertIsNone(self.w.store.get('sessions', self.body['session_key']))
+
+    def test_invalid_citation_not_saved(self):
+        self.client.chat.return_value = '阈值99摄氏度。[S999]'
+        self.assertEqual(self.run_chat()['status'], 'error')
+        self.assertEqual(session(self.w, self.body)['session']['messages'], [])
+
+    def test_changed_version_rejects_old_session(self):
+        a = self.w.store.article(self.a['id']); a['version'] = 'changed'
+        self.w.store.update_article(a)
+        self.assertEqual(self.run_chat()['status'], 'error')
+        self.w.client.assert_not_called()
+
+    def test_personal_notes_are_opt_in_and_versioned(self):
+        from app.study_hub import StudyHub
+        hub = StudyHub(self.w.store)
+        note = hub.save('notes', {'article_id':self.a['id'], 'content':'独立心得：ZEBRAXYZ需要再次核验。'})
+        body = {'article_ids':[self.a['id']], 'question':'ZEBRAXYZ'}
+        self.assertFalse(search(self.w, body)[3])
+        body['include_notes'] = True
+        _, key, _, hits = search(self.w, body)
+        self.assertEqual(hits[0]['source'], 'personal_note')
+        self.assertEqual(hits[0]['note_id'], note['id'])
+        hub.save('notes', {'id':note['id'], 'content':'ZEBRAXYZ已经重新检查。'})
+        self.assertNotEqual(key, search(self.w, body)[1])
+
+    def test_budget_shortage_is_not_no_match(self):
+        from unittest.mock import patch
+        diagnostics = {}
+        with patch('app.library_assistant.conversation_budget.retrieval_budget', return_value=0):
+            hits = search(self.w, self.body, diagnostics)[3]
+        self.assertFalse(hits)
+        self.assertGreater(diagnostics['matched'], 0)
+
+    def test_comparison_uses_each_article_even_without_keyword_match(self):
+        body={'article_ids':[self.a['id'],self.b['id']],'question':'Compare methods and limitations','mode':'compare'}
+        hits=search(self.w,body)[3]
+        self.assertEqual({h['article_id'] for h in hits},{self.a['id'],self.b['id']})
+        self.assertEqual(len({h['citation'] for h in hits}),len(hits))
+
+
+if __name__ == '__main__':
+    unittest.main()
