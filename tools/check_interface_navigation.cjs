@@ -1,0 +1,60 @@
+const {chromium}=require('C:/Users/张哲铭/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('fs'),assert=require('assert');
+(async()=>{
+ const info=JSON.parse(fs.readFileSync(process.env.ADAPTIVE_UI_INFO,'utf8'));
+ const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
+ try{
+  const p=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
+  p.on('pageerror',e=>errors.push(e.message));
+  await p.goto(info.url);await p.waitForSelector('.study-article-list');
+  await p.waitForFunction(()=>currentRoute!==null);
+  await p.locator('[data-action="library"]').first().click();await p.waitForSelector('#library-question');
+  await p.locator('#library-question').fill('保留我的问题');
+  await p.screenshot({path:info.root+'/library-simple.png'});
+  assert.equal(await p.locator('.library-welcome img').count(),0);
+  assert.equal(await p.locator('[data-action="study-compare"]:visible').count(),0);
+  await p.locator('.library-more summary').click();await p.locator('[data-action="rag-page"]').click();
+  await p.waitForSelector('#rag-workspace');await p.waitForFunction(()=>!document.querySelector('#page-back').disabled);
+  await p.locator('#page-back').click();await p.waitForSelector('#library-question');
+  assert.equal(await p.locator('#library-question').inputValue(),'保留我的问题');
+  await p.waitForFunction(()=>!document.querySelector('#page-back').disabled);await p.locator('#page-back').click();
+  await p.waitForSelector('.study-article-list');
+  const seeded=await p.evaluate(async()=>{const t=await api('study/themes',{title:'返回验证'});await api('study/assign',{theme_id:t.id,article_ids:[state.articles[0].id]});await studyPage('themes');return {t:t.id,a:state.articles[0].id};});
+  await p.locator(`.study-topics [data-study-theme="${seeded.t}"]`).click();
+  await p.waitForFunction(t=>currentRoute.theme===t,seeded.t);
+  await p.locator(`.managed-article-row [data-open="${seeded.a}"]`).click();await p.waitForFunction(()=>currentRoute.page==='work');
+  await p.locator('#page-back').click();await p.waitForSelector('.study-article-list');
+  assert.equal(await p.evaluate(()=>study.theme),seeded.t);
+  await p.locator('.top-settings').click();await p.locator('#api-model').fill('unsaved-setting');
+  await p.locator('[data-action="storage-info"]').click();await p.waitForSelector('.dialog-back');
+  await p.locator('.dialog-back').click();assert.equal(await p.locator('#api-model').inputValue(),'unsaved-setting');
+  await p.keyboard.press('Escape');
+  await p.locator('.top-settings').click();await p.locator('[data-action="storage-info"]').click();
+  await p.locator('[data-action="dialog-dismiss"]').click();assert(!(await p.locator('#dialog').evaluate(e=>e.open)));
+  await p.evaluate(()=>contentManagementPage('notes'));
+  await p.locator('#content-search').fill('保留筛选');
+  await p.evaluate(()=>{const el=document.querySelector('#content-kind');el.value='tasks';el.dispatchEvent(new Event('change'));});
+  await p.waitForFunction(()=>currentRoute.kind==='tasks'&&routeDepth===0);
+  await p.locator('#page-back').click();await p.waitForFunction(()=>currentRoute.kind==='notes'&&routeDepth===0);
+  assert.equal(await p.locator('#content-search').inputValue(),'保留筛选');
+  for(const action of ['study-today','study-plans','study-stats','manage-notes','content-management','library']){
+    await p.locator(`#navigation [data-action="${action}"]`).click();
+    await p.waitForFunction(()=>routeDepth===0);
+    const missing=await p.locator('.actions>button:visible,.choice-select-button:visible,.library-more>summary:visible,#page-back:visible').evaluateAll(es=>es.filter(e=>{const s=getComputedStyle(e);return parseFloat(s.borderTopWidth)<1||s.borderTopStyle==='none'||s.borderTopColor==='rgba(0, 0, 0, 0)';}).map(e=>e.textContent.trim().slice(0,40)));
+    assert.deepEqual(missing,[],action+' controls missing outlines');
+  }
+  await p.evaluate(()=>{library.ids=[];library.session={messages:[],draft:''};renderLibrary();});
+  assert(await p.locator('[data-action="library-send"]').isDisabled());
+  await p.screenshot({path:info.root+'/library-empty.png'});
+  await p.setViewportSize({width:390,height:844});await p.screenshot({path:info.root+'/library-mobile.png'});
+  assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await p.evaluate(async()=>acceptPreferences(await api('preferences',{palette:'ocean',mode:'dark'})));
+  await p.waitForTimeout(250);
+  await p.screenshot({path:info.root+'/library-dark.png'});
+  await p.setViewportSize({width:1280,height:900});
+  await p.screenshot({path:info.root+'/library-dark-desktop.png'});
+  assert.deepEqual(errors,[]);
+  console.log('PASS compact library, empty actions, page back with draft/theme retention, nested dialog back with input retained, button outline audit across seven pages, mobile/dark, no page errors');
+  if(process.env.ADAPTIVE_EXE)await p.evaluate(()=>api('shutdown',{}));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(String(e).replace(/token=[^\s]+/g,'token=hidden'));process.exitCode=1;});

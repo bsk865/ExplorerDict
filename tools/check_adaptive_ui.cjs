@@ -1,0 +1,40 @@
+const {chromium}=require('C:/Users/张哲铭/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('fs'),assert=require('assert');
+(async()=>{
+ const info=JSON.parse(fs.readFileSync(process.env.ADAPTIVE_UI_INFO,'utf8'));
+ const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
+ try{
+ const p=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
+ p.on('pageerror',e=>errors.push(e.message));await p.goto(info.url);await p.waitForSelector('.study-article-list');
+ await p.evaluate(async()=>{acceptPreferences(await api('preferences',{palette:'ocean',mode:'light'}));});
+ await p.locator('[data-action="study-plans"]').click();await p.locator('[data-action="study-advisor"]').click();
+ await p.locator('#study-advisor-request').fill('安排阅读多模态 RAG，然后写心得。');
+ assert(await p.locator('#study-advisor-form').evaluate(e=>e.checkValidity()),'optional dates must not block submission');
+ await p.screenshot({path:info.root+'/advisor-desktop.png'});
+ await p.locator('#study-advisor-form [type="submit"]').click();await p.waitForSelector('#busy:not([hidden])');
+ assert.equal(await p.locator('#busy progress:visible').count(),0);assert.equal(await p.locator('#busy details[open]').count(),0);
+ await p.screenshot({path:info.root+'/thinking.png'});
+ await p.waitForSelector('.study-advisor-turn.assistant');assert((await p.locator('.study-advisor-dialogue').innerText()).includes('安排阅读多模态'));
+ await p.locator('#study-advisor-request').fill('明天下午');await p.screenshot({path:info.root+'/followup.png'});
+ await p.locator('#study-advisor-form [type="submit"]').click();await p.waitForSelector('#study-undo-plan');
+ await p.locator('[data-action="close"]').last().click();await p.waitForSelector('.study-task');
+ const row=await p.locator('.study-task').elementHandle();await p.locator('[data-study-complete]').check();await p.waitForSelector('.study-task.is-done');
+ await p.waitForFunction(()=>!document.querySelector('[data-study-complete]').disabled);
+ assert(await row.evaluate(e=>e.isConnected),'completion must preserve the row');
+ await p.locator('[data-study-task]').click();assert.equal(await p.locator('#study-task-form [name="title"]').inputValue(),'阅读多模态 RAG');await p.locator('[data-action="close"]').first().click();
+ await p.route('**/api/weather',r=>r.fulfill({json:{status:'fresh',city:{name:'上海'},temperature:23,code:0,observed_at:'2026-10-20T14:00'}}));
+ await p.locator('[data-action="study-today"]').click();await p.waitForSelector('.weather-sun');await p.screenshot({path:info.root+'/today.png'});
+ await p.locator('[data-action="study-advisor"]').click();await p.locator('.study-advisor-options summary').click();await p.locator('#study-limit-toggle').check();
+ const fields=await p.locator('.study-availability input').evaluateAll(es=>es.map(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height})));assert(fields.every(e=>e.height===42));
+ await p.screenshot({path:info.root+'/options.png'});
+ await p.setViewportSize({width:390,height:844});await p.screenshot({path:info.root+'/mobile-options.png'});
+ assert(await p.evaluate(()=>document.querySelector('#dialog').scrollWidth<=document.querySelector('#dialog').clientWidth+1));
+ await p.locator('.study-advisor-options summary').click();await p.screenshot({path:info.root+'/mobile-advisor.png'});
+ await p.evaluate(()=>{localStorage.setItem('reading-theme','dark');applyTheme();});await p.waitForTimeout(200);await p.screenshot({path:info.root+'/dark-advisor.png'});
+ let starts=0;await p.route('**/api/ui-start-failure',async r=>{starts++;await new Promise(resolve=>setTimeout(resolve,150));await r.fulfill({status:400,json:{error:'Synthetic start failure'}});});
+ const recovery=await p.evaluate(async()=>{const first=runJob('ui-start-failure',{},async()=>{}).catch(e=>e.message);let second='';try{await runJob('ui-start-failure',{},async()=>{});}catch(e){second=e.message;}await first;return {second,idle:state.job===null,error:document.querySelector('#busy').dataset.status};});
+ assert.equal(starts,1);assert(recovery.second&&recovery.idle&&recovery.error==='error');
+ assert.deepEqual(errors,[]);console.log('PASS conversational follow-up, optional constraints, compact busy, duplicate-submit guard and error recovery, persistent task row, weather icons, desktop/mobile/dark layout');
+ if(process.env.ADAPTIVE_EXE)await p.evaluate(()=>api('shutdown',{}));
+ }finally{await browser.close();}
+})().catch(e=>{console.error(String(e).replace(/token=[^\s]+/g,'token=hidden'));process.exitCode=1;});
