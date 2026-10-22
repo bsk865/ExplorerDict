@@ -4,7 +4,8 @@ function syncPrototype(){
     document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
     $('#brand-mark').src='assets/'+(window.ExplorerThemes[theme()].assetPrefix||'')+'brand-mark.svg';
     document.querySelectorAll('[data-theme-image]').forEach(el=>el.src=window.ExplorerThemes[theme()][el.dataset.themeImage]);
-    $('#navigation').querySelectorAll('button').forEach(el=>el.classList.toggle('active',el.dataset.action===(state.page==='work'?'resume-reading':state.page==='saved'?(state.collectionKind==='term'?'concepts':'saved'):'shelf')));
+    const activeNav=state.page==='study'?'study-'+study.page:state.page==='library'?'library':state.page==='work'||state.page==='saved'?'study-themes':'shelf';
+    $('#navigation').querySelectorAll('button').forEach(el=>el.classList.toggle('active',el.dataset.action===activeNav));
 }
 const baseApplyTheme=applyTheme;
 applyTheme=function(){baseApplyTheme();syncPrototype();};

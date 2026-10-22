@@ -1,0 +1,41 @@
+.today-banner{position:relative;isolation:isolate;min-height:240px;overflow:hidden;margin-bottom:0;background:var(--surface)}
+.today-scene{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;z-index:-1}
+.today-banner>.page-heading{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:18px;min-height:240px;margin:0;padding:28px 32px;width:48%;box-sizing:border-box;color:#243b43}
+.today-banner .page-heading h1{font-size:32px;margin:0 0 8px;color:inherit}
+.today-banner .page-heading p{color:inherit;margin:4px 0;font-size:12px;line-height:1.8}
+.today-banner .page-heading .today-greeting{font-size:15px;margin:8px 0}
+.today-banner .actions{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;width:auto}
+.today-banner .actions button{min-height:36px;font-size:12px;border-radius:6px;background:var(--surface);color:var(--ink)}
+.today-banner .actions button.primary{background:var(--accent);color:var(--theme-button-ink);border-radius:6px!important}
+.today-view .study-day-strip{padding:20px 0;margin:0 0 28px;gap:24px;min-height:100px}
+.today-view .study-day-strip>img{display:none}
+.today-view .study-clock{min-width:130px}
+.today-view .study-clock time{font-size:32px;font-variant-numeric:tabular-nums}
+.today-view .study-weather-symbol{width:40px;height:40px}
+.today-view .study-weather-symbol svg{width:36px;height:36px}
+.today-view .study-weather-copy p{font-size:15px;margin:5px 0}
+.today-view .study-weather-copy small,.today-view .study-weather-actions small{font-size:11px}
+.today-task-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:14px}
+.today-task-heading h2,.today-view .study-recent h2,.task-progress-heading h2{font-size:18px;margin:0}
+.today-task-progress{width:240px;max-width:60%}
+.task-progress-copy{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:10px}
+.task-progress-copy>span{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.today-task-progress .task-progress-copy{font-size:11px;margin-bottom:6px}
+.task-completion progress,.today-task-progress progress{display:block;width:100%;height:9px;border:0;border-radius:5px;overflow:hidden;appearance:none;background:var(--line);accent-color:var(--accent)}
+.task-completion progress::-webkit-progress-bar,.today-task-progress progress::-webkit-progress-bar{background:var(--line);border-radius:5px}
+.task-completion progress::-webkit-progress-value,.today-task-progress progress::-webkit-progress-value{background:var(--accent);border-radius:5px;transition:width .3s ease}
+.task-completion progress::-moz-progress-bar,.today-task-progress progress::-moz-progress-bar{background:var(--accent);border-radius:5px}
+.today-empty{display:flex;align-items:center;gap:16px;padding:24px 0;border-block:1px solid var(--line)}
+.today-empty>img{width:48px;height:48px;border-radius:50%;object-fit:cover}
+.today-empty>div{flex:1;min-width:0}.today-empty strong{font-size:14px}.today-empty p{font-size:12px;color:var(--muted);line-height:1.8;margin:6px 0 0}
+.today-empty>button{display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);border-radius:6px;white-space:nowrap}
+.today-view .study-recent{margin-top:28px}.today-view .study-recent h2{margin-bottom:10px}
+.task-completion{padding:24px 0;margin:24px 0 32px;border-block:1px solid var(--line)}
+.task-progress-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+.task-progress-scopes{display:flex;gap:3px;padding:3px;background:var(--quiet);border-radius:6px}
+.task-progress-scopes button{padding:6px 12px;min-height:32px;font-size:12px;border-radius:4px;border:0}
+.task-progress-scopes button[aria-pressed=true]{box-shadow:0 1px 3px #00000012;background:var(--surface);color:var(--accent-text)}
+.task-progress-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px}
+.task-progress-foot p{font-size:13px;color:var(--muted);margin:0;line-height:1.7}.task-progress-foot>strong{font-size:24px;font-variant-numeric:tabular-nums}
+@media(max-width:760px){.today-banner{min-height:260px}.today-banner>.page-heading{min-height:260px;width:75%;padding:20px 16px}.today-scene{object-position:40% center}.today-banner .page-heading h1{font-size:26px}.today-view .study-day-strip{gap:14px;flex-wrap:wrap;padding:18px 0}.today-view .study-weather{flex-basis:100%;min-width:0}.today-view .study-clock time{font-size:28px}.today-task-heading{gap:12px}.today-empty{flex-wrap:wrap}.today-empty>button{margin-left:64px}.task-progress-heading{align-items:flex-start;flex-direction:column}.task-progress-heading h2{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.task-completion progress::-webkit-progress-value,.today-task-progress progress::-webkit-progress-value{transition:none}}

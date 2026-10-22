@@ -1,5 +1,11 @@
 /* 24×24统一网格：1.65px描边、圆端点、轻填充，书页/卡片/探索星贯穿主要图标。 */
 window.ExplorerIcons=Object.freeze({
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',
+  cloud:'<path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 20 10a4 4 0 0 1-1 8Z"/>',
+  rain:'<path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 18 8a3.5 3.5 0 0 1 1 7M8 18l-1 3M13 18l-1 3M18 18l-1 3"/>',
+  snow:'<path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7M9 4l3 3 3-3M9 20l3-3 3 3M4 10l4-1-1-4M17 19l-1-4 4-1M4 14l4 1-1 4M17 5l-1 4 4 1"/>',
+  storm:'<path d="M6 15a4 4 0 1 1 2-7.5A5 5 0 0 1 18 8a3.5 3.5 0 0 1 1 7M13 12l-4 6h5l-2 5"/>',
+  fog:'<path d="M4 12h16M2 16h20M5 20h14M6 8a4 4 0 0 1 7-3 3 3 0 0 1 5 3"/>',
   grid:'<rect class="icon-fill" x="3" y="4" width="7" height="8" rx="2"/><rect x="3" y="4" width="7" height="8" rx="2"/><rect x="3" y="16" width="7" height="5" rx="1.6"/><rect x="14" y="13" width="7" height="8" rx="2"/><path class="icon-star" d="m17.5 2 1.3 3.2L22 6.5l-3.2 1.3-1.3 3.2-1.3-3.2L13 6.5l3.2-1.3Z"/>',
   book:'<path class="icon-fill" d="M3 5h5a5 5 0 0 1 4 2v14a6 6 0 0 0-5-2H3Z"/><path d="M3 5h5a5 5 0 0 1 4 2v14a6 6 0 0 0-5-2H3V5Zm18 0h-5a5 5 0 0 0-4 2v14a6 6 0 0 1 5-2h4V5ZM6 9h3M6 12h3M15 9h3"/>',
   repeat:'<path class="icon-fill" d="M7 8h7v12l-3.5-2L7 20Z"/><path d="M7 8h7v12l-3.5-2L7 20V8ZM18 17a8 8 0 1 0-15-4M19 10v6h-5"/>',

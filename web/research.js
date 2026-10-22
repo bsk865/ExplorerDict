@@ -2,7 +2,7 @@
 state.researchScope = 'article';
 const fragmentSource = sourceHTML;
 sourceHTML = function () {
-  if(state.article?.source_status === 'pending_source') return `<section class="reading-paper"><div class="paper-tools"><span>原文待补充</span></div><div class="source-body"><div class="source-repair"><h2>已收录这篇文章的词语</h2><p>尚未取得完整原文。划选内容保存在对应词条中，不会重复拼接到这里。</p><div class="actions">${button('append-text','添加原文','primary')}${button('append','导入原文件')}${state.article.source_url?button('reextract','读取原网页'):''}</div></div></div></section>`;
+  if(state.article?.source_status === 'pending_source') return `<section class="reading-paper"><div class="paper-tools"><span>原文待补充</span></div><div class="source-body"><div class="source-repair"><h2>已收录这篇文章的词语</h2><p>${esc(state.article.source_error || "尚未取得完整原文。划选内容保存在对应词条中，不会重复拼接到这里。")}</p><div class="actions">${button('append-text','添加原文','primary')}${button('append','导入原文件')}${state.article.source_url?button('reextract','读取原网页'):''}</div></div></div></section>`;
   const html = fragmentSource();
   return state.article?.source_status === 'selection_fragment'
     ? html.replace('<div class="paper-tools">','<p class="source-fragment-note">以下内容来自同一篇文章的划选片段，尚未取得完整原文。</p><div class="paper-tools">')
@@ -79,7 +79,7 @@ const researchDispatch = dispatch;
 dispatch = async function(action) {
   if (action === 'night') {
     await savePreferences({palette:theme(),mode:document.documentElement.dataset.theme==='dark'?'light':'dark'});
-    settings();
+    preferences();
     return;
   }
   if (action === 'map-fit') {
@@ -189,18 +189,19 @@ document.addEventListener('click', event => {
 });
 
 // Both manual and automatic refresh share the same state-preserving path.
-let sharedRefreshBusy = false;
+let sharedRefreshBusy = false, refreshFailures=0, nextAutoRefresh=0;
 const refreshControl=document.createElement('button');
 refreshControl.id='refresh-workspace';refreshControl.type='button';refreshControl.className='secondary';
 refreshControl.textContent='刷新';refreshControl.title='同步浮窗记录并刷新当前页面';
 $('#capture-toggle').before(refreshControl);
 const syncLabel=document.createElement('span');syncLabel.id='workspace-sync-status';syncLabel.setAttribute('role','status');syncLabel.setAttribute('aria-live','polite');refreshControl.after(syncLabel);
 async function refreshWorkspace(manual=false){
-  if(sharedRefreshBusy)return;
+  if(sharedRefreshBusy){if(manual)toast('正在同步，请稍候。');return;}
+  if(!manual&&Date.now()<nextAutoRefresh)return;
   if(state.job){if(manual)toast('正在处理当前任务，完成后再刷新。');return;}
   if($('#dialog')?.open){if(manual)toast('请先完成或关闭当前对话框。');return;}
   if(!manual&&(document.hidden||document.activeElement?.matches('input,textarea,[contenteditable="true"]')||window.getSelection()?.toString()))return;
-  sharedRefreshBusy=true;refreshControl.disabled=true;
+  sharedRefreshBusy=true;if(manual)refreshControl.disabled=true;
   if(manual){refreshControl.textContent='同步中…';syncLabel.textContent='';}
   const page=state.page,articleId=state.article?.id;
   try{
@@ -234,8 +235,10 @@ async function refreshWorkspace(manual=false){
     const time=new Date().toLocaleTimeString('zh-CN',{hour12:false});
     syncLabel.textContent='已同步';syncLabel.dataset.error='false';syncLabel.title='最近同步：'+time;
     refreshControl.title='最近同步：'+time;
+    refreshFailures=0;nextAutoRefresh=0;
     if(manual)toast('已同步浮窗记录并刷新页面。');
   }catch(error){
+    refreshFailures++;nextAutoRefresh=Date.now()+Math.min(60000,3000*2**Math.min(refreshFailures,5));
     syncLabel.textContent='同步失败';syncLabel.dataset.error='true';syncLabel.title=error.message;
     if(manual)toast('刷新失败：'+error.message);
   }finally{sharedRefreshBusy=false;refreshControl.disabled=false;refreshControl.textContent='刷新';}

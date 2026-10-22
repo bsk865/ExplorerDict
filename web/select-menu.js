@@ -20,7 +20,7 @@
     button.setAttribute('role','combobox'); button.setAttribute('aria-haspopup','listbox');
     button.setAttribute('aria-expanded','false');
     const label = document.createElement('span'); label.className = 'choice-value';
-    const caret = document.createElement('span'); caret.className = 'choice-caret'; caret.textContent = '⌄'; caret.setAttribute('aria-hidden','true');
+    const caret = document.createElement('span'); caret.className = 'choice-caret'; caret.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'; caret.setAttribute('aria-hidden','true');
     button.append(label,caret); wrapper.append(button);
     function sync() {
       const value = select.selectedOptions[0]?.textContent || '暂无选项';
