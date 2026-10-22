@@ -31,6 +31,7 @@ venv/
 # ---- 开发期临时文件 ----
 # 会话交接笔记：给「下一个对话」看的本轮状态，不是产品文档，不入库
 任务交接.md
+docs/任务交接-*.md
 _enc.json
 _err.txt
 _in.txt
@@ -51,3 +52,8 @@ _reading_runtime_v5/
 
 _reading_runtime_v6/
 _reading_runtime_v7/
+
+/storage-location.json
+
+/storage-location.tmp
+/models/

@@ -6,7 +6,7 @@ $tokens=$null; $errors=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseFile($HelperPath,[ref]$tokens,[ref]$errors)
 if ($errors.Count) { throw 'Helper parse failed' }
 $functions=$ast.FindAll({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst]},$false)
-foreach ($name in @('Test-OfficeHwnd','Try-OfficeSelectionFrom','Get-ProcessIdentity')) {
+foreach ($name in @('Test-OfficeHwnd','Try-OfficeSelectionFrom','Handle-OfficeDocument','Get-ProcessIdentity')) {
     $code=($functions | Where-Object Name -eq $name).Extent.Text
     Invoke-Expression ($code.Replace('[ExplorerDict.Native]','[OfficeContract.Native]'))
 }
@@ -22,11 +22,16 @@ namespace OfficeContract {
   public static uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId) { processId=Processes[hwnd.ToInt64()]; return 1; }
  }
  public class Range {
-  public string Body; public int Start; public int End; public bool SwitchOnRead;
+  public Document Document; public string Body; public int Start; public int End; public bool SwitchOnRead;
   public string Text { get { if (SwitchOnRead) Native.Foreground=false; return Body.Substring(Start,End-Start); } }
   public Range Duplicate { get { return new Range { Body=Body,Start=Start,End=End }; } }
   public int MoveStart(int unit,int count) { int old=Start; Start=Math.Max(0,Start+count); return Start-old; }
   public int MoveEnd(int unit,int count) { int old=End; End=Math.Min(Body.Length,End+count); return End-old; }
+ }
+ public class Document {
+  public string FullName="C:/test/source.docx"; public string Name="source.docx";
+  public Range Body; public int Reads;
+  public Range Content { get { Reads++; return Body; } }
  }
  public class Selection {
   public int Type=2; public int Reads; public Range Value;
@@ -35,6 +40,7 @@ namespace OfficeContract {
  public class Window { public int Hwnd=20; public Selection Selection; }
 }
 '@
+function Get-ExpectedWindow($req) { return @{hwnd=10;pid=100} }
 function Test-ForegroundIs($exp) { return [OfficeContract.Native]::Foreground }
 function Test-Candidate($el,$exp) { return $script:CandidateError }
 function Get-ProcessImageName($processId) { return $script:Names[[int]$processId] }
@@ -58,6 +64,10 @@ function Reset-Fixture {
     $script:Window.Selection.Value.Body='alpha beta gamma'
     $script:Window.Selection.Value.Start=6
     $script:Window.Selection.Value.End=10
+    $doc=New-Object OfficeContract.Document
+    $doc.Body=New-Object OfficeContract.Range
+    $doc.Body.Body='alpha beta gamma'; $doc.Body.Start=0; $doc.Body.End=16
+    $script:Window.Selection.Value.Document=$doc
     $script:El=[pscustomobject]@{Current=[pscustomobject]@{ClassName='KxWpsView';NativeWindowHandle=30}}
 }
 $exp=@{hwnd=10;pid=100}
@@ -105,4 +115,22 @@ $second=Get-ProcessIdentity ([uint32]100)
 Assert ($first.name -eq 'wps.exe' -and $second.path -eq 'c:/wps.exe' -and $script:ProcessQueries -eq 1) 'Reuse process identity only within current request'
 $script:ProcessImages=@{}; $script:FakePath='c:/changed/wps.exe'
 Assert ((Get-ProcessIdentity 100).path -eq $script:FakePath -and $script:ProcessQueries -eq 2) 'New request must re-query process identity'
+Reset-Fixture
+$req=@{officeHandle=30;document='C:/test/source.docx'}
+$r=Handle-OfficeDocument $req
+Assert ($r.ok -and $r.text -eq 'alpha beta gamma') 'Read full body rather than selected word'
+Assert ($script:Window.Selection.Value.Start -eq 6 -and $script:Window.Selection.Value.End -eq 10) 'Full body read preserves selection'
+Reset-Fixture
+$req.document='C:/different.docx'
+$r=Handle-OfficeDocument $req
+Assert (-not $r.ok -and $script:Window.Selection.Value.Document.Reads -eq 0) 'Changed document cannot read body'
+Reset-Fixture
+$req.document='C:/test/source.docx'
+$script:Window.Selection.Value.Document.Body.SwitchOnRead=$true
+$r=Handle-OfficeDocument $req
+Assert (-not $r.ok -and -not $r.text) 'Foreground change discards complete body'
+Reset-Fixture
+[OfficeContract.Native]::Foreground=$false
+$r=Handle-OfficeDocument $req
+Assert (-not $r.ok -and $script:Binds -eq 0) 'Inactive window prevents full source binding'
 Write-Output ('PASS assertions=' + $script:Count)

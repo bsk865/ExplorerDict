@@ -491,6 +491,7 @@ function Try-OfficeSelectionFrom($el, $exp, $chars) {
     $selection = $null
     $range = $null
     $clone = $null
+    $document = $null
     try {
         # Restrict fallback to actual document body views. Ribbon/search fields
         # must never return an old selection left in the document.
@@ -538,10 +539,16 @@ function Try-OfficeSelectionFrom($el, $exp, $chars) {
         $result.reason = ''
         $result.text = $text
         $result.method = 'OfficeSelection'
+        try {
+            $document = $range.Document
+            $result.office_document = [string]$document.FullName
+            $result.office_handle = $handle
+        } catch { }
+        if (-not (Test-OfficeHwnd $officeHandle $exp)) { $result.ok = $false }
         return $result
     } catch { return $result }
     finally {
-        foreach ($obj in @($clone, $range, $selection, $window)) {
+        foreach ($obj in @($document, $clone, $range, $selection, $window)) {
             if ($null -ne $obj -and [System.Runtime.InteropServices.Marshal]::IsComObject($obj)) {
                 try { $null = [System.Runtime.InteropServices.Marshal]::ReleaseComObject($obj) } catch { }
             }
@@ -611,7 +618,7 @@ function Handle-Selection($req) {
         } else {
             $reads = $reads + 1
             $r = Try-SelectionFrom $cand.el $chars
-            if (-not $r.ok -and $r.reason -eq 'no_textpattern') {
+            if ($cand.el.Current.ClassName -in @('_WwG', 'KxWpsView')) {
                 $office = Try-OfficeSelectionFrom $cand.el $exp $chars
                 if ($office.ok -or $office.reason -in @('empty_selection', 'empty_text')) { $r = $office }
             }
@@ -629,6 +636,8 @@ function Handle-Selection($req) {
                 $result = @{
                     ok           = $true
                     reason       = ''
+                    office_document = $r.office_document
+                    office_handle = $r.office_handle
                     text         = $r.text
                     context      = $r.context
                     context_prefix = $r.context_prefix
@@ -667,6 +676,37 @@ function Handle-Selection($req) {
     if ($null -ne $result) { return $result }
     return @{ ok = $false; reason = $lastReason; text = ''; context = ''; method = ''
               reads = $reads; candidates = $candidates.Count; top_search = $topSearched }
+}
+
+function Handle-OfficeDocument($req) {
+    $exp = Get-ExpectedWindow $req
+    $window=$null; $selection=$null; $selected=$null; $document=$null; $body=$null
+    try {
+        if ($null -eq $exp -or -not $req.document) { return @{ok=$false; reason='expected_document_required'} }
+        if (-not (Test-OfficeHwnd ([int]$req.officeHandle) $exp)) { return @{ok=$false; reason='foreground_changed'} }
+        $window = Get-NativeOfficeWindow ([int]$req.officeHandle)
+        if ($null -eq $window -or -not (Test-OfficeHwnd ([int]$window.Hwnd) $exp)) { return @{ok=$false; reason='window_mismatch'} }
+        $selection = $window.Selection
+        $selected = $selection.Range
+        $document = $selected.Document
+        if ([string]$document.FullName -cne [string]$req.document) { return @{ok=$false; reason='document_changed'} }
+        $body = $document.Content
+        if (-not (Test-OfficeHwnd ([int]$window.Hwnd) $exp)) { return @{ok=$false; reason='foreground_changed'} }
+        if (([int64]$body.End - [int64]$body.Start) -gt 2000000) { return @{ok=$false; reason='document_too_large'} }
+        $text = [string]$body.Text
+        if (-not (Test-OfficeHwnd ([int]$window.Hwnd) $exp) -or [string]$document.FullName -cne [string]$req.document) {
+            return @{ok=$false; reason='document_changed'}
+        }
+        if (-not $text.Trim()) { return @{ok=$false; reason='empty_document'} }
+        return @{ok=$true; text=$text; title=[string]$document.Name; document=[string]$document.FullName}
+    } catch { return @{ok=$false; reason='office_document_unavailable'} }
+    finally {
+        foreach ($obj in @($body,$document,$selected,$selection,$window)) {
+            if ($null -ne $obj -and [System.Runtime.InteropServices.Marshal]::IsComObject($obj)) {
+                try { $null=[System.Runtime.InteropServices.Marshal]::ReleaseComObject($obj) } catch { }
+            }
+        }
+    }
 }
 
 function Handle-Check($req) {
@@ -737,6 +777,7 @@ while ($true) {
             'selection' {
                 $resp = Handle-Selection $req
             }
+            'office_document' { $resp = Handle-OfficeDocument $req }
             'check' {
                 $resp = Handle-Check $req
             }

@@ -385,6 +385,7 @@ class CaptureService:
         #: 正在取原文的 ``doc_key`` 集合（同一页只抓一次；抓失败也算抓过，
         #: 结果落在 ``articles`` 表里，不在这里重试）。
         self._article_pending: set[str] = set()
+        self._office_snapshots: dict[tuple, dict] = {}
         self._lock = threading.RLock()
         self._current_batch_id: int | None = None
         self._current_doc_key: str = ""
@@ -899,7 +900,7 @@ class CaptureService:
             return False
         if not self.config.fetch_article:
             return False
-        source = self._article_source_value(src)
+        source = self._article_source_value(src) if not src.office_article else "office:document"
         if not source:
             return False
         if self.db.has_article(key):
@@ -910,13 +911,13 @@ class CaptureService:
             self._article_pending.add(key)
         thread = threading.Thread(
             target=self._fetch_article_worker,
-            args=(key, source, src.title if src is not None else ""),
+            args=(key, source, src.title if src is not None else "", src.office_article),
             name="article-fetch", daemon=True,
         )
         thread.start()
         return True
 
-    def _fetch_article_worker(self, doc_key: str, url: str, title: str) -> None:
+    def _fetch_article_worker(self, doc_key: str, url: str, title: str, office_article: dict | None = None) -> None:
         """后台线程：抓原文 → 落库 → 发 ``article_ready`` 事件。
 
         取回这一步统一走 :func:`app.article_source.fetch_source`（批次 M22-A）：
@@ -929,7 +930,9 @@ class CaptureService:
         """
         article = None
         try:
-            if article_source.is_http_url(url):
+            if office_article is not None:
+                article = article_source.Article(**office_article)
+            elif article_source.is_http_url(url):
                 article = self._article_fetcher(url)
             else:
                 article = article_source.fetch_source(url, title)
@@ -1155,6 +1158,30 @@ class CaptureService:
             title=info.get("title", ""),
         )
         src = self.enrich_source_with_uia(src, resp)
+        document = str(resp.get('office_document') or '')
+        if document and self.config.fetch_article and not self.db.has_article(self.page_doc_key(src)):
+            cache_key = (pid, hwnd, document)
+            snapshot = self._office_snapshots.get(cache_key)
+            if snapshot is None:
+                result = self.bridge.get_office_document(hwnd=hwnd, pid=pid,
+                    handle=int(resp.get('office_handle') or 0), document=document)
+                body = str(result.get('text') or '').replace('\r\n', '\n').replace('\r', '\n').replace('\x07', '\t').strip()
+                ok = bool(result.get('ok') and body)
+                snapshot = dict(ok=ok, status='ok' if ok else 'failed',
+                    text=body if ok else '', title=result.get('title') or src.title,
+                    url='', method='office_document', note='' if ok else
+                    '未能读取 Word 正文（窗口切换、文档不可访问或读取超时）。请导入原文件补充原文。')
+                if len(self._office_snapshots) >= 16:
+                    self._office_snapshots.pop(next(iter(self._office_snapshots)))
+                self._office_snapshots[cache_key] = snapshot
+            src.office_article = snapshot
+            current = w32.foreground_info()
+            if (self._verify_uia_identity(resp, current)
+                    or str(current.get('title') or '') != title_before
+                    or gen0 != self.current_generation() or ep0 != self.current_page_epoch()
+                    or not self.config.capture_enabled or not self.gate.evaluate().allowed):
+                self._office_snapshots.pop(cache_key, None)
+                return None, 'foreground_changed_during_document_read'
         with self._lock:
             self._last_source = src
 

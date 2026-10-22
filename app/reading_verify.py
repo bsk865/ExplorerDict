@@ -28,7 +28,8 @@ def verify_window(window, directory):
             return
         def inspect():
             def checked(value):
-                report['rendered'] = bool(value and '资料书架' in value)
+                value = json.loads(value) if isinstance(value, str) and value else {}
+                report['rendered'] = bool(isinstance(value, dict) and value.get('library') and value.get('management') and value.get('navigation', 0) >= 7)
                 window.grab().save(str(directory / 'packaged-window.png'))
                 window.findChild(QPushButton, 'maximize').click()
                 report['maximize'] = window.isMaximized()
@@ -37,7 +38,7 @@ def verify_window(window, directory):
                 window.findChild(QPushButton, 'minimize').click()
                 report['minimize'] = window.isMinimized()
                 finish()
-            window.page.runJavaScript('document.body.innerText', checked)
+            window.page.runJavaScript("JSON.stringify({library:!!document.querySelector('.study-library'),management:!!document.querySelector('[data-action=content-management]')&&!!document.querySelector('[data-action=manage-notes]'),navigation:document.querySelectorAll('#navigation button').length})", checked)
         QTimer.singleShot(2000, inspect)
     window.page.loadFinished.connect(loaded)
     def timeout():

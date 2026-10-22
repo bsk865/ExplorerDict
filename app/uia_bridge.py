@@ -456,6 +456,20 @@ class UiaBridge:
                  bool(resp.get("ok")), resp.get("reason", ""))
         return resp
 
+    def get_office_document(self, *, hwnd: int, pid: int, handle: int, document: str) -> dict:
+        """Read only the verified foreground document; never use ActiveDocument."""
+        fg = w32.foreground_info()
+        if not document or not handle or fg.get('hwnd') != hwnd or fg.get('pid') != pid:
+            return {'ok': False, 'reason': 'foreground_changed'}
+        try:
+            return self._request({'cmd': 'office_document', 'expectedHwnd': hwnd,
+                'expectedPid': pid, 'officeHandle': handle, 'document': document}, timeout=8.0)
+        except TimeoutError:
+            self._evict_stuck_helper('office document timeout')
+            return {'ok': False, 'reason': 'timeout'}
+        except UiaUnavailable:
+            return {'ok': False, 'reason': 'helper_unavailable'}
+
     def last_error(self) -> str:
         return self._last_error
 

@@ -148,6 +148,7 @@ def main():
     if verify and not os.environ.get('EXPLORER_DICT_DATA_DIR'):
         raise RuntimeError('Window verification requires an isolated data directory')
     directory = data_dir()
+    os.environ["EXPLORER_DICT_DATA_DIR"] = str(directory)
     identity = 'Local\\ExplorerDict.Reader.' + data_dir_digest(directory)
     guard = SingleInstance(name=identity)
     if not guard.acquire():
@@ -157,6 +158,7 @@ def main():
     session = directory / 'workspace-session-v7.json'
     session.unlink(missing_ok=True)
     command = [sys.executable, '--headless'] if getattr(sys, 'frozen', False) else [sys.executable, str(project_root() / 'reading_desktop.py'), '--headless']
+    command += ['--owner-pid', str(os.getpid())]
     server_process = subprocess.Popen(command, cwd=project_root(), env={**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT':'1'}, creationflags=0x08000000)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     try:
@@ -196,8 +198,8 @@ def main():
         qt.exec()
     finally:
         close()
-        capture_bridge.stop_and_wait()
-        receiver.close(); guard.release()
+        capture_stopped = capture_bridge.stop_and_wait()
+        receiver.close()
         try:
             request = urllib.request.Request(url.split('/session')[0]+'/api/shutdown', data=b'{}', headers={'Content-Type':'application/json'})
             opener.open(request, timeout=1).close()
@@ -206,3 +208,8 @@ def main():
             server_process.terminate()
             server_process.wait(timeout=5)
         session.unlink(missing_ok=True)
+        from .storage_location import apply_pending
+        try:
+            apply_pending(directory, components_stopped=capture_stopped)
+        finally:
+            guard.release()
