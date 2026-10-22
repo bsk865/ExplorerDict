@@ -1,0 +1,8 @@
+# 运行时依赖（与验收环境一致，Windows / CPython 3.14.5）
+# 安装：.build-env\Scripts\python.exe -m pip install -r requirements.txt
+PySide6==6.10.3
+onnxruntime==1.31.0
+tokenizers==0.23.3
+numpy==2.5.4
+Pillow==12.3.0
+PyMuPDF==1.28.2

@@ -81,6 +81,19 @@ python bootstrap.py
 python -X utf8 -m unittest discover -s tests -t .
 ```
 
+## 10 分钟复现
+
+干净机器从克隆到启动：
+
+```powershell
+git clone https://github.com/bsk865/ExplorerDict.git
+cd ExplorerDict
+powershell -ExecutionPolicy Bypass -File scripts\setup-repro.ps1
+.build-env\Scripts\python.exe bootstrap.py
+```
+
+脚本会建虚拟环境、按 [requirements.txt](requirements.txt) 安装依赖、下载并校验离线向量模型（SHA-256），最后跑全量测试；可用 `-SkipModel` / `-SkipTests` 跳过对应步骤。完整步骤、环境变量模板、验证清单与常见问题见 **[10 分钟复现指南](docs/复现指南.md)**。
+
 ## 架构
 
 ```
@@ -103,7 +116,9 @@ tests/                            ← unittest 全量用例
 app/            原生应用与本地服务
 web/            阅读工作区前端
 tests/          单元与界面测试
+scripts/        启动助手与 setup-repro.ps1（复现脚本）
 docs/
+  复现指南.md   2.2 10 分钟复现：依赖、模型校验、环境变量、验证清单
   参赛材料/     2.1 代码仓库与演进记录（原始 Prompt 链、优化稿、核对清单）
   验收记录/     各功能批次的验证记录
   设计预览/     离线界面预览
