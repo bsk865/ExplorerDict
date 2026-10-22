@@ -22,18 +22,23 @@ from .api_transport import (ApiError, KIND_LABELS, RetryPolicy, http_error,
 log = get_logger("api")
 
 
-SYSTEM_PROMPT = """你是一个严谨的阅读助手。用户在阅读时划选了一个术语，请给出简洁、准确、可核查的解释。
+SYSTEM_PROMPT = """你是一个严谨的阅读助手。用户在阅读时划选了一个术语，请帮助用户真正理解它的含义、机制及其在原文中的作用，而不是只给词典式释义。
 
 严格只输出一个 JSON 对象，不要输出任何其它文字，不要使用 Markdown 代码围栏。JSON 结构：
-{"one_line": "一句话解释，不超过 60 字", "detail": "详细解释，可含背景、易混点、必要前提", "examples": ["例句或用法示例"], "topic": "可选：这组阅读内容所属主题的简短名字，6 字以内，无法判断时给空串"}
+{"one_line": "用通俗语言说明核心含义，不超过 60 字", "detail": "按下方要求分段的解释正文", "examples": [], "topic": "可选：这组阅读内容所属主题的简短名字，6 字以内，无法判断时给空串"}
 
 要求：
-1. 只依据术语本身与给定上下文作答。若上下文不足以确定含义，必须在 detail 中写明「仅凭该语境无法确定」，并把最可能的解释标注为「推测」。
-2. examples 最多 3 条，可以为空数组。
+1. 用术语本身与给定上下文确定含义。可以补充可靠的通用知识帮助理解，但必须与原文的陈述区分，不得把常识当作本文结论。若上下文不足以确定含义，写明「仅凭该语境无法确定」，并把可能的解释标注为「推测」。
+2. 不要造句，不要用法示例，不要输出「例子」「例句」栏目，examples 固定为空数组。不要用换一种说法重复 one_line 来填充 detail。
 3. 不要编造原文中不存在的事实、出处、页码或引文。
 4. 不要输出与解释无关的联想关系；若确有必要提及关联概念，必须写在 detail 中并标注「以下为推测性关联」，不得表述为原文事实。
 5. 使用与上下文一致的语言作答（上下文为中文时用中文）。
-6. topic 只用于给「这一次阅读的内容」分组命名：必须来自术语与上下文本身，不要复制窗口标题、网址或整段原文；判断不了就给空串。"""
+6. topic 只用于给「这一次阅读的内容」分组命名：必须来自术语与上下文本身，不要复制窗口标题、网址或整段原文；判断不了就给空串。
+7. detail 使用纯文本短段落，标题独占一行，标题与正文之间用换行，段落之间空一行；不使用 Markdown、表格或装饰符号。按内容选择以下栏目，不强凑空泛内容：
+展开理解：拆解关键组成、工作机制或约束之间的关系，回答「为什么、怎么理解」。简单词语可省略此栏。
+在本文中：结合给定原文解释作者为何提到它、它与当前论点的关系；没有可用上下文时省略，不能臆造作者意图。
+辨析与边界：说明最容易混淆的概念、适用条件或不能由此推出的结论，只选确有帮助的点。
+8. 技术或学术术语的 detail 通常为 220–450 个中文字，每段 2–4 句，复杂内容拆成两段。简单术语可更短；信息不足时坦率说明，不为凑长度编造事实。不重复标题词语，不罗列无关知识。"""
 
 USER_TEMPLATE = """术语：{term}
 
@@ -1233,6 +1238,8 @@ class DeepSeekClient:
         self.retry_policy = retry_policy or RetryPolicy()
         self.cancel_event = None
         self.on_retry = None
+        self.last_context = None
+        self.on_context = None
 
     @property
     def has_key(self) -> bool:
@@ -1297,6 +1304,8 @@ class DeepSeekClient:
             "temperature": float(temperature),
             "stream": False,
         }, self.reasoning_effort)
+        if isinstance(getattr(self, 'chat_output_limit', None), int):
+            payload['max_tokens'] = self.chat_output_limit
         return parse_chat_reply(self._extract_content(self._post(payload)))
 
     def ask(self, question: str, *, term: str, context: str = "", explanation: str = "",
@@ -1434,6 +1443,7 @@ class DeepSeekClient:
                          draft=None, reading=None, feedback=()) -> dict:
         """全文图：独立读原文 / 生成主题树 / 回原文复核，各阶段无共享对话历史。"""
         from .article_map import ArticleMapError, parse_object, payload
+        self.request_kind = 'map-' + stage
         try:
             request = payload(self.model, stage=stage, text=text,
                               selected_words=selected_words, draft=draft,
@@ -1446,10 +1456,53 @@ class DeepSeekClient:
 
     # ------------------------------------------------------------- 内部
     def _post(self, payload: dict) -> str:
-        """Audit and send using a fresh route with bounded transient retries."""
-        return post_json(endpoint_for(self.base_url), payload, api_key=self._api_key,
-                         timeout=self.timeout, policy=self.retry_policy,
-                         cancel_event=self.cancel_event, on_retry=self.on_retry)
+        """Share one bounded request, including cancellable transient retries."""
+        from .context_usage import estimate, reported
+        self.last_context = estimate(payload.get('messages', []))
+        if self.on_context:
+            self.on_context(dict(self.last_context))
+        import time
+        from dataclasses import replace
+        from .request_supervisor import supervisor
+        kind = getattr(self, 'request_kind', 'model')
+        ceiling = {'map-read': 30, 'map-generate': 45, 'map-review': 45}.get(kind, 60)
+        retries = min(2, self.retry_policy.max_retries)
+        attempt_timeout = min(self.timeout, ceiling)
+        budget = min(attempt_timeout * (retries + 1) + self.retry_policy.max_delay * retries,
+                     90 if kind == 'model' else ceiling * (retries + 1),
+                     self.retry_policy.total_timeout or float('inf'))
+        deadline = getattr(self, 'request_deadline', None)
+        if deadline is not None:
+            budget = min(budget, deadline - time.monotonic())
+        if budget <= 0:
+            raise ApiError('timeout', '等待时间过长，本次任务已结束，请稍后重试。')
+        background = getattr(self, 'background_request', False)
+        if callable(background):
+            background = background()
+        endpoint = endpoint_for(self.base_url)
+        try:
+            response = supervisor.run(url=endpoint, payload=payload, api_key=self._api_key,
+                timeout=budget, cancel=self.cancel_event, background=background, kind=kind,
+                wait_for_recovery=retries > 0,
+                operation=lambda cancel, remaining: post_json(endpoint, payload, api_key=self._api_key,
+                    timeout=min(attempt_timeout, remaining),
+                    policy=replace(self.retry_policy, max_retries=retries,
+                                   max_delay=max(60, self.retry_policy.max_delay), total_timeout=remaining),
+                    cancel_event=cancel, on_retry=self.on_retry))
+        except ApiError as exc:
+            if exc.kind in {'timeout', 'network', 'server', 'rate_limit', 'busy'}:
+                message = '暂时未能连接，请检查网络或服务设置，稍后再试。'
+                error = ApiError(exc.kind, message, status=exc.status)
+                error.attempts = exc.attempts
+                raise error from None
+            raise
+        try:
+            self.last_context = reported(self.last_context, json.loads(response))
+        except (ValueError, TypeError):
+            pass
+        if self.on_context:
+            self.on_context(dict(self.last_context))
+        return response
 
     @staticmethod
     def _http_error(status: int, detail: str) -> ApiError:

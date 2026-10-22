@@ -518,12 +518,8 @@ class TestTagsLocalOnly(unittest.TestCase):
             finally:
                 probe.close()
 
-    def test_reopen_local_entry_keeps_db_examples_and_survives_dirty_json(self):
-        """本地重开已解释词条：DB 里的 ``examples`` 必须显示，且脏 JSON 不崩、不联网。
-
-        实时结果走 ``ExplainResult.as_text()``（例子已含在结果里）；这条路径针对的是
-        **从库里重新打开**的词条 —— 旧实现只拼 ``one_line`` / ``detail``，例子丢了。
-        """
+    def test_reopen_hides_examples_without_changing_history(self):
+        """本地阅读不显示造句，历史内容保留，脏数据不影响打开。"""
         with temp_db() as db:
             bid = db.create_batch("b")
             eid = int(db.add_entry(batch_id=bid, term="卷积"))
@@ -540,14 +536,19 @@ class TestTagsLocalOnly(unittest.TestCase):
                 panel.show_dock()
                 self.assertTrue(panel.open_entry(eid))
                 body = panel.def_text.get("1.0", "end")
-                self.assertIn("例一：离散卷积", body, "从库里打开必须带出 DB 例子")
-                self.assertIn("例二：卷积核", body)
+                self.assertNotIn("例一：离散卷积", body)
+                self.assertNotIn("例二：卷积核", body)
+                self.assertIn("核心含义\n一句话解释", body)
+                self.assertIn("展开理解\n详细说明", body)
+                self.assertEqual(len(panel.def_text.text_tag_ranges['section']), 2)
+                self.assertEqual(len(panel.def_text.text_tag_ranges['summary']), 1)
 
                 panel.show_list()
                 self.assertTrue(panel.open_entry(eid), "同一词条再次本地打开仍要成功")
                 body = panel.def_text.get("1.0", "end")
-                self.assertIn("例一：离散卷积", body, "重开后例子不得丢")
-                self.assertIn("例二：卷积核", body)
+                self.assertNotIn("例一：离散卷积", body)
+                self.assertEqual(json.loads(db.get_entry(eid)['examples']),
+                                 ["例一：离散卷积", "例二：卷积核"])
 
                 self.assertTrue(panel.open_entry(dirty),
                                 "脏 JSON 例子不得让详情渲染失败")

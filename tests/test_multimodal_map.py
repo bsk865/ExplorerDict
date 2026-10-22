@@ -12,6 +12,7 @@ from app.multimodal_map import source_material,attach_evidence,review_images
 class MultimodalMapTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.w=Workspace(Path(self.temp.name));self.store=self.w.store
+        self.store.model_config=lambda:{'base_url':'https://test.invalid','model':'test','key':'test'}
         out=io.BytesIO();Image.new('RGB',(80,80),'blue').save(out,'PNG')
         self.asset,_=self.store.image(out.getvalue())
         self.a=self.store.import_article('扫描页',[{'type':'image','asset':self.asset,'caption':'图1'}])
@@ -49,6 +50,7 @@ class MultimodalMapTests(unittest.TestCase):
         with self.store.connect() as db:db.execute('INSERT INTO visual_index VALUES(?,?,?)',(self.asset,signature,'图片中有一个蓝色正方形。'))
         class Client:
             model='test'
+            base_url='https://test.invalid'
             def chat(self,messages):return '{"approved":true,"issues":[]}'
         self.w.client=lambda:Client()
         job={'cancel':threading.Event()}
@@ -67,6 +69,7 @@ class MultimodalMapTests(unittest.TestCase):
         self.a['map']={'old':'keep'};self.store.update_article(self.a)
         class Client:
             model='test'
+            base_url='https://test.invalid'
             def chat(self,messages):return '{"approved":false,"issues":["不能确认形状"]}'
         self.w.client=lambda:Client();job={'cancel':threading.Event()}
         with patch('app.long_article_map.run',return_value=(self.graph(),{'approved':True})):

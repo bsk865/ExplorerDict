@@ -48,6 +48,13 @@ class TestRequestResilience(unittest.TestCase):
                                 retry_policy=RetryPolicy(jitter=0, **overrides))
         self.wait = FakeWait()
         client.cancel_event = self.wait
+        # These tests exercise raw transport retry policies. Admission and
+        # no-replay behavior of managed requests are tested separately.
+        from app.api_transport import post_json
+        from app.api_client import endpoint_for
+        client._post = lambda payload: post_json(endpoint_for(client.base_url), payload,
+            api_key=FAKE_KEY, timeout=client.timeout, policy=client.retry_policy,
+            cancel_event=client.cancel_event, on_retry=client.on_retry)
         return client
 
     def test_transient_failures_recover_with_same_body_and_key(self):

@@ -24,6 +24,8 @@ class SourceInfo:
     doc_key: str = ""
     note: str = ""
 
+    office_article: dict | None = field(default=None, repr=False)
+
     def display(self) -> str:
         if self.url:
             return f"{self.title} — {self.url}"
@@ -75,12 +77,16 @@ class ExplainResult:
 
     def as_text(self) -> str:
         """给用户看的多行文本（解释结果小窗 / 词条详情都用它，保证一致）。"""
-        lines = [self.one_line or ""]
+        lines = ["核心含义", self.one_line.strip()] if self.one_line.strip() else []
         if self.detail:
+            headings = ("展开理解", "在本文中", "辨析与边界")
+            detail = "\n".join(
+                line.strip().rstrip("：:")
+                if line.strip().rstrip("：:") in headings else line
+                for line in self.detail.strip().splitlines()
+            )
             lines.append("")
-            lines.append(self.detail)
-        if self.examples:
-            lines.append("")
-            lines.append("例子：")
-            lines.extend(f"  · {ex}" for ex in self.examples)
+            if not detail.startswith(("展开理解\n", "在本文中\n", "辨析与边界\n")):
+                lines.append("展开理解")
+            lines.append(detail)
         return "\n".join(lines).strip()

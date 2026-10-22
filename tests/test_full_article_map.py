@@ -64,6 +64,20 @@ def saved_nodes(fixture):
 
 
 class TestArticleMapContract(unittest.TestCase):
+    def test_progress_reports_each_request_and_repair_round(self):
+        fixture = FIXTURES[0]
+        messages = []
+        am.run(FixtureClient(fixture, fail_rounds=1), text=fixture['text'],
+               selected_words=fixture['selected_words'], progress=messages.append)
+        self.assertEqual(len(messages), 5)
+        self.assertIn('独立阅读全文', messages[0])
+        self.assertIn('生成导图草稿', messages[1])
+        self.assertIn('复核', messages[2])
+        self.assertIn('第 2/3 轮', messages[3])
+        self.assertIn('修正', messages[3])
+        self.assertIn('复核', messages[4])
+
+
     def test_three_approved_previews_preserve_full_structure_and_all_relations(self):
         for fixture in FIXTURES:
             with self.subTest(file=fixture["file"]):

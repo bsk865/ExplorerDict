@@ -18,7 +18,8 @@ def segments(text, limit=24000, overlap=500):
 
 
 def run(store, client, *, text, title, version, signature, selected_words=(), cancel, progress, on_attempt, runner=None):
-    runner = runner or article_map.run
+    from functools import partial
+    runner = runner or partial(article_map.run, progress=progress, cancel=cancel)
     if len(text)<=article_map.MAX_TEXT_CHARS:
         return runner(client,text=text,selected_words=selected_words,on_attempt=on_attempt)
     pieces=list(segments(text))

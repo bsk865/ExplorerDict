@@ -44,6 +44,7 @@ def make_cache_key(term: str, context: str, base_url: str, model: str) -> str:
     """缓存键 = 术语 + 语境 + 模型配置。同词不同语境必须区分开。"""
     payload = json.dumps(
         {
+            "explanation_style": "reading-depth-v2",
             "term": (term or "").strip(),
             "context": (context or "").strip(),
             "base_url": (base_url or "").strip().rstrip("/"),

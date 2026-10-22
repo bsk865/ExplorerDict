@@ -339,7 +339,7 @@ def review_issues(draft: dict, reading: dict, review: dict) -> list[str]:
     return list(dict.fromkeys(problems))
 
 
-def run(client, *, text: str, selected_words=(), on_attempt=None) -> tuple[dict, dict]:
+def run(client, *, text: str, selected_words=(), on_attempt=None, progress=None, cancel=None) -> tuple[dict, dict]:
     """同一冻结客户端，两路独立读原文；最多三轮生成/纠错与复核。"""
     from .api_client import ApiError
     selected_words = tuple(selected_words)
@@ -347,22 +347,32 @@ def run(client, *, text: str, selected_words=(), on_attempt=None) -> tuple[dict,
         raise ApiError("schema",f"全文导图最多关联{MAX_NODES}个划选词，已保留原图；不会静默删除收藏词")
     if not text.strip() or len(text) > MAX_TEXT_CHARS:
         raise ApiError("schema", f"完整原文为空或超过{MAX_TEXT_CHARS}字，已保留原图；不会截取片段冒充全文")
+    progress = progress or (lambda message: None)
     reading = None
     reader_feedback = []
     feedback = []
     previous_draft = None
+    def check_cancel():
+        if cancel is not None and cancel.is_set():
+            raise ValueError('已停止生成导图。')
     for round_no in range(1, MAX_ROUNDS + 1):
+        check_cancel()
         draft, review, raw = None, {}, {}
         try:
             if reading is None:
+                progress(f'第 {round_no}/{MAX_ROUNDS} 轮 · 独立阅读全文')
                 read_args = {"stage":"read", "text":text, "selected_words":selected_words}
                 if reader_feedback:
                     read_args["feedback"] = reader_feedback
                 reading = validate_reading(client.full_article_map(**read_args), text, selected_words)
                 reader_feedback = []
+            progress(f'第 {round_no}/{MAX_ROUNDS} 轮 · '+('生成导图草稿' if round_no == 1 else '根据问题修正草稿'))
+            check_cancel()
             raw = client.full_article_map(stage="generate", text=text, selected_words=selected_words,
                                           feedback=feedback, draft=previous_draft)
             draft = validate_draft(raw, text, selected_words)
+            progress(f'第 {round_no}/{MAX_ROUNDS} 轮 · 对照原文复核节点与关系')
+            check_cancel()
             review = client.full_article_map(stage="review", text=text, selected_words=selected_words, draft=draft, reading=reading)
             feedback = review_issues(draft, reading, review)
         except ArticleMapError as exc:

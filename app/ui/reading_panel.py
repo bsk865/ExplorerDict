@@ -241,20 +241,9 @@ def local_examples(raw) -> list[str]:
 
 
 def _local_body(row) -> str:
-    """本地词条的释义正文：one_line + detail + 例子（与 ``ExplainResult.as_text`` 同排版）。
-
-    **实时结果**走 ``self.result.as_text()``（它自己已含例子），这条路径只用于
-    「从库里重开已解释词条」—— 旧实现只拼 one_line/detail，DB 里的 examples 丢了。
-    """
-    lines = [str(row["one_line"] or "")]
-    detail = str(row["detail"] or "")
-    if detail:
-        lines.extend(["", detail])
-    examples = local_examples(row["examples"])
-    if examples:
-        lines.extend(["", "例子："])
-        lines.extend(f"  · {ex}" for ex in examples)
-    return "\n".join(lines).strip()
+    """保留历史存储，只在阅读界面展示释义与正文。"""
+    from ..models import ExplainResult
+    return ExplainResult(str(row["one_line"] or ""), str(row["detail"] or "")).as_text()
 
 #: 状态文案（只描述这条词此刻的状态，不带任何内部标记）。
 #: ``none`` = 库里从未解释过（``explain_status`` 原值，打开词条时不再被吞成空串）。
@@ -952,7 +941,8 @@ class ReadingPanel(FloatingWindow):
         self.def_text = tk.Text(
             self.def_area.inner, wrap="word", font=theme.font(9), bg=theme.PANEL,
             fg=theme.TEXT_BODY, relief="flat", bd=0, highlightthickness=0,
-            state="disabled", height=4, spacing1=1, spacing3=2,
+            state="disabled", height=4, spacing1=0, spacing2=theme.px(3),
+            spacing3=theme.px(4), padx=theme.px(2), pady=theme.px(6),
         )
         self.def_text.pack(fill="both", expand=True)
         self.def_area.add_text(self.def_text)
@@ -3020,13 +3010,25 @@ class ReadingPanel(FloatingWindow):
         elif self.status == "stale":
             body = "词条改动过，需要重新解释。"
         elif str(row["explain_status"]) == "ok":
-            # 本地重开：one_line + detail + **DB 里的例子**（不联网、不重复请求）
+            # 历史解释在本地重排，不联网、不改写原记录。
             body = _local_body(row)
         elif str(row["explain_status"]) == "error":
             body = f"上次解释失败：{self._stored_error(row)}"
         else:
             body = "尚未解释。"
-        self._set_text_widget(self.def_text, prefix + body)
+        if self._set_text_widget(self.def_text, prefix + body):
+            self.def_text.tag_configure("section", font=theme.font(8, bold=True),
+                                        foreground=theme.TEXT_MUTED, spacing1=theme.px(5),
+                                        spacing3=theme.px(6))
+            self.def_text.tag_configure("summary", font=theme.font(10),
+                                        foreground=theme.TEXT, spacing2=theme.px(4))
+            in_summary = False
+            for number, line in enumerate((prefix + body).splitlines(), 1):
+                if line.strip() in ("核心含义", "展开理解", "在本文中", "辨析与边界"):
+                    self.def_text.tag_add("section", f"{number}.0", f"{number}.end")
+                    in_summary = line.strip() == "核心含义"
+                elif in_summary and line.strip():
+                    self.def_text.tag_add("summary", f"{number}.0", f"{number}.end")
         self._render_chat()
         if self.status in ("error", "stale") and not self._explain_inflight():
             self._hint_auto(self._failure_hint(), action="")

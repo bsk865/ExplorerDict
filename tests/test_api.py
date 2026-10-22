@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import threading
 import unittest
+from unittest.mock import patch
 
 from tests.support import temp_db
 from tools.fake_api_server import FakeApiServer
@@ -208,13 +209,21 @@ class TestFailurePath(ApiTestBase):
         self.assertIn("REDACTED", text)
 
     def test_retry_after_error_succeeds(self):
-        """失败后必须可以重试。"""
-        self.server.responder = lambda r: (500, {"error": {"message": "boom"}}, 0)
-        with self.assertRaises(ApiError):
-            self.client().explain("t", "c")
-        self.server.responder = FakeApiServer.default_responder
-        result = self.client().explain("t", "c")
-        self.assertTrue(result.one_line)
+        """失败后先冷却，冷却结束后可以重试。"""
+        import time
+        from app.request_supervisor import RequestSupervisor
+        with patch('app.request_supervisor.supervisor', RequestSupervisor(cooldown=.08)):
+            self.server.responder = lambda r: (500, {"error": {"message": "boom"}}, 0)
+            with self.assertRaises(ApiError):
+                self.client().explain("t", "c")
+            with self.assertRaises(ApiError) as error:
+                self.client().explain("t", "c")
+            self.assertEqual(error.exception.kind, 'busy')
+            self.assertEqual(len(self.server.requests), 1)
+            time.sleep(.1)
+            self.server.responder = FakeApiServer.default_responder
+            result = self.client().explain("t", "c")
+            self.assertTrue(result.one_line)
 
 
 class TestPureHelpers(unittest.TestCase):

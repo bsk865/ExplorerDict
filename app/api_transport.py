@@ -29,6 +29,7 @@ KIND_LABELS = {
     "rate_limit": "请求过于频繁（限流）", "bad_request": "请求被拒绝",
     "model": "模型不可用", "endpoint": "接口地址有误", "server": "服务端错误",
     "bad_response": "响应非法", "unknown": "未知错误", "cancelled": "已停止解释",
+    "busy": "暂时繁忙",
 }
 
 
