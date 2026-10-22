@@ -229,15 +229,23 @@ class WorkspaceStore:
                                     native.execute('DELETE FROM articles WHERE doc_key=?',(entry['doc_key'],))
             with self.connect() as db:
                 for aid in ids:
-                    for table in ('objects','attempts','source_chunks','source_indexes'):
+                    for table in ('objects','attempts','source_chunks','source_indexes','study_notes','study_memberships','study_reading','study_visits','reading_annotations','rag_vectors','rag_documents'):
                         if table in tables:
                             db.execute(f'DELETE FROM {table} WHERE article_id=?',(aid,))
                     db.execute('DELETE FROM sessions WHERE id LIKE ?', (aid+':%',))
                     db.execute('DELETE FROM articles WHERE id=?',(aid,))
+                if 'study_tasks' in tables:
+                    for row in db.execute('SELECT id,payload FROM study_tasks').fetchall():
+                        task = json.loads(row['payload'])
+                        task['article_ids'] = [aid for aid in task.get('article_ids', []) if aid not in ids]
+                        db.execute('UPDATE study_tasks SET payload=? WHERE id=?', (json.dumps(task, ensure_ascii=False), row['id']))
                 if 'capture_links' in tables:
                     db.executemany('DELETE FROM capture_links WHERE object_id=?',[(oid,) for oid in objects])
                 if 'map_parts' in tables:
                     db.executemany('DELETE FROM map_parts WHERE version=?',[(version,) for version in versions])
+                for row in list(db.execute("SELECT id,payload FROM sessions WHERE id LIKE 'library:%'")):
+                    if set(json.loads(row['payload']).get('article_ids', [])) & set(ids):
+                        db.execute('DELETE FROM sessions WHERE id=?', (row['id'],))
                 used = {b['asset'] for r in db.execute('SELECT payload FROM articles') for b in json.loads(r[0])['blocks'] if b.get('asset')}
                 for row in list(db.execute('SELECT id FROM assets')):
                     if row[0] not in used:

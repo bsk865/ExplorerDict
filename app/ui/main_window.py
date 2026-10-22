@@ -1379,7 +1379,7 @@ class MainWindow:
         self._render_tag_chips(names)
 
     def _set_explanation_text(self, row) -> None:
-        import json
+        from ..models import ExplainResult
 
         self.exp_text.configure(state="normal")
         self.exp_text.delete("1.0", tk.END)
@@ -1391,17 +1391,8 @@ class MainWindow:
             #: 覆盖新的上下文，所以照旧显示 + 明说一句「建议重新解释」。
             if row["explain_status"] == "stale":
                 self.exp_text.insert("1.0", "（上下文已补充，建议重新解释）\n\n")
-            self.exp_text.insert(tk.END, row["one_line"] + "\n")
-            if row["detail"]:
-                self.exp_text.insert(tk.END, f"\n{row['detail']}\n")
-            try:
-                examples = json.loads(row["examples"] or "[]")
-            except Exception:
-                examples = []
-            if examples:
-                self.exp_text.insert(tk.END, "\n例子：\n")
-                for ex in examples:
-                    self.exp_text.insert(tk.END, f"  · {ex}\n")
+            self.exp_text.insert(tk.END, ExplainResult(row["one_line"] or "",
+                                                       row["detail"] or "").as_text())
         else:
             self.exp_text.insert("1.0", "尚未解释。\n\n点下方「解释」获取解释。")
         self.exp_text.configure(state="disabled")

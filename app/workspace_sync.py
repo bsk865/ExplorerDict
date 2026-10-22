@@ -94,6 +94,13 @@ def synchronize(store):
             if not entry or not obj:continue
             article=store.article(obj['article_id'])
             if article.get('origin')!='capture' and not article.get('capture_document'):continue
+            if article.get('source_status') == 'pending_source':
+                source = native.query_one('SELECT * FROM articles WHERE doc_key=?', (entry['doc_key'],))
+                note = source['note'] if source and not source['text'] else ''
+                if article.get('source_error', '') != note:
+                    article['source_error'] = note
+                    store.update_article(article)
+                    changed += 1
             batch=native.get_batch(entry['batch_id'])
             title=str(batch['name'] or '').strip() if batch else ''
             if title and article['title']!=title:

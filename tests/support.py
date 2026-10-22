@@ -1703,6 +1703,17 @@ class FakeWidget:
     # --- 文本控件用到的 API ---
     def delete(self, *_a):
         self._buffer = ""
+        self.text_tag_ranges = {}
+
+    def tag_configure(self, name, **options):
+        if not hasattr(self, "text_tag_options"):
+            self.text_tag_options = {}
+        self.text_tag_options[name] = options
+
+    def tag_add(self, name, start, end):
+        if not hasattr(self, "text_tag_ranges"):
+            self.text_tag_ranges = {}
+        self.text_tag_ranges.setdefault(name, []).append((start, end))
 
     def insert(self, _index, text):
         self._buffer += str(text)
