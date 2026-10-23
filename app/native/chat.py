@@ -1,9 +1,9 @@
 """Article and selected-object conversations without browser transport."""
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QEvent
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QTextBrowser, QPlainTextEdit, QListWidget, QListWidgetItem, QLabel, QToolButton, QScrollArea, QPushButton, QLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QTextBrowser, QPlainTextEdit, QListWidget, QListWidgetItem, QLabel, QToolButton, QScrollArea, QPushButton, QLayout, QSizePolicy
 from .widgets import PageComboBox as QComboBox
-from .widgets import button, QuestionInput
+from .widgets import button, QuestionInput, FlowLayout
 from .dialogs import EditForm
 from .handoff import HandoffDialog, records as handoff_records
 from .. import conversation_budget
@@ -93,13 +93,14 @@ class ChatPanel(QScrollArea):
         layout.setContentsMargins(8, 12, 8, 8)
         self.focus = QComboBox()
         self.focus.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.focus.setMinimumContentsLength(10)
+        self.focus.setMinimumContentsLength(4)
+        self.focus.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.focus.addItem('整篇文章', '')
         for obj in self.article['objects']:
             self.focus.addItem(obj['title'], obj['id'])
         layout.addWidget(self.focus)
         layout.addWidget(button('探索记录', lambda: self.reader.show_records('objects')))
-        tools = QHBoxLayout()
+        tools = FlowLayout(spacing=6)
         self.explain = button('解释', self.explain_focus)
         self.saved = button('收藏', self.save_object)
         self.understood = button('已理解', self.mark_understood)
@@ -109,6 +110,7 @@ class ChatPanel(QScrollArea):
         self.image_button = button('查看图片与选区', self.open_image)
         layout.addWidget(self.image_button)
         self.scope = QComboBox()
+        self.scope.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.scope.addItem('查阅本文', 'article')
         self.scope.addItem('查阅资料书架', 'library')
         layout.addWidget(self.scope)
@@ -178,7 +180,7 @@ class ChatPanel(QScrollArea):
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        actions = QHBoxLayout()
+        actions = FlowLayout(spacing=6)
         self.note = button('会话笔记', self.edit_note)
         self.restart = button('接续', lambda: self.controller.restart())
         self.stop = button('停止', lambda: self.controller.stop())

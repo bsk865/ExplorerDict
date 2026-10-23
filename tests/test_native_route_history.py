@@ -91,6 +91,39 @@ class NativeRouteHistoryTests(unittest.TestCase):
         self.assertEqual('all', saved['scope'])
         self.assertNotIn(note['id'], [n['id'] for n in self.service.hub.notes(self.article['id'])['notes']])
 
+    def test_narrow_reader_object_actions_wrap_without_horizontal_overflow(self):
+        obj = self.service.store.object(self.article['id'], {'type': 'term', 'block': 'b0', 'title': '原文'})
+        self.window.resize(900, 620)
+        self.window.open_article(self.article['id'])
+        self.wait(lambda: isinstance(self.window.stack.currentWidget(), ReaderPage))
+        reader = self.window.stack.currentWidget()
+        for _ in range(5):
+            self.app.processEvents()
+        reader.set_assistant_visible(True)
+        chat = reader.chat
+        chat.set_focus(obj['id'])
+        try:
+            for closed, job in [(False, None), (False, 'fixture'), (True, None)]:
+                chat.controller.session['closed'] = closed
+                chat.controller.job = job
+                chat.render()
+                for _ in range(20):
+                    self.app.processEvents()
+                self.assertEqual(0, chat.horizontalScrollBar().maximum())
+                self.assertLessEqual(chat.widget().width(), chat.viewport().width())
+                controls = [chat.explain, chat.saved, chat.understood, chat.note, chat.send,
+                            chat.stop if job else chat.restart if closed else chat.send]
+                for control in controls:
+                    self.assertTrue(control.isVisible())
+                    self.assertGreaterEqual(control.geometry().left(), 0)
+                    self.assertLess(control.geometry().right(), chat.widget().width())
+                self.assertFalse(chat.understood.geometry().intersects(chat.explain.geometry()))
+                chat.ensureWidgetVisible(chat.send)
+                self.app.processEvents()
+                self.assertTrue(chat.viewport().rect().contains(chat.send.mapTo(chat.viewport(), chat.send.rect().center())))
+        finally:
+            chat.controller.job = None
+
     def test_return_restores_management_filter_and_scroll(self):
         self.move('notes')
         page = self.window.stack.currentWidget()

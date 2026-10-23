@@ -87,6 +87,8 @@ class FlowLayout(QLayout):
     def minimumSize(self):
         size = QSize()
         for item in self.items:
+            if item.isEmpty():
+                continue
             size = size.expandedTo(item.minimumSize())
         return size
 
@@ -100,6 +102,8 @@ class FlowLayout(QLayout):
     def arrange(self, rect, apply):
         x, y, row_height = rect.x(), rect.y(), 0
         for item in self.items:
+            if item.isEmpty():
+                continue
             size = item.sizeHint()
             size.setWidth(min(size.width(), rect.width()))
             if row_height and x + size.width() > rect.right() + 1:
