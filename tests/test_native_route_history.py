@@ -3,7 +3,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from app.native.service import NativeService
@@ -79,6 +79,17 @@ class NativeRouteHistoryTests(unittest.TestCase):
         self.window.go_back()
         self.wait(lambda: self.window.stack.currentWidget() is not old)
         self.assertEqual('', self.window.stack.currentWidget().theme)
+
+    def test_delete_note_keeps_all_library_scope(self):
+        note = self.service.hub.notes(self.article['id'])['notes'][0]
+        self.window.library.body.update(scope='all', article_ids=[self.article['id']])
+        with patch('app.native.window.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+            self.window.delete('notes', note['id'], note['title'])
+        self.wait(lambda: not self.window.tasks.pending)
+        self.assertEqual('all', self.window.library.body['scope'])
+        saved = self.service.store.get('settings', 'native-library-scope', {})
+        self.assertEqual('all', saved['scope'])
+        self.assertNotIn(note['id'], [n['id'] for n in self.service.hub.notes(self.article['id'])['notes']])
 
     def test_return_restores_management_filter_and_scroll(self):
         self.move('notes')

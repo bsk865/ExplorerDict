@@ -331,10 +331,14 @@ class ReaderPage(QWidget):
         source.setObjectName('muted')
         paper_tools.addWidget(source)
         paper_tools.addStretch()
+        from .find import FindBar
+        self.find_bar = FindBar(self.text, self)
+        paper_tools.addWidget(button('查找', self.find_bar.open, tip='文内查找 · Ctrl+F'))
         self.marks_toggle = button(f"标注 {len(bundle['annotations']['items'])}", lambda: self.show_records('marks'))
         paper_tools.addWidget(self.marks_toggle)
         paper_tools.addWidget(material)
         paper_layout.addLayout(paper_tools)
+        paper_layout.addWidget(self.find_bar)
         paper_layout.addWidget(self.text, 1)
         self.paper.setObjectName('readingPaper')
         self.paper.setStyleSheet(f"QWidget#readingPaper {{background:{palette.get('soft', palette['bg'])}; border-radius:8px;}}")
@@ -604,6 +608,9 @@ class ReaderPage(QWidget):
             self.chat.open_image()
 
     def selection_changed(self):
+        if hasattr(self, 'find_bar') and not self.find_bar.isHidden() and self.find_bar.query.hasFocus():
+            self.selection_bar.hide()
+            return
         segments = self.text.selected_segments()
         enabled = bool(segments)
         for b in self.mark_buttons:

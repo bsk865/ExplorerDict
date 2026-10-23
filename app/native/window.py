@@ -405,7 +405,8 @@ class NativeWindow(QMainWindow):
                 if kind in {'articles', 'conversations', 'notes', 'object_note', 'session_note'}:
                     ids = {a['id'] for a in self.service.store.summaries()}
                     selected = [a for a in self.library.body['article_ids'] if a in ids]
-                    self.library.select(selected, self.library.body['include_notes'], self.library.body['mode'])
+                    self.library.select(selected, self.library.body['include_notes'], self.library.body['mode'],
+                                        self.library.body.get('scope', 'all'))
                 self.refresh()
             def failed(message):
                 for controller, drafts in paused:
@@ -425,9 +426,16 @@ class NativeWindow(QMainWindow):
         menu.addButton('取消', QMessageBox.ButtonRole.RejectRole)
         menu.exec()
         if menu.clickedButton() == file_button:
-            path, _ = QFileDialog.getOpenFileName(self, '选择资料', '', '资料 (*.txt *.md *.pdf *.docx *.png *.jpg *.jpeg *.webp *.bmp)')
-            if path:
-                self.run(lambda: self.service.import_file(path), lambda a: self.open_article(a['id']))
+            paths, _ = QFileDialog.getOpenFileNames(self, '选择资料（可多选）', '', '资料 (*.txt *.md *.pdf *.docx *.png *.jpg *.jpeg *.webp *.bmp)')
+            if paths:
+                from .imports import BatchImportDialog
+                dialog = BatchImportDialog(self, paths)
+                dialog.exec()
+                articles = [row['article_id'] for row in dialog.results if 'article_id' in row]
+                if len(articles) == 1:
+                    self.open_article(articles[0])
+                else:
+                    self.navigate('shelf')
         elif menu.clickedButton() == web_button:
             from .materials import extract
             extract(self)
