@@ -2,3 +2,6 @@ pyinstaller==6.22.3
 pillow==12.3.0
 pystray==0.19.5
 beautifulsoup4==4.15.0
+ziamath==0.13
+ziafont==0.11
+latex2mathml==3.81.1

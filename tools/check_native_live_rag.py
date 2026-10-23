@@ -1,0 +1,126 @@
+"""Run a real model request through the native RAG controller with synthetic data."""
+import argparse
+import base64
+from contextlib import closing
+import json
+import logging
+import os
+from pathlib import Path
+import sqlite3
+import sys
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
+
+def read_config(source):
+    from app.crypto_dpapi import unprotect
+    with closing(sqlite3.connect((source/'reading_workspace.sqlite3').as_uri()+'?mode=ro', uri=True)) as db:
+        row = db.execute("SELECT payload FROM settings WHERE id='model'").fetchone()
+        model = json.loads(row[0]) if row else {}
+    if model and not model.get('shared'):
+        return {**model, 'key': unprotect(base64.b64decode(model['key'])) if model.get('key') else ''}
+    with closing(sqlite3.connect((source/'explorer_dict.sqlite3').as_uri()+'?mode=ro', uri=True)) as db:
+        settings = dict(db.execute('SELECT k,v FROM settings'))
+        row = db.execute("SELECT blob FROM secrets WHERE name='api_key'").fetchone()
+    return {'base_url': settings.get('api.base_url', ''), 'model': settings.get('api.model', ''),
+            'key': unprotect(row[0]) if row else ''}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('configuration_directory', type=Path)
+    args = parser.parse_args()
+    logging.disable(logging.CRITICAL)
+    config = read_config(args.configuration_directory.resolve(strict=True))
+    if not config.get('key'):
+        print(json.dumps({'passed': False, 'reason': 'model_key_missing'}))
+        return 1
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication, QWidget
+    from app.native.service import NativeService
+    from app.native.widgets import Tasks
+    from app.native.library import LibraryController
+
+    parent = ROOT/'artifacts/native-checks'
+    parent.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix='live-rag-', dir=parent))
+    app = QApplication([])
+    service = NativeService(directory)
+    # Credentials stay in memory; all articles, sessions and requests use the isolated store.
+    service.store.model_config = lambda: dict(config)
+    article = service.import_text('合成阅读安排', '青禾阅读小组每次阅读25分钟，然后休息5分钟。每次阅读后回到原文核对笔记。')
+    note = service.hub.save('notes', {'article_id': article['id'], 'title': '个人复习心得',
+                                    'content': '我的个人复习心得：休息后写下3个待核对的问题。'})
+    host = QWidget()
+    host.service = service
+    host.tasks = Tasks(host)
+    host.run = lambda action, done: host.tasks.submit(action, done)
+    controller = LibraryController(host)
+    report = {'directory': str(directory), 'model': config['model'], 'passed': False,
+              'synthetic_content_only': True, 'controller': 'LibraryController', 'errors': []}
+    started = time.monotonic()
+    submitted = False
+    finished = False
+
+    def finish(error=None):
+        nonlocal finished
+        if finished:
+            return
+        finished = True
+        if error:
+            report['errors'].append(error)
+        controller.timer.stop()
+        timer.stop()
+        report['elapsed_seconds'] = round(time.monotonic()-started, 2)
+        report['passed'] = not report['errors'] and report.get('article_and_note_cited', False)
+        (directory/'verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+        service.close()
+        host.tasks.pool.waitForDone(5000)
+        host.close()
+        app.quit()
+
+    def tick():
+        nonlocal submitted
+        if time.monotonic()-started > 180:
+            controller.stop()
+            finish('request_deadline_exceeded')
+            return
+        if not submitted and controller.key:
+            submitted = True
+            controller.request('阅读小组每次阅读和休息各几分钟？个人复习心得建议写下几个待核对的问题？请区分原文与个人心得，并引用来源。')
+        elif submitted and not controller.busy:
+            messages = controller.session.get('messages', [])
+            if not messages or messages[-1].get('role') != 'assistant':
+                finish('no_saved_assistant_answer')
+                return
+            answer = messages[-1]
+            evidence = answer.get('evidence', [])
+            report['answer'] = answer['content']
+            report['answer_model'] = answer.get('model')
+            report['cited_sources'] = [{'article_id': e.get('article_id'), 'note_id': e.get('note_id'),
+                                        'source': e.get('source'), 'citation': e.get('citation')} for e in evidence]
+            report['article_and_note_cited'] = (any(e.get('note_id') == note['id'] for e in evidence)
+                and any(e.get('article_id') == article['id'] and e.get('source') != 'personal_note' for e in evidence))
+            if answer.get('model') == '本地检索':
+                finish('model_was_not_called')
+            elif not all(value in answer['content'] for value in ('25', '5', '3')):
+                finish('expected_facts_missing')
+            else:
+                finish()
+
+    timer = QTimer()
+    timer.timeout.connect(tick)
+    timer.start(100)
+    host.tasks.error.connect(lambda _: finish('background_task_failed'))
+    controller.select([article['id']], True, 'question')
+    app.exec()
+    print(json.dumps({k: report[k] for k in ('directory', 'model', 'passed', 'elapsed_seconds', 'errors')}, ensure_ascii=False))
+    return 0 if report['passed'] else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

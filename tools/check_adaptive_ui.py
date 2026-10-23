@@ -18,6 +18,12 @@ root = Path(tempfile.mkdtemp(prefix='adaptive-study-'))
 w = Workspace(root)
 w.store.model_config = lambda: {'base_url':'https://test.invalid','model':'test','key':'test'}
 article = w.store.import_article('多模态 RAG 阅读', [{'type':'text','text':'检索增强生成与多模态学习。'}])
+if os.environ.get('ADAPTIVE_CHECK_SCRIPT', '').endswith('capture_legacy_layout.cjs'):
+    from app.study_hub import StudyHub
+    hub = StudyHub(w.store)
+    theme = hub.save('themes', {'title': '阅读与思考', 'description': '整理原文、观点与读后心得。'})
+    hub.save('themes', {'title': '研究方法', 'description': '记录方法和证据。'})
+    hub.assign(theme['id'], [article['id']], 'add')
 day = (datetime.now()+timedelta(days=1)).strftime('%Y-%m-%d')
 client = Mock(model='test', base_url='https://test.invalid')
 def answer(messages):

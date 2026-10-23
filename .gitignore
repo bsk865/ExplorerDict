@@ -58,3 +58,14 @@ _reading_runtime_v7/
 
 /storage-location.tmp
 /models/
+
+# Isolated local checks and private data never belong in a public release.
+/adaptive-study-*/
+/tmp*/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+.env
+.env.*
+!.env.example

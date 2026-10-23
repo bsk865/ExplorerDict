@@ -2,6 +2,7 @@
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 from .paths import project_root, data_dir
@@ -90,10 +91,16 @@ def ensure_started(*, reveal=False):
         if _launch is not None and _launch.poll() is None:
             return {'running':False,'ready':False,'label':'悬浮取词正在启动'}
         executable=project_root()/'探索词典.exe'
+        command = [str(executable)]
         if not executable.is_file():
-            raise ValueError('缺少悬浮取词组件，请重新安装应用。')
+            source = project_root() / 'bootstrap.py'
+            if not getattr(sys, 'frozen', False) and source.is_file():
+                command = [sys.executable, str(source)]
+            else:
+                raise ValueError('缺少悬浮取词组件，请重新安装应用。')
         try:
-            _launch=subprocess.Popen([str(executable)],cwd=project_root(),creationflags=0x08000000)
+            _launch=subprocess.Popen(command,cwd=project_root(),
+                                     env={**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT': '1'}, creationflags=0x08000000)
         except OSError as exc:
             raise ValueError('悬浮取词未能启动，请稍后重试。') from exc
         return {'running':False,'ready':False,'label':'悬浮取词正在启动'}

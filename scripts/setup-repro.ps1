@@ -61,6 +61,7 @@ if (-not $SkipModel) {
         $ok = (Test-Path $target) -and ((Get-FileHash $target -Algorithm SHA256).Hash.ToLower() -eq $item.Sha)
         if ($ok) { Write-Host ("已存在且校验通过：" + $item.Path); continue }
         Write-Host ("下载 " + $item.Path + " ...")
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
         $tmp = "$target.download"
         Invoke-WebRequest -Uri $item.Url -OutFile $tmp -UseBasicParsing
         $hash = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower()
@@ -78,6 +79,9 @@ if (-not $SkipTests) {
     if ($LASTEXITCODE -ne 0) { throw "测试未全部通过，请查看输出。" }
 }
 
+Write-Step "构建本地 UIA 辅助库"
+& (Join-Path $Root "tools/build_uia_native.ps1")
+
 Write-Step "完成"
-Write-Host "启动应用： $venvPython bootstrap.py"
+Write-Host "启动应用： $venvPython native_desktop.py"
 Write-Host "详细步骤与验收清单： docs\复现指南.md"
