@@ -42,6 +42,17 @@ def choose(store, city):
     return {'ok':True}
 
 
+def saved(store):
+    """Restore the chosen city immediately, without waiting for the network."""
+    city = store.get('settings', 'study-weather-city')
+    if not isinstance(city, dict) or not city.get('name'):
+        return {'status':'unconfigured'}
+    cache = store.get('settings', 'study-weather-cache', {})
+    if isinstance(cache, dict) and cache.get('city') == city:
+        return dict(cache, status='ready' if time.time()-cache.get('fetched_at', 0)<1800 else 'stale')
+    return {'status':'loading', 'city':city}
+
+
 def current(store):
     city = store.get('settings','study-weather-city')
     if not city:

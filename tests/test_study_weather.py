@@ -29,6 +29,19 @@ class WeatherTests(unittest.TestCase):
         with patch.object(study_weather, 'fetch', side_effect=ValueError('unavailable')):
             self.assertEqual(study_weather.current(self.store)['status'], 'stale')
 
+    def test_city_restores_in_new_store_before_any_network_request(self):
+        study_weather.choose(self.store, {'name':'Shanghai','latitude':31.2,'longitude':121.5})
+        reopened = WorkspaceStore(self.store.directory)
+        with patch.object(study_weather, 'fetch') as fetch:
+            value = study_weather.saved(reopened)
+        self.assertEqual('Shanghai', value['city']['name'])
+        self.assertEqual('loading', value['status'])
+        fetch.assert_not_called()
+        with patch.object(study_weather, 'fetch', side_effect=ValueError('offline')):
+            value = study_weather.current(reopened)
+        self.assertEqual('Shanghai', value['city']['name'])
+        self.assertEqual('unavailable', value['status'])
+
     def test_invalid_coordinates_rejected(self):
         with self.assertRaises(ValueError):
             study_weather.choose(self.store, {'name':'City','latitude':float('nan'),'longitude':0})
