@@ -19,6 +19,7 @@ from .index import IndexController, IndexPage
 from .saved import SavedPage
 from .navigation import Sidebar
 from .topbar import TopBar
+from .discover import DiscoveryController, DiscoverPage
 
 
 class TitleBar(QWidget):
@@ -53,9 +54,11 @@ class TitleBar(QWidget):
 class NativeWindow(QMainWindow):
     ready = Signal()
 
-    def __init__(self, service):
+    def __init__(self, service, *, discovery_updates=True):
         super().__init__()
         self.service = service
+        self.discovery_updates = discovery_updates
+        self.discovery = DiscoveryController(self)
         self.tasks = Tasks(self)
         self.tasks.error.connect(self.notice)
         self.library = LibraryController(self)
@@ -69,7 +72,7 @@ class NativeWindow(QMainWindow):
         self.week_offset = 0
         self.advisor_dialog = None
         self.snapshot = {}
-        self.current_page = 'today'
+        self.current_page = 'discover'
         self.article_id = None
         self.article_block = None
         self.article_object = None
@@ -158,6 +161,9 @@ class NativeWindow(QMainWindow):
         self.tasks.submit(lambda: ensure_started(reveal=True), finish, failed)
 
     def refresh_data(self):
+        if self.current_page == 'discover':
+            self.discovery.refresh()
+            return
         if not self.sync_pending and not self.closing:
             self.synchronize(manual=True)
 
@@ -227,6 +233,9 @@ class NativeWindow(QMainWindow):
             elif page == 'map' and bundle:
                 widget = MapPage(self, bundle)
                 title = '思维导图 / ' + bundle['article']['title']
+            elif page == 'discover':
+                widget = DiscoverPage(self)
+                title = '发现'
             elif page == 'library':
                 widget = LibraryPage(self, self.snapshot)
                 if restored and 'library' in restored:
@@ -267,6 +276,7 @@ class NativeWindow(QMainWindow):
             self.stack.addWidget(widget)
             self.stack.setCurrentWidget(widget)
             if old:
+                old.hide()
                 self.stack.removeWidget(old)
                 old.deleteLater()
             self.crumb.setText('我的空间 / ' + title)
@@ -286,6 +296,8 @@ class NativeWindow(QMainWindow):
                 QTimer.singleShot(0, restore_scroll)
             if page == 'today':
                 self.update_weather()
+            elif page == 'discover':
+                QTimer.singleShot(0, self.discovery.maybe_refresh)
             self.ready.emit()
         def failed(message):
             if not self.closing and version == self.generation:
@@ -320,6 +332,8 @@ class NativeWindow(QMainWindow):
 
     @staticmethod
     def page_scroll(widget):
+        if isinstance(widget, DiscoverPage):
+            return widget.scroll.verticalScrollBar()
         if isinstance(widget, ShelfPage):
             return widget.articles.verticalScrollBar()
         if isinstance(widget, ContentPage):

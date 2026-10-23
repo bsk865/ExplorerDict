@@ -30,7 +30,7 @@ class NativeRouteHistoryTests(unittest.TestCase):
             self.service.hub.save('notes', {'article_id':self.article['id'], 'title':f'心得{i}', 'content':'阅读记录。'*15})
         self.capture_patch = patch('app.native.topbar.TopBar.check_capture', lambda self: None)
         self.capture_patch.start()
-        self.window = NativeWindow(self.service)
+        self.window = NativeWindow(self.service, discovery_updates=False)
         self.window.show()
         self.wait(lambda: self.window.stack.currentWidget() is not None)
 

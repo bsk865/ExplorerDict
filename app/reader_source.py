@@ -27,10 +27,11 @@ def safe_markup(fragment):
 
 def readable_blocks(html, url, store, load_image=None):
     soup = BeautifulSoup(html, 'html.parser')
-    article = soup.find('article') or soup.find('main')
+    wechat = urlsplit(url).hostname == 'mp.weixin.qq.com'
+    article = (soup.select_one('#js_content') if wechat else None) or soup.find('article') or soup.find('main')
     if article is None:
         raise ValueError('这页没有明确的文章区域。请导入原文件，或继续在原网页阅读；不把局部抓取冒充全文。')
-    title = (article.find('h1') or soup.find('title'))
+    title = (soup.select_one('#activity-name') if wechat else None) or article.find('h1') or soup.find('title')
     title = title.get_text(' ',strip=True) if title else '网页文章'
     for node in list(article.select(DROP)):
         if node.parent:

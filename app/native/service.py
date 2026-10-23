@@ -15,6 +15,8 @@ class NativeService:
         self.hub = StudyHub(self.store)
         self.activity = StudyActivity(self.store)
         self.annotations = ReadingAnnotations(self.store)
+        from ..discovery import Discovery
+        self.discovery = Discovery(self.store)
 
     def snapshot(self):
         return {'articles': self.store.summaries(), 'study': self.hub.snapshot(),

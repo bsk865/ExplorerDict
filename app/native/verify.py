@@ -16,7 +16,7 @@ from .saved import SavedPage
 
 def attach_verification(window, directory):
     report = {'pages': [], 'errors': []}
-    routes = ['today', 'shelf', 'plans', 'notes', 'progress', 'saved', 'content', 'index', 'library', 'reader', 'map']
+    routes = ['discover', 'today', 'shelf', 'plans', 'notes', 'progress', 'saved', 'content', 'index', 'library', 'reader', 'map']
     index = 0
     scheduled = False
     library_phase = 0
@@ -370,12 +370,12 @@ def attach_verification(window, directory):
                 QApplication.processEvents()
             image = window.grab()
             assert [control.text() for control in window.nav.values()] == [
-                '今日', '主题资料库', '计划', '探索统计', '资料库问答', '笔记管理', '内容管理'], 'legacy navigation order changed'
+                '发现', '今日', '主题资料库', '计划', '探索统计', '资料库问答', '笔记管理', '内容管理'], 'navigation order changed'
             assert all(not control.icon().isNull() for control in window.nav.values()), 'navigation icon missing'
             assert not window.sidebar.mark.pixmap().isNull(), 'brand asset missing'
             assert window.sidebar.recent.count() > 0, 'recent materials missing'
             report['legacy_navigation'] = True
-            if index == 0:
+            if routes[index] == 'today':
                 from ..reading_preferences import PALETTES
                 from .widgets import stylesheet
                 for palette in sorted(PALETTES):

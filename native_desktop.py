@@ -61,7 +61,7 @@ def main():
     from app.native.service import NativeService
     from app.native.window import NativeWindow
     service = NativeService(directory)
-    window = NativeWindow(service)
+    window = NativeWindow(service, discovery_updates=not isolated_ui)
     window.capture_enabled = not isolated_ui
     activation = QTimer(window)
     def reveal():

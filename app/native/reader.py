@@ -326,7 +326,7 @@ class ReaderPage(QWidget):
         paper_layout.setContentsMargins(16, 0, 16, 16)
         paper_layout.setSpacing(16)
         paper_tools = QHBoxLayout()
-        source_label = '原文' if self.article.get('source_status') == 'readable' else '历史提取内容' if self.article.get('origin') == 'legacy' else '自编示例' if self.article.get('origin') == 'demo' else '本机文章'
+        source_label = '论文摘要 · 非全文' if self.article.get('source_status') == 'abstract' else '原文' if self.article.get('source_status') == 'readable' else '历史提取内容' if self.article.get('origin') == 'legacy' else '自编示例' if self.article.get('origin') == 'demo' else '本机文章'
         source = QLabel(source_label)
         source.setObjectName('muted')
         paper_tools.addWidget(source)

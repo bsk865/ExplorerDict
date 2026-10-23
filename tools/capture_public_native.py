@@ -32,7 +32,7 @@ def main():
         service.hub.save('themes', {'title':'阅读与思考'})
         service.hub.save('notes', {'article_id':article['id'], 'title':'把问题留在原文旁边', 'content':'先读原句，再记下自己的理解。'})
         service.hub.save('tasks', {'title':'精读一篇文章，留下一个问题', 'date':date.today().isoformat(), 'minutes':25, 'article_ids':[article['id']]})
-        window = NativeWindow(service)
+        window = NativeWindow(service, discovery_updates=False)
         window.resize(1440, 900)
         window.capture_enabled = False
         window.show()
