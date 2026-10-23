@@ -57,6 +57,14 @@ class SemanticLibraryTests(unittest.TestCase):
             self.assertEqual(hit['quote'], self.article['blocks'][0]['text'][hit['start']:hit['end']])
         self.assertEqual(reopened.status()['ready'], 1)
 
+    def test_close_during_encoding_prevents_publish_and_restart(self):
+        self.encoder.hook = self.rag.close
+        self.rag.sync()
+        self.assertEqual(0, self.rag.status()['vectors'])
+        self.rag.request()
+        self.assertFalse(self.rag.running)
+        self.assertEqual(1, self.encoder.calls)
+
     def test_scope_edit_and_delete_filter_old_vectors_immediately(self):
         other = self.store.import_article('Other', [{'type':'text', 'text':'Different source.'}])
         self.rag.sync()

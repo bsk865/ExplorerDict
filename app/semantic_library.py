@@ -23,6 +23,7 @@ class SemanticLibrary:
         self.progress = [0, 0]
         self.last_error = ''
         self.query_error = ''
+        self.closed = False
         with store.connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS rag_documents (
@@ -62,6 +63,8 @@ class SemanticLibrary:
 
     def request(self):
         with self.lock:
+            if self.closed:
+                return
             if not self.encoder.available():
                 self.last_error = '本地语义模型尚未安装，当前仅使用关键词检索。'
                 return
@@ -70,6 +73,12 @@ class SemanticLibrary:
                 return
             self.running = True
             threading.Thread(target=self._run, name='local-rag-index', daemon=True).start()
+
+    def close(self):
+        with self.lock:
+            self.closed = True
+            self.epoch += 1
+            self.pending = False
 
     def reset(self):
         with self.lock:
@@ -83,6 +92,9 @@ class SemanticLibrary:
         try:
             while True:
                 with self.lock:
+                    if self.closed:
+                        self.running = False
+                        return
                     self.pending = False
                     epoch = self.epoch
                 self.sync(epoch)

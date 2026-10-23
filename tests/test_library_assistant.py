@@ -27,6 +27,49 @@ class LibraryAssistantTests(unittest.TestCase):
         self.w.work(job, 'library-chat', self.body)
         return job
 
+    def test_empty_library_can_open_all_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            w = Workspace(Path(directory))
+            value = session(w, {'scope':'all'})
+            self.assertTrue(value['key'])
+            self.assertEqual([], value['article_ids'])
+            self.assertEqual([], search(w, {'scope':'all', 'question':'问题'})[3])
+
+    def test_all_scope_picks_up_new_import_without_losing_conversation(self):
+        body = {'scope':'all', 'article_ids':[], 'question':'钙钛矿'}
+        first = session(self.w, body)
+        self.w.store.put('sessions', first['key'], {'messages':[], 'draft':'继续阅读'})
+        added = self.w.store.import_article('新资料', [{'type':'text', 'text':'钙钛矿测试结果。'}])
+        current = session(self.w, body)
+        self.assertEqual(first['key'], current['key'])
+        self.assertEqual('继续阅读', current['session']['draft'])
+        self.assertIn(added['id'], current['article_ids'])
+        self.assertIn(added['id'], [h['article_id'] for h in search(self.w, body)[3]])
+
+    def test_capture_context_is_retrievable_but_not_article_body(self):
+        from app.capture_documents import pending_article, captured_object
+        entry = {'id':42, 'doc_key':'capture-test', 'term':'光合作用',
+                 'context':'光合作用把光能转为化学能。', 'source_title':'抓取网页', 'source_url':''}
+        article = pending_article(self.w.store, entry)
+        captured_object(self.w.store, article, entry)
+        hits = search(self.w, {'scope':'all', 'question':'光合作用'})[3]
+        hit = next(h for h in hits if h['article_id'] == article['id'])
+        self.assertEqual('capture_context', hit['source'])
+        self.assertIn('化学能', hit['quote'])
+        self.assertIsNone(hit['block'])
+        self.assertFalse(self.w.store.article(article['id'])['text'].strip())
+
+    def test_all_scope_rejects_source_changes_during_answer(self):
+        self.body.update(scope='all')
+        self.body['session_key'] = session(self.w, self.body)['key']
+        def changed(*args, **kwargs):
+            self.w.store.import_article('新版本', [{'type':'text', 'text':'内容变化'}])
+            return '阈值为83摄氏度。[S1]'
+        self.client.chat.side_effect = changed
+        self.assertNotEqual('done', self.run_chat()['status'])
+        saved = self.w.store.get('sessions', self.body['session_key'], {})
+        self.assertEqual([], saved.get('messages', []))
+
     def test_scope_and_separate_session(self):
         j = self.run_chat()
         self.assertEqual(j['status'], 'done')
@@ -56,7 +99,7 @@ class LibraryAssistantTests(unittest.TestCase):
         j = self.run_chat()
         self.assertEqual(j['status'], 'done')
         self.w.client.assert_not_called()
-        self.assertIn('没找到相关段落', j['result']['messages'][-1]['content'])
+        self.assertIn('没找到相关内容', j['result']['messages'][-1]['content'])
 
     def test_preview_is_local_and_text_only(self):
         _, _, _, hits = search(self.w, self.body)

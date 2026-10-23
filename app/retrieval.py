@@ -127,7 +127,7 @@ class SourceIndex:
                      for i, (score, ordinal, row) in enumerate(lexical)]
             for rank, hit in enumerate(semantic_hits):
                 match = next((entry for entry in fused if entry[2]['article_id'] == hit['article_id'] and
-                              entry[2]['block'] == hit['block'] and entry[2].get('note_id') == hit.get('note_id') and
+                              entry[2]['block'] == hit['block'] and entry[2].get('note_id') == hit.get('note_id') and entry[2].get('object_id') == hit.get('object_id') and
                               min(entry[2]['end'], hit['end'])-max(entry[2]['start'], hit['start']) >
                               .5*min(entry[2]['end']-entry[2]['start'], hit['end']-hit['start'])), None)
                 if match:
@@ -155,7 +155,7 @@ class SourceIndex:
             # If there are relevant hits, do not pad them with unrelated passages.
             if score <= 0 and chosen and ranked[0][0] > 0:
                 break
-            if any(r['article_id']==row['article_id'] and r['block']==row['block'] and r.get('note_id')==row.get('note_id') and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
+            if any(r['article_id']==row['article_id'] and r['block']==row['block'] and r.get('note_id')==row.get('note_id') and r.get('object_id')==row.get('object_id') and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
                 continue
             cost = len(row['quote']) + len(row.get('visual_description',''))
             if used + cost > budget:

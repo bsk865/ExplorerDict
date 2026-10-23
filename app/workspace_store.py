@@ -266,7 +266,8 @@ class WorkspaceStore:
             settings = dict(db.execute('SELECT k,v FROM settings'))
             row = db.execute("SELECT blob FROM secrets WHERE name='api_key'").fetchone()
         return {'base_url': settings.get('api.base_url', ''), 'model': settings.get('api.model', ''),
-                'key': crypto_dpapi.unprotect(row[0]) if row else ''}
+                'key': crypto_dpapi.unprotect(row[0]) if row else '',
+                'reasoning_effort': settings.get('api.reasoning_effort', '')}
 
     def save_config(self, body):
         from urllib.parse import urlsplit
@@ -277,12 +278,18 @@ class WorkspaceStore:
         model = str(body.get('model', '')).strip()
         if not model:
             raise ValueError('请输入模型名称。')
+        from .config import REASONING_EFFORTS
+        effort = body.get('reasoning_effort')
+        if effort is not None and effort not in REASONING_EFFORTS:
+            raise ValueError('请选择有效的推理强度。')
         key = str(body.get('key') or self.model_config().get('key', ''))
         from .db import Database
         with closing(Database(self.directory / 'explorer_dict.sqlite3')) as native:
             native.set_setting('api.base_url', base)
             native.set_setting('api.model', model)
             native.set_secret('api_key', key)
+            if effort is not None:
+                native.set_setting('api.reasoning_effort', effort)
         self.put('settings', 'model', {'shared':True})
         self.put('settings', 'vision', {})
 

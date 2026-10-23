@@ -109,7 +109,8 @@ class Workspace:
         c = self.store.model_config()
         if not c.get('key'):
             raise ValueError('尚未配置 API Key，请打开设置。')
-        return DeepSeekClient(c['base_url'], c['model'], c['key'], timeout=120)
+        return DeepSeekClient(c['base_url'], c['model'], c['key'], timeout=120,
+                              reasoning_effort=c.get('reasoning_effort', ''))
 
     def prepare_images(self, articles, client, job, focus=None, required=False):
         if not any(b['type']=='image' for a in articles for b in a['blocks']):
@@ -137,7 +138,7 @@ class Workspace:
         c = self.store.model_config()
         signature = hashlib.sha256((c['base_url'] + c['model']).encode()).hexdigest()
         vision = self.store.get('settings', 'vision', {})
-        return {'base_url': c['base_url'], 'model': c['model'], 'has_key': bool(c.get('key')),
+        return {'base_url': c['base_url'], 'model': c['model'], 'has_key': bool(c.get('key')), 'reasoning_effort': c.get('reasoning_effort', ''),
                 'vision': vision if vision.get('signature') == signature else {}, 'signature': signature,
                 'context_limit': conversation_budget.policy(self.store)['capacity'],
                 'conversation_policy': conversation_budget.policy(self.store)}
@@ -274,6 +275,12 @@ class Workspace:
                 scope = body.get('scope', 'article')
                 if scope not in {'article', 'library'}:
                     raise ValueError('请选择本文或资料书架作为问答范围。')
+                if obj and obj['type'] != 'term':
+                    # A selected image must fit before paid visual indexing or capability checks.
+                    minimum = conversation_budget.history(session) + [{'role': 'user', 'content': [
+                        {'type': 'text', 'text': question}, {'type': 'image_url'}]}]
+                    conversation_budget.guard(self.store, key, question, minimum,
+                                              job['conversation_policy'], job['cancel'])
                 articles = [a] if scope == 'article' or obj else [self.store.article(row['id']) for row in self.store.summaries()]
                 articles = self.prepare_images(articles,client,job,
                     focus=obj if obj and obj['type']!='term' else None,required=bool(obj and obj['type']!='term'))
@@ -699,11 +706,15 @@ def process_alive(pid):
 def main():
     parser=argparse.ArgumentParser(); parser.add_argument('--port',type=int,default=0); parser.add_argument('--headless',action='store_true')
     parser.add_argument('--owner-pid', type=int)
+    parser.add_argument('--browser', action='store_true')
     args=parser.parse_args(); workspace=Workspace(data_dir()); token=secrets.token_urlsafe(32)
     server=ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(workspace,token))
     url=f'http://127.0.0.1:{server.server_port}/session?token={token}'
     state=data_dir()/'workspace-session-v7.json'; state.write_text(json.dumps({'pid':os.getpid(),'url':url,'build':'reader-v7'}),encoding='utf-8')
-    if not args.headless:
+    if args.browser:
+        import webbrowser
+        webbrowser.open(url)
+    elif not args.headless:
         from .capture_bridge import start_on_launch
         start_on_launch()
         edge=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe'

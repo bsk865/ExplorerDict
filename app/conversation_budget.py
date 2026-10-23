@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 SOURCE = 'https://api-docs.deepseek.com/quick_start/pricing/'
 FLASH_NAMES = {'deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'}
 DEFAULT = 16384
+MAX_BUDGET = 1000000
 OUTPUT = 4096
 
 
@@ -15,16 +16,17 @@ def policy(store):
     signature = hashlib.sha256((c['base_url'] + c['model']).encode()).hexdigest()
     official = urlsplit(c['base_url']).hostname == 'api.deepseek.com' and c['model'] in FLASH_NAMES | {'deepseek-v4-pro'}
     capacity = 1000000 if official else store.get('settings', 'context_limits', {}).get(signature)
-    budget = store.get('settings', 'conversation_budgets', {}).get(signature, DEFAULT)
-    budget = min(budget, capacity) if capacity else min(budget, DEFAULT)
+    ceiling = min(capacity, MAX_BUDGET) if capacity else DEFAULT
+    budget = store.get('settings', 'conversation_budgets', {}).get(signature, ceiling)
+    budget = min(budget, ceiling)
     return {'budget':budget, 'capacity':capacity, 'official':official,
             'source':SOURCE if official else None, 'checked':'2026-10-20' if official else None,
-            'output_reserve':min(OUTPUT, budget//4), 'signature':signature}
+            'ceiling':ceiling, 'output_reserve':min(OUTPUT, budget//4), 'signature':signature}
 
 
 def save_policy(store, budget):
     p = policy(store)
-    ceiling = p['capacity'] or DEFAULT
+    ceiling = p['ceiling']
     if type(budget) is not int or not 8192 <= budget <= ceiling:
         raise ValueError('问答预算须至少 8192 tokens，且不能超过已确认的模型容量。')
     values = store.get('settings', 'conversation_budgets', {})
