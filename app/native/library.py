@@ -315,7 +315,7 @@ class LibraryPage(QWidget):
         all_sources = QCheckBox('全部资料（自动包含以后导入和抓取的内容）')
         all_sources.setChecked(self.controller.body.get('scope') == 'all')
         layout.addWidget(all_sources)
-        explanation = QLabel('默认查阅全部本地资料，也可以缩小范围。划词内容仅作为已抓取片段使用。')
+        explanation = QLabel('默认查阅全部资料，可选择范围。')
         explanation.setWordWrap(True)
         explanation.setObjectName('muted')
         layout.addWidget(explanation)

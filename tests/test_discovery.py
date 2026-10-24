@@ -90,9 +90,10 @@ class DiscoveryTests(unittest.TestCase):
                 return b'<rss><channel/></rss>', url, 'utf-8'
             return self.loader(url, limit)
         state = self.service.refresh(loader)
-        self.assertEqual(dict(sources=3, failed=1, empty=1, articles=1), state['refresh_counts'])
+        self.assertEqual(dict(sources=3, failed=1, empty=1, articles=1, added=1, changed=0, unchanged=0), state['refresh_counts'])
         message = refresh_message(state)
-        self.assertIn('已更新 2 个来源', message)
+        self.assertIn('已检查 2 个来源', message)
+        self.assertIn('新增 1 条', message)
         self.assertIn('1 个来源本期暂无新文章', message)
         self.assertIn('1 个来源更新失败', message)
         self.assertEqual('', state['source_health']['empty']['error'])

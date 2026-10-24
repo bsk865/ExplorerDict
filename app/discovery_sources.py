@@ -41,29 +41,30 @@ def platform_key(url):
     return '.'.join(parts[-length:])
 
 
-def diversify(rows):
+def diversify(rows, *, key=None, explore=True):
     """One item per publisher per round, with occasional off-interest material.
 
     A publisher's multiple feeds share one queue. No source or topic is invented
     when only one is available, and an explicit source filter remains possible.
     """
     groups = defaultdict(list)
+    key = key or (lambda row: row['score'])
     for row in rows:
         groups[row['platform']].append(row)
     result = []
     while groups:
-        order = sorted(groups, key=lambda key: groups[key][0]['score'], reverse=True)
+        order = sorted(groups, key=lambda publisher: key(groups[publisher][0]), reverse=True)
         if result and len(order) > 1 and result[-1]['platform'] == order[0]:
             order[0], order[1] = order[1], order[0]
-        for key in order:
-            queue = groups[key]
+        for publisher in order:
+            queue = groups[publisher]
             index = 0
-            if len(result) % 5 == 4:
+            if explore and len(result) % 5 == 4:
                 index = next((i for i, row in enumerate(queue) if not row.get('matched_topics')), 0)
             row = dict(queue.pop(index))
             if index:
                 row['reason'] = '探索其他方向 · ' + row['source']
             result.append(row)
             if not queue:
-                del groups[key]
+                del groups[publisher]
     return result

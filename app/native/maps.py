@@ -450,7 +450,7 @@ class MapPage(QWidget):
         arrange.addWidget(self.restore_graph)
         arrange.addStretch()
         layout.addLayout(arrange)
-        scope = QLabel('正文导图只研读正文；图文导图同时识别并核对图片，需要模型支持图片。扫描页需使用图文导图。')
+        scope = QLabel('含扫描页时请选择图文导图，需要模型支持图片。')
         scope.setWordWrap(True)
         scope.setObjectName('muted')
         layout.addWidget(scope)

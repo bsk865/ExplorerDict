@@ -230,6 +230,48 @@ class NativeDiscoveryTests(unittest.TestCase):
         self.assertNotIn('仅保存摘要', actions)
         self.assertIn('获取全文并加入资料库', actions)
 
+    def test_actual_new_items_can_be_viewed_and_unchanged_refresh_reports_no_news(self):
+        page = self.window.stack.currentWidget()
+        extra = b'<item><title>New original story</title><link>https://example.org/new</link></item>'
+        feed = FEED.replace(b'</channel>', extra + b'</channel>')
+        original_refresh = self.service.discovery.refresh
+        def refresh():
+            return original_refresh(lambda url, *args: (feed, url, 'utf-8'))
+        with patch.object(self.service.discovery, 'refresh', side_effect=refresh), \
+                patch.object(self.service.discovery, 'cover', side_effect=lambda item, *args: item):
+            page.refresh_button.click()
+            self.wait(lambda: not self.window.discovery.busy)
+            self.assertIn('新增 1 条', page.status.text())
+            self.assertTrue(page.updates_button.isVisible())
+            page.updates_button.click()
+            self.assertTrue(self.window.discovery.changes_only)
+            labels = [label.text() for label in page.scroll.widget().findChildren(QLabel)]
+            self.assertIn('New original story', labels)
+            self.assertNotIn('Robotics research', labels)
+            self.assertTrue(any('本次新增' in text for text in labels))
+            page.refresh_button.click()
+            self.wait(lambda: not self.window.discovery.busy)
+            self.assertIn('暂无新增或修改', page.status.text())
+            self.assertFalse(page.updates_button.isVisible())
+            self.assertFalse(self.window.discovery.changes_only)
+            self.assertIn('Robotics research', [label.text() for label in page.scroll.widget().findChildren(QLabel)])
+        self.assertEqual([], self.watch.shown)
+
+    def test_latest_order_is_saved_without_affecting_filters_or_open_detail(self):
+        page = self.window.stack.currentWidget()
+        self.window.discovery.query = 'research'
+        page.order.setCurrentIndex(page.order.findData('latest'))
+        self.assertEqual('latest', self.window.discovery.order)
+        self.assertEqual('research', self.window.discovery.query)
+        self.assertEqual('latest', self.service.store.get('settings', 'discovery-view')['order'])
+        item = self.service.discovery.state()['items'][0]
+        page.show_detail(item['id'])
+        detail = page.stack.currentWidget()
+        self.window.discovery.changed.emit()
+        self.app.processEvents()
+        self.assertIs(detail, page.stack.currentWidget())
+        self.assertEqual([], self.watch.shown)
+
 
 if __name__ == '__main__':
     unittest.main()

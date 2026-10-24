@@ -28,19 +28,23 @@ def refresh_message(state):
     counts = state.get('refresh_counts')
     if counts is None:
         failed = len(state.get('errors', []))
-        return f'{failed} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。' if failed else '订阅内容已更新'
+        return f'{failed} 个来源更新失败，已保留原内容' if failed else '订阅内容已更新'
     total, failed = counts['sources'], counts['failed']
     if not total:
         if counts.get('skipped'):
             return '本次更新已跳过已暂停或变更的来源。'
         return '尚未启用订阅来源，请在“兴趣与来源”中添加。'
     if failed == total:
-        return f'全部 {total} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。'
-    message = f"已更新 {total-failed} 个来源 · 本次取得 {counts['articles']} 条内容"
-    if counts['empty']:
-        message += f" · {counts['empty']} 个来源本期暂无新文章"
+        return f'全部 {total} 个来源更新失败，已保留原内容'
+    if 'added' in counts:
+        if counts['added'] or counts['changed']:
+            message = f"新增 {counts['added']} 条 · 修改 {counts['changed']} 条"
+        else:
+            message = '暂无新增或修改'
+    else:
+        message = f"已更新 {total-failed} 个来源 · 本次取得 {counts['articles']} 条内容"
     if failed:
-        message += f' · {failed} 个来源更新失败，保留上次内容'
+        message += f' · {failed} 个来源更新失败'
     if counts.get('skipped'):
         message += f" · 已跳过 {counts['skipped']} 个已暂停或变更的来源"
     return message
@@ -58,6 +62,10 @@ class DiscoveryController(QObject):
         self.kind = 'all'
         self.query = ''
         self.source_id = ''
+        self.order = self.service.store.get('settings', 'discovery-view', {}).get('order', 'recommended')
+        if self.order not in {'recommended', 'latest'}:
+            self.order = 'recommended'
+        self.changes_only = False
         self.limit = 20
         self.cover_loading = False
         self.cover_attempts = set()
@@ -85,7 +93,7 @@ class DiscoveryController(QObject):
 
     def refresh(self):
         self.cover_attempts.clear()
-        self.work(self.service.refresh, '正在更新订阅，已有内容仍可阅读…',
+        self.work(self.service.refresh, '正在更新…',
                   refresh_message)
 
     def load_covers(self, items):
@@ -141,7 +149,7 @@ class DiscoveryController(QObject):
     def collect(self, item, mode='full'):
         self.work(lambda: self.service.import_item(item['id'], mode=mode),
                   '正在下载并提取全文…' if mode == 'full' else '正在保存摘要…',
-                  lambda article: '全文已加入资料库，可打开阅读和问答。' if article.get('source_status') != 'abstract'
+                  lambda article: '全文已加入资料库' if article.get('source_status') != 'abstract'
                   else '已单独保存摘要，未取得全文。')
 
     def flag(self, item, name, value):
@@ -221,7 +229,7 @@ class DiscoverPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 20, 24, 12)
         top = QHBoxLayout()
-        top.addWidget(heading('发现', '从你的好奇心出发，遇见新的内容'), 1)
+        top.addWidget(heading('发现'), 1)
         self.refresh_button = button('更新内容', self.controller.refresh)
         top.addWidget(self.refresh_button)
         top.addWidget(button('兴趣与来源', self.show_preferences))
@@ -257,7 +265,7 @@ class DiscoverPage(QWidget):
         links.addWidget(self.add_button)
         feed_layout.addLayout(links)
         self.search = QLineEdit(self.controller.query)
-        self.search.setPlaceholderText('筛选发现内容的标题与简介')
+        self.search.setPlaceholderText('搜索标题或简介')
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(180)
@@ -271,7 +279,16 @@ class DiscoverPage(QWidget):
         self.source_filter.setMaximumWidth(240)
         self.source_filter.currentIndexChanged.connect(self.filter_source)
         filters.addWidget(self.source_filter, 1)
+        self.order = PageComboBox()
+        self.order.setAccessibleName('发现内容排序')
+        self.order.addItem('为你推荐', 'recommended')
+        self.order.addItem('最新发布', 'latest')
+        self.order.setCurrentIndex(max(0, self.order.findData(self.controller.order)))
+        self.order.currentIndexChanged.connect(self.change_order)
+        filters.addWidget(self.order)
         feed_layout.addLayout(filters)
+        self.updates_button = button('', self.show_updates)
+        feed_layout.addWidget(self.updates_button)
         self.scroll = QScrollArea(self.feed)
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -293,6 +310,19 @@ class DiscoverPage(QWidget):
         self.controller.limit = 20
         self.render()
 
+    def change_order(self, *_):
+        self.controller.order = self.order.currentData()
+        self.service.store.put('settings', 'discovery-view', {'order': self.controller.order})
+        self.controller.limit = 20
+        self.scroll.verticalScrollBar().setValue(0)
+        self.render()
+
+    def show_updates(self):
+        self.controller.changes_only = not self.controller.changes_only
+        self.controller.limit = 20
+        self.scroll.verticalScrollBar().setValue(0)
+        self.render()
+
     def render(self):
         c = self.controller
         self.refresh_button.setEnabled(not c.busy)
@@ -302,7 +332,7 @@ class DiscoverPage(QWidget):
         when = datetime.fromtimestamp(updated).strftime('%m-%d %H:%M') if updated else '尚未更新'
         self.status.setText((c.message+' · ' if c.message else '')+'上次更新：'+when)
         topics = self.service.interests()
-        source_options = [('', '全部平台 · 交错推荐')]
+        source_options = [('', '全部来源')]
         source_options += [(s['id'], s['name']) for s in self.service.preferences()['sources'] if s.get('enabled')]
         source_options.append(('links', '主动收集的链接'))
         self.source_filter.blockSignals(True)
@@ -320,18 +350,28 @@ class DiscoverPage(QWidget):
         rows = QVBoxLayout(body)
         rows.setContentsMargins(0, 8, 8, 8)
         rows.setSpacing(14)
-        items = self.service.ranked(c.kind, c.query, c.source_id)
+        changes = state.get('refresh_changes', {})
+        added = set(changes.get('added', []))
+        changed = set(changes.get('changed', []))
+        current_ids = {row['id'] for row in state['items']}
+        changed_ids = (added | changed) & current_ids
+        if not changed_ids:
+            c.changes_only = False
+        self.updates_button.setVisible(bool(changed_ids))
+        self.updates_button.setText('返回全部内容' if c.changes_only else f'查看本次更新 · {len(changed_ids)} 条')
+        items = self.service.ranked(c.kind, c.query, c.source_id, order=c.order)
+        if c.changes_only:
+            items = [item for item in items if item['id'] in changed_ids]
         platforms = {row['platform'] for row in items}
-        direction = '关注方向：'+'、'.join(topic for topic, _ in topics) if topics else '可在“兴趣与来源”中选择方向；也会展示其他领域的内容。'
-        diversity = f'当前内容来自 {len(platforms)} 个平台' if platforms else '等待订阅内容'
-        if len(platforms) == 1 and not c.source_id:
-            diversity += '，可更新或添加其他来源'
-        self.interests.setText(direction+'\n'+diversity+' · 跨平台交错展示，穿插其他探索方向')
+        direction = '关注：'+'、'.join(topic for topic, _ in topics) if topics else ''
+        diversity = f'{len(platforms)} 个平台' if platforms else ''
+        self.interests.setText(' · '.join(filter(None, [direction, diversity])))
+        self.interests.setVisible(bool(direction or diversity))
         for item in items[:c.limit]:
-            rows.addWidget(self.card(item, body))
+            status = '本次新增' if item['id'] in added else '内容有修改' if item['id'] in changed else ''
+            rows.addWidget(self.card(dict(item, update_status=status), body))
         if not items:
-            rows.addWidget(label('这里还没有内容。更新订阅、调整筛选，或粘贴一篇文章链接。'))
-            rows.addWidget(label('发现内容来自原始来源；只有主动加入资料库后，才会用于本地问答。', True))
+            rows.addWidget(label('当前筛选暂无更新' if c.changes_only else '暂无内容，可更新订阅或收集文章链接。'))
         if len(items) > c.limit:
             rows.addWidget(button(f'继续查看 · 还有 {len(items)-c.limit} 条', self.more))
         rows.addStretch()
@@ -360,7 +400,7 @@ class DiscoverPage(QWidget):
         layout.setContentsMargins(18, 16, 18, 16)
         date = stamp(item.get('published', ''))
         date_label = datetime.fromtimestamp(date).strftime('%Y-%m-%d') if date else '日期未提供'
-        layout.addWidget(label(' · '.join(filter(None, [item['source'], date_label, item.get('publication', '')])), True))
+        layout.addWidget(label(' · '.join(filter(None, [item['source'], date_label, item.get('publication', ''), item.get('update_status', '')])), True))
         main = QHBoxLayout()
         cover_file = item.get('cover_file', '')
         if re.fullmatch(r'[a-f0-9]{64}\.jpg', cover_file):
@@ -429,9 +469,8 @@ class DiscoverPage(QWidget):
             layout.addWidget(label(item['summary']))
         elif item.get('document_format') != 'pdf':
             layout.addWidget(label('来源未提供简介，请在原站阅读。'))
-        layout.addWidget(label(('获取全文将读取可访问的论文正文，并保留下载的 PDF 原文件。'
-                                + ('也可以单独保存来源摘要。' if has_summary else '')) if paper
-                               else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
+        layout.addWidget(label('获取全文后可阅读和问答，PDF 原件一并保存。' if paper
+                               else '加入资料库后可阅读全文和问答。', True))
         layout.addWidget(label(item['url'], True))
         actions = FlowLayout(spacing=8)
         actions.addWidget(button('打开原站', lambda: open_source(self.host, item['url'])))
@@ -517,13 +556,13 @@ class DiscoverPage(QWidget):
             error.setText('已恢复被忽略的内容')
             self.controller.changed.emit()
         layout.addWidget(button('恢复被忽略的内容', restore_hidden))
-        layout.addWidget(heading('添加订阅', '粘贴网站地址，查找它提供的新闻或论文订阅'))
+        layout.addWidget(heading('添加订阅'))
         self.subscription=SourceSubscription(self.controller,body)
         layout.addWidget(self.subscription)
-        layout.addWidget(heading('订阅来源', f'可订阅最多{MAX_SOURCES}个来源，选择不同网站和栏目，发现更多方向'))
+        layout.addWidget(heading('订阅来源', f'最多 {MAX_SOURCES} 个'))
         source_rows = QVBoxLayout()
         layout.addLayout(source_rows)
-        layout.addWidget(heading('更多平台', '直接订阅原始来源；公众号文章可在发现页收集公开链接'))
+        layout.addWidget(heading('更多来源'))
         catalog_rows = QVBoxLayout()
         layout.addLayout(catalog_rows)
         def populate_sources():
@@ -541,6 +580,8 @@ class DiscoverPage(QWidget):
                 status = health.get(source['id'], {})
                 last = datetime.fromtimestamp(status['updated']).strftime('%m-%d %H:%M') if status.get('updated') else '尚无成功更新'
                 history = '最近更新：'+last+' · '+str(status.get('last_count', status.get('count', 0)))+' 条' if status.get('updated') else last
+                if 'added' in status and not status.get('error'):
+                    history += f"\n本次新增 {status['added']} 条 · 修改 {status['changed']} 条"
                 detail = status.get('error') or status.get('message')
                 column.addWidget(label((detail+'\n' if detail else '')+history, True))
                 controls = QHBoxLayout()

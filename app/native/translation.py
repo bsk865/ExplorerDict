@@ -171,7 +171,7 @@ class TranslationPage(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(*( (12, 4, 12, 8) if self.article_bound else (24, 20, 24, 16) ))
         header = QHBoxLayout()
-        header.addWidget(QLabel('原文与译文') if self.article_bound else heading('翻译', '保留原文，对照理解不同语言的内容'), 1)
+        header.addWidget(QLabel('原文与译文') if self.article_bound else heading('翻译'), 1)
         if close:
             header.addWidget(button('返回原文' if self.controller.scope.startswith('article:') else '收起翻译', close))
         outer.addLayout(header)

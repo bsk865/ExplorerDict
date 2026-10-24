@@ -33,6 +33,12 @@ TOPICS = {
     '数学': ['数学', '积分', '概率', 'mathematics', 'integral', 'probability'],
 }
 
+CONTENT_FIELDS = ('title', 'summary', 'published', 'authors', 'publication')
+
+
+def content_changed(before, after):
+    return any(before.get(key, '') != after.get(key, '') for key in CONTENT_FIELDS)
+
 
 def clean(value, limit=1000):
     return re.sub(r'\s+', ' ', BeautifulSoup(value or '', 'html.parser').get_text(' ', strip=True))[:limit]
@@ -344,7 +350,7 @@ class Discovery:
                         scores[topic] = scores.get(topic, 0) + 1 / (1 + index / 30)
         return sorted(((k, v) for k, v in scores.items() if k not in prefs['blocked']), key=lambda x: -x[1])[:10]
 
-    def ranked(self, kind='all', query='', source_id=''):
+    def ranked(self, kind='all', query='', source_id='', order='recommended'):
         prefs = self.preferences()
         interests = self.interests()
         flags = self.store.get('settings', 'discovery-flags', {})
@@ -384,6 +390,10 @@ class Discovery:
             score = sum(weight for _, weight in matched) + 2 / (1 + age / 7)
             item['platform'] = item.get('platform') or sources.get(item.get('source_id'), {}).get('platform') or platform_key(item['url'])
             rows.append(dict(item, **flag, matched_topics=[topic for topic, _ in matched], reason=('与你关注的“'+matched[0][0]+'”相关') if matched else '来自你的订阅与收集', score=score))
+        if order == 'latest':
+            key = lambda row: (stamp(row.get('published', '')), row.get('first_seen', row.get('imported_at', 0)))
+            ordered = sorted(rows, key=key, reverse=True)
+            return diversify(ordered, key=key, explore=False) if kind not in {'saved', 'article'} and not source_id else ordered
         ordered = sorted(rows, key=lambda row: (row['score'], stamp(row.get('published', '')), row.get('imported_at', 0)), reverse=True)
         return diversify(ordered) if kind not in {'saved', 'article'} and not source_id else ordered
 
@@ -443,12 +453,15 @@ class Discovery:
             fresh = [dict(item, source=source['name'], platform=source['platform'])
                      for source, items, _, _ in batches for item in items]
             state = self.state()
-            merged = {item['id']: item for item in state['items']}
+            previous = {item['id']: item for item in state['items']}
+            merged = dict(previous)
             for item in fresh:
                 old = merged.get(item['id'], {})
                 origins = item_origins(old)
                 origins.update(item_origins(item))
-                merged[item['id']] = dict(old, **dict(item, **covers.get(item['id'], {})), origins=list(origins.values()))
+                merged[item['id']] = dict(old, **dict(item, **covers.get(item['id'], {})),
+                                         first_seen=old.get('first_seen', old.get('imported_at', item['imported_at'])),
+                                         origins=list(origins.values()))
             flags = self.store.get('settings', 'discovery-flags', {})
             ordered = sorted(merged.values(), key=lambda row: row.get('imported_at', 0), reverse=True)
             protected = [row for row in ordered if flags.get(row['id'], {}).get('saved') or 'links' in item_origins(row)]
@@ -458,21 +471,33 @@ class Discovery:
             active = [row for row in pool if enabled.intersection(item_origins(row))]
             dormant = [row for row in pool if not enabled.intersection(item_origins(row))]
             kept = protected + (diversify(active) + diversify(dormant))[:400]
+            kept_ids = {row['id'] for row in kept}
+            received = {row['id'] for row in fresh}
+            added = sorted(received - previous.keys())
+            changed = sorted(key for key in received & previous.keys() if content_changed(previous[key], merged[key]))
             state.update(items=kept, attempted=time.time(), errors=[error for _, _, error, _ in batches if error],
                          refresh_counts={'sources': len(batches), 'failed': sum(bool(error) for _, _, error, _ in batches),
                                          'empty': sum(not items and not error for _, items, error, _ in batches),
-                                         'articles': len(fresh)})
+                                         'articles': len(fresh), 'added': len(added), 'changed': len(changed),
+                                         'unchanged': len(received) - len(added) - len(changed)},
+                         refresh_changes={'added': [key for key in added if key in kept_ids],
+                                          'changed': [key for key in changed if key in kept_ids]})
             if len(batches) != len(requested):
                 state['refresh_counts']['skipped'] = len(requested) - len(batches)
             configured = {source['id'] for source in self.preferences()['sources']}
             health = {key: value for key, value in state.get('source_health', {}).items() if key in configured}
             for source, items, error, attempts in batches:
                 old = health.get(source['id'], {})
+                source_ids = {row['id'] for row in items}
+                source_added = len(source_ids.intersection(added))
+                source_changed = len(source_ids.intersection(changed))
                 health[source['id']] = dict(attempted=time.time(), count=len(items), error=error or '',
                                              attempts=attempts,
+                                             added=source_added, changed=source_changed,
                                              last_count=old.get('last_count', old.get('count', 0)) if error else len(items),
                                              updated=old.get('updated', 0) if error else time.time(),
                                              message='本期暂无新文章，已保留上次内容' if not error and not items
+                                             else ('重试后读取成功 · ' if attempts > 1 else '') + '暂无新增或修改，保留现有内容' if not error and not source_added and not source_changed
                                              else '重试后已更新' if not error and attempts > 1 else '')
             state['source_health'] = health
             if any(not error for _, _, error, _ in batches):
