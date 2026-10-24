@@ -131,6 +131,8 @@ class RichTextTests(unittest.TestCase):
         widget.resize(360, 450)
         widget.load_article({'blocks':[block]}, {})
         widget.show()
+        self.app.processEvents()
+        self.assertEqual(0, widget.horizontalScrollBar().maximum())
         QTest.qWait(40)
         self.assertEqual(0, widget.horizontalScrollBar().maximum())
         clicked = []

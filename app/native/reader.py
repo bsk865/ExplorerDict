@@ -201,6 +201,7 @@ class OriginalText(QTextEdit):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'image_layout'):
+            self.resize_images()
             self.image_layout.start()
 
     def resize_images(self):

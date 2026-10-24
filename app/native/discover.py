@@ -215,6 +215,7 @@ class DiscoverPage(QWidget):
         self.host, self.controller = host, host.discovery
         self.service = self.controller.service
         self.detail_id = None
+        self.detail_update = None
         self.preferences_update = None
         self.palette = colors(host.snapshot['preferences']['palette'], host.snapshot['preferences']['mode'])
         outer = QVBoxLayout(self)
@@ -342,8 +343,8 @@ class DiscoverPage(QWidget):
         self.scroll.verticalScrollBar().setValue(position)
         if self.stack.currentWidget() is self.feed:
             QTimer.singleShot(0, lambda controller=c, visible=items[:c.limit]: controller.load_covers(visible))
-        if self.detail_id and self.stack.currentWidget() is not self.feed:
-            self.show_detail(self.detail_id)
+        if self.detail_id and self.detail_update and self.stack.currentWidget() is not self.feed:
+            self.detail_update()
         elif self.preferences_update and self.stack.currentWidget() is not self.feed:
             self.preferences_update()
 
@@ -388,6 +389,7 @@ class DiscoverPage(QWidget):
 
     def replace_secondary(self, widget):
         self.preferences_update = None
+        self.detail_update = None
         while self.stack.count() > 1:
             old = self.stack.widget(1)
             old.hide()
@@ -398,6 +400,7 @@ class DiscoverPage(QWidget):
 
     def back(self):
         self.detail_id = None
+        self.detail_update = None
         self.stack.setCurrentWidget(self.feed)
         self.render()
 
@@ -427,24 +430,36 @@ class DiscoverPage(QWidget):
         actions = FlowLayout(spacing=8)
         actions.addWidget(button('打开原站', lambda: open_source(self.host, item['url'])))
         actions.addWidget(button('复制链接', lambda: copy_link(self.host, item['url'])))
-        actions.addWidget(button('翻译摘要' if paper else '翻译简介',
-                                 lambda: self.host.open_translation(item.get('summary', ''), item['title'], 'discovery:' + item['id'])))
-        article_id = item.get('article_id')
-        article = self.host.service.store.get('articles', article_id) if article_id else None
-        if article:
-            actions.addWidget(button('打开资料', lambda: self.host.open_article(article_id), primary=True))
-        if not article or article.get('source_status') == 'abstract':
-            collect = button('获取全文并加入资料库', lambda: self.controller.collect(item), primary=True)
+        has_summary = bool(item.get('summary', '').strip())
+        if has_summary:
+            actions.addWidget(button('翻译摘要' if paper else '翻译简介',
+                                     lambda: self.host.open_translation(item['summary'], item['title'], 'discovery:' + item['id'])))
+        state = {'article_id': None}
+        open_article = button('打开资料', lambda: self.host.open_article(state['article_id']), primary=True)
+        collect = button('获取全文并加入资料库', lambda: self.controller.collect(item), primary=True)
+        abstract = button('仅保存摘要', lambda: self.controller.collect(item, 'abstract')) if paper else None
+        for control in (open_article, collect, abstract):
+            if control is not None:
+                actions.addWidget(control)
+        def update_actions():
+            flags = self.service.store.get('settings', 'discovery-flags', {}).get(key, {})
+            aid = flags.get('article_id', item.get('article_id'))
+            article = self.host.service.store.get('articles', aid) if aid else None
+            state['article_id'] = article['id'] if article else None
+            open_article.setVisible(bool(article))
+            collect.setVisible(not article or article.get('source_status') == 'abstract')
             collect.setEnabled(not self.controller.busy)
-            actions.addWidget(collect)
-        if paper and not item.get('abstract_article_id') and not (article and article.get('source_status') == 'abstract'):
-            abstract = button('仅保存摘要', lambda: self.controller.collect(item, 'abstract'))
-            abstract.setEnabled(not self.controller.busy)
-            actions.addWidget(abstract)
+            if abstract is not None:
+                abstract_id = flags.get('abstract_article_id', item.get('abstract_article_id'))
+                saved_abstract = self.host.service.store.get('articles', abstract_id) if abstract_id else None
+                abstract.setVisible(has_summary and not saved_abstract and not (article and article.get('source_status') == 'abstract'))
+                abstract.setEnabled(not self.controller.busy)
         layout.addLayout(actions)
         layout.addStretch()
         scroll.setWidget(body)
         self.replace_secondary(scroll)
+        self.detail_update = update_actions
+        update_actions()
 
     def show_preferences(self):
         self.detail_id = None

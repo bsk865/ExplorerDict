@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from PySide6.QtCore import QObject, QEvent
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 from app.native.service import NativeService
 from app.native.window import NativeWindow
 from app.native.discover import DiscoverPage, refresh_message
@@ -182,6 +182,53 @@ class NativeDiscoveryTests(unittest.TestCase):
         self.assertTrue(any('重试后已更新' in label.text() and '10 条' in label.text()
                             for label in settings.findChildren(QLabel)))
         self.assertEqual([], self.watch.shown)
+
+    def test_refresh_and_import_update_detail_actions_without_replacing_or_scrolling_page(self):
+        state = self.service.discovery.state()
+        item = state['items'][0]
+        item['summary'] = 'Read this paragraph before importing the original article. '*150
+        self.service.store.put('settings', 'discovery-state', state)
+        self.window.resize(900, 620)
+        page = self.window.stack.currentWidget()
+        page.show_detail(item['id'])
+        detail = page.stack.currentWidget()
+        self.wait(lambda:detail.verticalScrollBar().maximum() > 100)
+        detail.verticalScrollBar().setValue(180)
+        self.window.discovery.busy = True
+        self.window.discovery.changed.emit()
+        self.app.processEvents()
+        self.assertIs(detail, page.stack.currentWidget())
+        self.assertEqual(180, detail.verticalScrollBar().value())
+        collect = next(b for b in detail.findChildren(QPushButton) if b.text() == '获取全文并加入资料库')
+        self.assertFalse(collect.isEnabled())
+        article = self.service.import_text('Imported original', 'Full body remains available.')
+        self.service.discovery.flag(item['id'], 'article_id', article['id'])
+        self.window.discovery.busy = False
+        self.window.discovery.changed.emit()
+        self.app.processEvents()
+        self.assertIs(detail, page.stack.currentWidget())
+        self.assertEqual(180, detail.verticalScrollBar().value())
+        self.assertTrue(collect.isHidden())
+        open_article = next(b for b in detail.findChildren(QPushButton) if b.text() == '打开资料')
+        self.assertFalse(open_article.isHidden())
+        open_article.click()
+        self.wait(lambda:not self.window.navigation_busy)
+        self.assertEqual(article['id'], self.window.article_id)
+        self.assertEqual([], self.watch.shown)
+
+    def test_paper_without_summary_has_no_empty_translation_or_abstract_action(self):
+        state = self.service.discovery.state()
+        item = state['items'][0]
+        item.update(kind='paper', summary='')
+        self.service.store.put('settings', 'discovery-state', state)
+        page = self.window.stack.currentWidget()
+        page.show_detail(item['id'])
+        detail = page.stack.currentWidget()
+        self.app.processEvents()
+        actions = [b.text() for b in detail.findChildren(QPushButton) if not b.isHidden()]
+        self.assertNotIn('翻译摘要', actions)
+        self.assertNotIn('仅保存摘要', actions)
+        self.assertIn('获取全文并加入资料库', actions)
 
 
 if __name__ == '__main__':

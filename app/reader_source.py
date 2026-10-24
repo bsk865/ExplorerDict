@@ -150,12 +150,9 @@ def capture_source(store,url):
     if parts.scheme not in {'https','http'} or not parts.netloc or parts.username or parts.password:
         raise ValueError('请提供文章的 HTTP/HTTPS 原网页地址。')
     from .discovery import fetch
-    def load(address,max_size):
-        body,_,charset=fetch(address,max_size)
-        return body,charset
-    raw,charset=load(url,5_000_000)
-    title,blocks,stats=readable_blocks(raw.decode(charset,errors='replace'),url,store,lambda u:load(u,24_000_000)[0])
+    raw,final,charset=fetch(url,5_000_000)
+    title,blocks,stats=readable_blocks(raw.decode(charset,errors='replace'),final,store,lambda u:fetch(u,24_000_000)[0])
     a=store.import_article(title,blocks,origin='web')
-    a.update(source_url=url,source_status='readable',source_stats=stats)
+    a.update(source_url=url,resolved_source_url=final,source_status='readable',source_stats=stats)
     store.update_article(a)
     return store.article(a['id'])
