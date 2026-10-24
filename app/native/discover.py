@@ -24,6 +24,24 @@ def label(text, muted=False):
     return value
 
 
+def refresh_message(state):
+    counts = state.get('refresh_counts')
+    if counts is None:
+        failed = len(state.get('errors', []))
+        return f'{failed} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。' if failed else '订阅内容已更新'
+    total, failed = counts['sources'], counts['failed']
+    if not total:
+        return '尚未启用订阅来源，请在“兴趣与来源”中添加。'
+    if failed == total:
+        return f'全部 {total} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。'
+    message = f"已更新 {total-failed} 个来源 · 本次取得 {counts['articles']} 条内容"
+    if counts['empty']:
+        message += f" · {counts['empty']} 个来源本期暂无新文章"
+    if failed:
+        message += f' · {failed} 个来源更新失败，保留上次内容'
+    return message
+
+
 class DiscoveryController(QObject):
     changed = Signal()
 
@@ -64,7 +82,7 @@ class DiscoveryController(QObject):
     def refresh(self):
         self.cover_attempts.clear()
         self.work(self.service.refresh, '正在更新订阅，已有内容仍可阅读…',
-                  lambda state: '；'.join(state.get('errors', [])) or '订阅内容已更新')
+                  refresh_message)
 
     def load_covers(self, items):
         if (self.busy or self.cover_loading or self.host.closing or not self.host.discovery_updates
@@ -147,6 +165,10 @@ class SourceSubscription(QWidget):
         self.url.returnPressed.connect(self.find.click)
         self.choices=PageComboBox()
         self.choices.setAccessibleName('网站提供的订阅入口')
+        self.choices.setSizeAdjustPolicy(PageComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.choices.setMinimumContentsLength(8)
+        self.choices.setMinimumWidth(0)
+        self.choices.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.subscribe=button('订阅选中来源',self.add_source,primary=True)
         self.message=label('',True)
         for control in (self.name,self.url,self.kind,self.find,self.choices,self.subscribe,self.message):
@@ -161,6 +183,7 @@ class SourceSubscription(QWidget):
         self.choices.clear()
         for row in rows:
             self.choices.addItem(row['name']+' · '+row['url'],row)
+            self.choices.setItemData(self.choices.count()-1, row['name']+' · '+row['url'], Qt.ItemDataRole.ToolTipRole)
         if previous in rows:
             self.choices.setCurrentIndex(rows.index(previous))
         self.choices.setVisible(bool(rows))

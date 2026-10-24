@@ -1,11 +1,12 @@
 """Article and selected-object conversations without browser transport."""
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QEvent
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QTextBrowser, QPlainTextEdit, QListWidget, QListWidgetItem, QLabel, QToolButton, QScrollArea, QPushButton, QLayout, QSizePolicy
+from PySide6.QtGui import QPixmap, QActionGroup
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QTextBrowser, QPlainTextEdit, QListWidget, QListWidgetItem, QLabel, QToolButton, QScrollArea, QPushButton, QLayout, QSizePolicy, QMenu
 from .widgets import PageComboBox as QComboBox
 from .widgets import button, QuestionInput, FlowLayout
 from .dialogs import EditForm
 from .handoff import HandoffDialog, records as handoff_records
+from .transcript import TranscriptBrowser
 from .. import conversation_budget
 from ..paths import resource_root
 
@@ -90,7 +91,8 @@ class ChatPanel(QScrollArea):
         self.setWidget(body)
         layout = QVBoxLayout(body)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
-        layout.setContentsMargins(8, 12, 8, 8)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
         self.focus = QComboBox()
         self.focus.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.focus.setMinimumContentsLength(4)
@@ -98,8 +100,16 @@ class ChatPanel(QScrollArea):
         self.focus.addItem('整篇文章', '')
         for obj in self.article['objects']:
             self.focus.addItem(obj['title'], obj['id'])
-        layout.addWidget(self.focus)
-        layout.addWidget(button('探索记录', lambda: self.reader.show_records('objects')))
+        selectors = QHBoxLayout()
+        selectors.addWidget(self.focus, 1)
+        self.more = button('更多', tip='查阅范围与探索记录')
+        self.more.setAccessibleName('问答选项')
+        self.more.setFixedWidth(50)
+        self.menu = QMenu(self.more)
+        self.menu.addAction('探索记录', lambda: self.reader.show_records('objects'))
+        self.more.setMenu(self.menu)
+        selectors.addWidget(self.more)
+        layout.addLayout(selectors)
         tools = FlowLayout(spacing=6)
         self.explain = button('解释', self.explain_focus)
         self.saved = button('收藏', self.save_object)
@@ -109,11 +119,21 @@ class ChatPanel(QScrollArea):
         layout.addLayout(tools)
         self.image_button = button('查看图片与选区', self.open_image)
         layout.addWidget(self.image_button)
-        self.scope = QComboBox()
+        self.scope = QComboBox(self)
         self.scope.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.scope.addItem('查阅本文', 'article')
         self.scope.addItem('查阅资料书架', 'library')
-        layout.addWidget(self.scope)
+        self.scope.hide()
+        self.scope_menu = self.menu.addMenu('查阅范围')
+        self.scope_group = QActionGroup(self)
+        for index in range(self.scope.count()):
+            action = self.scope_menu.addAction(self.scope.itemText(index))
+            action.setCheckable(True)
+            action.setChecked(index == self.scope.currentIndex())
+            self.scope_group.addAction(action)
+            action.triggered.connect(lambda checked=False, index=index: self.scope.setCurrentIndex(index))
+        self.scope.currentIndexChanged.connect(self.update_scope)
+        self.update_scope()
         self.focus_evidence_toggle = QToolButton()
         self.focus_evidence_toggle.setText('原文依据')
         self.focus_evidence_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -133,6 +153,7 @@ class ChatPanel(QScrollArea):
         self.welcome.setWidgetResizable(True)
         self.welcome.setFrameShape(QScrollArea.Shape.NoFrame)
         self.welcome.setMinimumHeight(90)
+        self.welcome.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         welcome_body = QWidget()
         welcome_body.setObjectName('page')
         welcome_layout = QVBoxLayout(welcome_body)
@@ -161,20 +182,27 @@ class ChatPanel(QScrollArea):
         self.welcome.setWidget(welcome_body)
         self.welcome.viewport().installEventFilter(self)
         layout.addWidget(self.welcome, 3)
-        self.messages = QTextBrowser()
-        self.messages.setMinimumHeight(0)
+        self.messages = TranscriptBrowser()
+        self.messages.setMinimumHeight(48)
+        self.messages.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.messages.setOpenLinks(False)
         self.messages.setStyleSheet('QTextBrowser {border:0; padding:6px;}')
         layout.addWidget(self.messages, 3)
         self.evidence = QListWidget()
-        self.evidence.setMaximumHeight(100)
+        self.evidence.setMaximumHeight(72)
         self.evidence.itemDoubleClicked.connect(self.locate)
+        self.evidence_toggle = QToolButton()
+        self.evidence_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.evidence_toggle.setCheckable(True)
+        self.evidence_toggle.setStyleSheet('QToolButton {background:transparent; border:0; padding:3px 0; text-align:left;}')
+        self.evidence_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.evidence_toggle.toggled.connect(self.toggle_evidence)
+        layout.addWidget(self.evidence_toggle)
         layout.addWidget(self.evidence)
         self.handoff = button('对话回顾', lambda: HandoffDialog(self.host, self.controller.session, self).exec())
         layout.addWidget(self.handoff, 0, Qt.AlignmentFlag.AlignLeft)
         self.input = QuestionInput()
-        self.input.setMaximumHeight(100)
-        self.input.setMinimumHeight(54)
+        self.input.setFixedHeight(54)
         self.input.setPlaceholderText('针对原文继续提问…')
         layout.addWidget(self.input)
         self.status = QLabel()
@@ -197,6 +225,7 @@ class ChatPanel(QScrollArea):
 
     def choose(self, *_):
         self.focus_evidence_toggle.setChecked(False)
+        self.evidence_toggle.setChecked(False)
         if self.controller:
             self.controller.changed.disconnect(self.render)
         oid = self.focus.currentData()
@@ -232,12 +261,23 @@ class ChatPanel(QScrollArea):
     def current_object(self):
         return next((obj for obj in self.article['objects'] if obj['id'] == self.focus.currentData()), None)
 
+    def update_scope(self):
+        for index, action in enumerate(self.scope_group.actions()):
+            action.setChecked(index == self.scope.currentIndex())
+        self.more.setToolTip(self.scope.currentText() + ' · 探索记录与问答选项')
+        if hasattr(self, 'input'):
+            self.input.setPlaceholderText('针对原文继续提问…' if self.scope.currentData() == 'article' else '结合资料书架提问…')
+
+    def toggle_evidence(self, expanded):
+        self.evidence.setVisible(expanded and self.evidence.count() > 0)
+        self.evidence_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+
     def render(self):
         self.rendering = True
         c = self.controller
-        self.messages.setMarkdown('\n\n'.join(('**我**' if m.get('role') == 'user' else '**小探**') + '\n\n' + m['content']
-                                               for m in c.session.get('messages', [])))
-        self.messages.verticalScrollBar().setValue(self.messages.verticalScrollBar().maximum())
+        messages = c.session.get('messages', [])
+        self.messages.update_content(c.key, messages, lambda: self.messages.setMarkdown('\n\n'.join(
+            ('**我**' if m.get('role') == 'user' else '**小探**') + '\n\n' + m['content'] for m in messages)))
         if self.input.toPlainText() != c.session.get('draft', ''):
             self.input.setPlainText(c.session.get('draft', ''))
         self.evidence.clear()
@@ -245,7 +285,9 @@ class ChatPanel(QScrollArea):
             for hit in message.get('evidence', []):
                 item = QListWidgetItem(f"[{hit.get('citation', '')}] {hit.get('article_title', '')}\n{hit.get('quote', '')[:100]}", self.evidence)
                 item.setData(Qt.ItemDataRole.UserRole, hit)
-        self.evidence.setVisible(self.evidence.count() > 0)
+        self.evidence_toggle.setVisible(self.evidence.count() > 0)
+        self.evidence_toggle.setText(f'参考来源 · {self.evidence.count()}')
+        self.toggle_evidence(self.evidence_toggle.isChecked())
         obj = self.current_object()
         welcome = not obj and not c.session.get('messages') and not c.job
         self.welcome.setVisible(welcome)
@@ -260,7 +302,7 @@ class ChatPanel(QScrollArea):
         self.understood.setVisible(bool(obj))
         self.saved.setText('已收藏' if obj and obj['saved'] else '收藏')
         self.understood.setText('已理解' if obj and obj['understood'] else '标记理解')
-        self.scope.setVisible(not obj)
+        self.scope_menu.menuAction().setVisible(not obj)
         self.image_button.setVisible(bool(obj and obj['type'] != 'term'))
         self.restart.setVisible(bool(c.session.get('closed')))
         count = len(handoff_records(c.session))

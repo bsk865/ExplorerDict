@@ -170,6 +170,60 @@ class NativeRouteHistoryTests(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(self.window.stack.currentWidget().assistant_visible)
 
+    def test_article_answer_can_be_read_and_selected_during_background_updates(self):
+        self.window.resize(900, 620)
+        self.window.open_article(self.article['id'])
+        self.wait(lambda: isinstance(self.window.stack.currentWidget(), ReaderPage))
+        reader = self.window.stack.currentWidget()
+        for _ in range(5):
+            self.app.processEvents()
+        reader.set_assistant_visible(True)
+        chat = reader.chat
+        chat.controller.session['messages'] = [{'role': 'assistant', 'content': '\n\n'.join(
+            f'第 {i} 段阅读回答。' for i in range(70))}]
+        chat.render()
+        self.app.processEvents()
+        bar = chat.messages.verticalScrollBar()
+        bar.setValue(bar.maximum() // 3)
+        cursor = chat.messages.document().find('第 20 段阅读回答。')
+        chat.messages.setTextCursor(cursor)
+        text, position = cursor.selectedText(), bar.value()
+        revision = chat.messages.document().revision()
+        chat.controller.message = '正在停止…'
+        chat.controller.changed.emit()
+        self.app.processEvents()
+        self.assertEqual(revision, chat.messages.document().revision())
+        self.assertEqual(text, chat.messages.textCursor().selectedText())
+        self.assertEqual(position, bar.value())
+        chat.controller.session['messages'].append({'role': 'assistant', 'content': '新回答。'})
+        chat.controller.changed.emit()
+        self.app.processEvents()
+        self.assertEqual(text, chat.messages.textCursor().selectedText())
+        self.assertEqual(position, bar.value())
+        self.assertIn('新回答。', chat.messages.toPlainText())
+        self.assertEqual(0, chat.verticalScrollBar().maximum())
+        self.assertTrue(chat.viewport().rect().contains(chat.send.mapTo(chat.viewport(), chat.send.rect().bottomRight())))
+        self.assertGreaterEqual(chat.messages.viewport().height(), 75)
+        chat.controller.session['messages'][-1]['evidence'] = [dict(article_id=self.article['id'],
+            article_title='阅读资料', citation='S1', quote='原文依据', block=self.article['blocks'][0]['id'])]
+        chat.render()
+        self.app.processEvents()
+        self.assertEqual(1, chat.evidence.count())
+        self.assertTrue(chat.evidence_toggle.isVisible())
+        self.assertFalse(chat.evidence.isVisible())
+        chat.evidence_toggle.click()
+        self.app.processEvents()
+        self.assertTrue(chat.evidence.isVisible())
+        with patch.object(reader.text, 'locate') as locate:
+            chat.locate(chat.evidence.item(0))
+            locate.assert_called_once_with(self.article['blocks'][0]['id'])
+        chat.evidence_toggle.click()
+        self.wait(lambda: chat.verticalScrollBar().maximum() == 0)
+        chat.scope_group.actions()[1].trigger()
+        self.assertEqual('library', chat.scope.currentData())
+        self.assertIn('资料书架', chat.input.placeholderText())
+        self.assertTrue(chat.scope_group.actions()[1].isChecked())
+
     def test_library_return_restores_scope_and_its_draft(self):
         other = self.service.import_text('第二份资料', '另一份用于比较的文字资料。')
         self.move('library')

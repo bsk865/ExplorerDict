@@ -8,6 +8,7 @@ from .widgets import button, heading, FlowLayout
 from .. import library_assistant, conversation_budget, reading_preferences
 from .dialogs import EditForm
 from .topbar import ElidedLabel
+from .transcript import TranscriptBrowser
 from .handoff import HandoffDialog, records as handoff_records
 from ..paths import resource_root
 
@@ -159,9 +160,10 @@ class LibraryPage(QWidget):
         layout.setContentsMargins(24, 24, 24, 16)
         layout.setSpacing(16)
         title = QHBoxLayout()
-        avatar = QLabel()
-        avatar.setPixmap(QPixmap(str(resource_root() / 'web/assets/generated' /
-            (snapshot['preferences']['palette']+'-xiaotan-avatar.webp'))).scaled(42, 42,
+        self.avatar = avatar = QLabel()
+        self.avatar_pixmap = QPixmap(str(resource_root() / 'web/assets/generated' /
+            (snapshot['preferences']['palette']+'-xiaotan-avatar.webp')))
+        avatar.setPixmap(self.avatar_pixmap.scaled(42, 42,
              Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         title.addWidget(avatar)
         title.addWidget(heading('资料库问答'), 1)
@@ -224,7 +226,7 @@ class LibraryPage(QWidget):
         tools.addWidget(self.handoff)
         tools.addWidget(self.restart)
         conversation.addLayout(tools)
-        self.transcript = QTextBrowser()
+        self.transcript = TranscriptBrowser()
         self.transcript.document().setDefaultStyleSheet('a {color:' + colors.get('accent-text', colors['accent']) + ';}')
         self.transcript.setOpenExternalLinks(False)
         self.transcript.setOpenLinks(False)
@@ -243,7 +245,7 @@ class LibraryPage(QWidget):
         composer = QWidget()
         composer.setObjectName('libraryComposer')
         composer.setStyleSheet('QWidget#libraryComposer {border-top:1px solid '+colors['line']+';}')
-        compose = QVBoxLayout(composer)
+        self.compose = compose = QVBoxLayout(composer)
         compose.setContentsMargins(16, 16, 16, 16)
         compose.setSpacing(12)
         from .widgets import QuestionInput
@@ -280,6 +282,18 @@ class LibraryPage(QWidget):
         if not self.controller.busy and (not self.controller.key or selected != self.controller.body['article_ids']):
             self.controller.select(selected, self.notes.isChecked(), 'question', scope)
         self.render()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = self.height() < 570
+        self.layout().setContentsMargins(*( (12, 10, 12, 8) if compact else (24, 24, 24, 16) ))
+        self.layout().setSpacing(8 if compact else 16)
+        self.compose.setContentsMargins(*( (10, 8, 10, 8) if compact else (16, 16, 16, 16) ))
+        self.compose.setSpacing(6 if compact else 12)
+        self.input.setFixedHeight(52 if compact else 84)
+        size = 32 if compact else 42
+        self.avatar.setPixmap(self.avatar_pixmap.scaled(size, size,
+            Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
     def choose(self, *_):
         self.controller.select(self.controller.body['article_ids'], self.notes.isChecked(), 'question', self.controller.body.get('scope', 'all'))
@@ -383,7 +397,6 @@ class LibraryPage(QWidget):
         self.compare_action.setEnabled(bool(c.key) and not c.busy and not c.session.get('closed') and 2 <= len(c.body['article_ids']) <= 12)
         self.clear_action.setEnabled(not c.busy and bool(c.session.get('messages') or c.session.get('draft')))
         self.render_messages()
-        self.transcript.verticalScrollBar().setValue(self.transcript.verticalScrollBar().maximum())
         draft = c.session.get('draft', '')
         if self.input.toPlainText() != draft:
             self.input.setPlainText(draft)
@@ -446,6 +459,10 @@ class LibraryPage(QWidget):
         if self.transcript_key != self.controller.key:
             self.expanded_sources.clear()
             self.transcript_key = self.controller.key
+        self.transcript.update_content(self.controller.key,
+            (self.controller.session.get('messages', []), self.expanded_sources), self.write_messages)
+
+    def write_messages(self):
         self.transcript.clear()
         cursor = QTextCursor(self.transcript.document())
         for index, message in enumerate(self.controller.session.get('messages', [])):

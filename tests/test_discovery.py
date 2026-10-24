@@ -77,6 +77,27 @@ class DiscoveryTests(unittest.TestCase):
         self.assertTrue(broken['errors'])
         self.assertEqual(health['updated'],broken['source_health']['test']['updated'])
 
+    def test_refresh_reports_each_source_outcome_without_confusing_empty_with_failure(self):
+        from app.native.discover import refresh_message
+        preferences = self.service.preferences()
+        preferences['sources'] = [SOURCE, dict(SOURCE, id='empty', url='https://example.net/empty'),
+                                  dict(SOURCE, id='offline', url='https://example.com/offline')]
+        self.service.save_preferences(preferences)
+        def loader(url, limit=2_000_000):
+            if 'offline' in url:
+                raise OSError('offline')
+            if 'empty' in url:
+                return b'<rss><channel/></rss>', url, 'utf-8'
+            return self.loader(url, limit)
+        state = self.service.refresh(loader)
+        self.assertEqual(dict(sources=3, failed=1, empty=1, articles=1), state['refresh_counts'])
+        message = refresh_message(state)
+        self.assertIn('已更新 2 个来源', message)
+        self.assertIn('1 个来源本期暂无新文章', message)
+        self.assertIn('1 个来源更新失败', message)
+        self.assertEqual('', state['source_health']['empty']['error'])
+        self.assertTrue(state['source_health']['offline']['error'])
+
     def test_website_subscription_uses_published_links_and_validates_each_feed(self):
         html=b'''<html><head><base href="https://example.org/public/">
         <link rel="alternate" type="application/rss+xml" href="../feed" title="News">

@@ -30,7 +30,7 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 
 ## 从本地资料中寻找依据
 
-![公开14页论文的实际问答与原文引用](docs/screenshots/source-consistency-20261024/public-paper-rag.png)
+![公开14页论文的实际问答与原文引用](docs/screenshots/reading-space-20261024/public-paper-rag.png)
 
 资料库问答默认查阅全部本地资料，后续导入的文章和抓取片段自动纳入。选择文件是可选的范围筛选，不是开始提问的前置步骤。抓取片段明确标为片段，不冒充文章全文。
 

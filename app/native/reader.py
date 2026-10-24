@@ -273,7 +273,8 @@ class ReaderPage(QWidget):
         layout.addLayout(bar)
         count = sum(block['type'] == 'image' for block in self.article['blocks'])
         title_row = QHBoxLayout()
-        title_row.addWidget(heading(self.article['title'], ('网页文章' if self.article.get('source_url') else '我的资料') + f' · {count} 张图片'), 1)
+        self.article_heading = heading(self.article['title'], ('网页文章' if self.article.get('source_url') else '我的资料') + f' · {count} 张图片')
+        title_row.addWidget(self.article_heading, 1)
         title_row.addWidget(button('资料信息', lambda: article_info(host, self.article, self)))
         layout.addLayout(title_row)
         self.selection_bar = QWidget(self)
@@ -372,7 +373,8 @@ class ReaderPage(QWidget):
         objects.setParent(self)
         objects.hide()
         self.assistant = QWidget()
-        assistant_layout = QVBoxLayout(self.assistant)
+        self.assistant.setMinimumWidth(260)
+        self.assistant_layout = assistant_layout = QVBoxLayout(self.assistant)
         assistant_layout.setContentsMargins(12, 12, 12, 8)
         assistant_layout.setSpacing(10)
         assistant_heading = QHBoxLayout()
@@ -399,6 +401,15 @@ class ReaderPage(QWidget):
         self.assistant.hide()
         self.selection_changed()
         QTimer.singleShot(0, self.restore_view)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = self.height() < 530
+        self.article_heading.layout().itemAt(1).widget().setVisible(not compact)
+        self.article_heading.layout().setContentsMargins(0, 0, 0, 4 if compact else 12)
+        self.article_heading.layout().itemAt(0).widget().setStyleSheet('font-size:20px;' if compact else '')
+        self.assistant_layout.setContentsMargins(*( (6, 4, 6, 4) if compact else (12, 12, 12, 8) ))
+        self.assistant_layout.setSpacing(6 if compact else 10)
 
     def save_view(self):
         self.notes.controller.flush()

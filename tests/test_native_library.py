@@ -224,6 +224,59 @@ class NativeLibraryTests(unittest.TestCase):
             block = block.next()
         self.assertEqual(2, len(points))
 
+    def test_reading_position_and_selection_survive_status_changes_and_new_answers(self):
+        self.show()
+        controller = self.host.library
+        controller.session['messages'] = [{'role': 'assistant', 'content': '\n\n'.join(
+            f'第 {i} 段原文分析。' for i in range(80))}]
+        self.page.render()
+        self.app.processEvents()
+        browser = self.page.transcript
+        bar = browser.verticalScrollBar()
+        self.assertGreater(bar.maximum(), browser.height())
+        bar.setValue(bar.maximum() // 3)
+        selection = browser.document().find('第 20 段原文分析。')
+        browser.setTextCursor(selection)
+        selected_text = selection.selectedText()
+        position, revision = bar.value(), browser.document().revision()
+        controller.message = '正在查找资料…'
+        controller.changed.emit()
+        self.app.processEvents()
+        self.assertEqual(position, bar.value())
+        self.assertEqual(revision, browser.document().revision())
+        self.assertEqual(selected_text, browser.textCursor().selectedText())
+        controller.session['messages'].append({'role': 'assistant', 'content': '新回答已到达。'})
+        self.page.render()
+        self.app.processEvents()
+        self.assertEqual(position, bar.value())
+        self.assertEqual(selected_text, browser.textCursor().selectedText())
+        self.assertIn('新回答已到达。', browser.toPlainText())
+        bar.setValue(bar.maximum())
+        controller.session['messages'].append({'role': 'assistant', 'content': '继续阅读最新回答。'})
+        self.page.render()
+        self.app.processEvents()
+        self.assertEqual(bar.maximum(), bar.value())
+        controller.key = 'another-conversation'
+        self.page.render()
+        self.assertFalse(browser.textCursor().hasSelection())
+
+    def test_short_page_keeps_space_for_answers_and_visible_send_button(self):
+        self.show()
+        self.host.library.session['messages'] = [{'role': 'assistant', 'content': '可持续阅读的回答。\n\n' * 30}]
+        self.page.render()
+        self.app.processEvents()
+        self.assertGreaterEqual(self.page.transcript.viewport().height(), 170)
+        self.assertTrue(self.page.send.isVisible())
+        self.assertTrue(self.page.rect().contains(self.page.send.mapTo(self.page, self.page.send.rect().bottomRight())))
+        self.page.input.setPlainText('保留多行草稿\n第二行\n第三行')
+        self.page.resize(1100, 750)
+        self.app.processEvents()
+        self.assertEqual(84, self.page.input.height())
+        self.page.resize(650, 470)
+        self.app.processEvents()
+        self.assertEqual(52, self.page.input.height())
+        self.assertEqual('保留多行草稿\n第二行\n第三行', self.page.input.toPlainText())
+
     def open_reference(self, hit):
         errors = []
         def locate():

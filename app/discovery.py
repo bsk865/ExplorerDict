@@ -378,7 +378,10 @@ class Discovery:
             kept_ids = {row['id'] for row in protected}
             pool = [dict(row, platform=row.get('platform') or platform_key(row['url']), score=stamp(row.get('published', ''))) for row in ordered if row['id'] not in kept_ids]
             kept = protected + diversify(pool)[:400]
-            state.update(items=kept, attempted=time.time(), errors=[e for _, e in batches if e])
+            state.update(items=kept, attempted=time.time(), errors=[e for _, e in batches if e],
+                         refresh_counts={'sources': len(sources), 'failed': sum(bool(error) for _, error in batches),
+                                         'empty': sum(not items and not error for items, error in batches),
+                                         'articles': len(fresh)})
             health = dict(state.get('source_health', {}))
             for source, (items, error) in zip(sources, batches):
                 old = health.get(source['id'], {})

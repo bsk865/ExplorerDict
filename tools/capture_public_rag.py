@@ -43,7 +43,7 @@ def main():
     if session.get('draft') == session['messages'][-2]['content']:
         session['draft'] = ''
         service.store.put('sessions', 'library:all', session)
-    output = ROOT/'docs/screenshots/source-consistency-20261024'
+    output = Path(sys.argv[2]).resolve() if len(sys.argv) > 2 else ROOT/'docs/screenshots/source-consistency-20261024'
     output.mkdir(parents=True, exist_ok=True)
     with patch('app.native.topbar.TopBar.check_capture', lambda self: None):
         window = NativeWindow(service, discovery_updates=False)
@@ -70,6 +70,31 @@ def main():
         window.resize(900, 620)
         application.processEvents()
         assert window.grab().save(str(output/'public-paper-rag-narrow.png'))
+        metrics = {'library_narrow_answer_height': page.transcript.viewport().height()}
+        messages = window.library.session['messages']
+        article_id = service.store.summaries()[0]['id']
+        window.open_article(article_id)
+        settle()
+        reader = window.stack.currentWidget()
+        reader.set_assistant_visible(True)
+        reader.chat.controller.session['messages'] = messages
+        reader.chat.render()
+        for width, height, suffix in ((1440, 900, ''), (900, 620, '-narrow')):
+            window.resize(width, height)
+            for _ in range(10): application.processEvents()
+            reader.chat.messages.verticalScrollBar().setValue(reader.chat.messages.verticalScrollBar().maximum())
+            assert window.grab().save(str(output/('public-paper-reader'+suffix+'.png')))
+            if suffix:
+                metrics['reader_narrow_answer_height'] = reader.chat.messages.viewport().height()
+                chat = reader.chat
+                metrics['reader_panel'] = dict(viewport=chat.viewport().height(), body=chat.widget().height(),
+                    minimum=chat.widget().minimumHeight(), hint=chat.widget().minimumSizeHint().height(),
+                    minimum_layout=chat.widget().layout().minimumSize().height(),
+                    height_for_width=chat.widget().layout().totalHeightForWidth(chat.viewport().width()),
+                    send_y=chat.send.mapTo(chat.viewport(), chat.send.rect().topLeft()).y(),
+                    send_height=chat.send.height(), outer_scroll=chat.verticalScrollBar().maximum())
+        (directory/'view-metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
+        print(json.dumps(metrics))
         window.close()
         application.processEvents()
     service.close()

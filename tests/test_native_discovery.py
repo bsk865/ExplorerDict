@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QEvent
 from PySide6.QtWidgets import QApplication
 from app.native.service import NativeService
 from app.native.window import NativeWindow
-from app.native.discover import DiscoverPage
+from app.native.discover import DiscoverPage, refresh_message
 from app.reading_preferences import PALETTES
 from app.native.widgets import stylesheet
 from tests.test_discovery import FEED, SOURCE
@@ -111,6 +111,22 @@ class NativeDiscoveryTests(unittest.TestCase):
                 self.assertEqual([],self.watch.shown)
         finally:
             release.set()
+
+    def test_many_failed_sources_have_compact_status_and_details_in_settings(self):
+        state = self.service.discovery.state()
+        names = ['来源名称' * 20 + str(i) for i in range(12)]
+        state.update(errors=[name + '：更新失败，保留上次内容' for name in names],
+                     refresh_counts={'sources': 12, 'failed': 12, 'empty': 0, 'articles': 0})
+        self.window.resize(900, 620)
+        page = self.window.stack.currentWidget()
+        self.window.discovery.message = refresh_message(state)
+        page.render()
+        self.app.processEvents()
+        self.assertIn('全部 12 个来源更新失败', page.status.text())
+        self.assertLess(len(page.status.text()), 100)
+        self.assertGreater(page.scroll.viewport().height(), 100)
+        self.assertEqual([], self.watch.shown)
+        self.assertIn('尚未启用', refresh_message(dict(refresh_counts=dict(sources=0, failed=0, empty=0, articles=0))))
 
     def test_website_subscription_can_finish_after_navigation_without_popup(self):
         entered,release=threading.Event(),threading.Event()
