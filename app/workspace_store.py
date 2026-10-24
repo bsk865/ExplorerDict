@@ -11,6 +11,7 @@ from contextlib import contextmanager, closing
 from pathlib import Path
 from PIL import Image, ImageOps
 from . import crypto_dpapi
+from .reading_text import block_text, article_text
 
 
 def uid():
@@ -47,7 +48,12 @@ class WorkspaceStore:
         assert table in {'articles', 'objects', 'sessions', 'settings'}
         with self.connect() as db:
             row = db.execute(f'SELECT payload FROM {table} WHERE id=?', (key,)).fetchone()
-        return json.loads(row[0]) if row else default
+        if not row:
+            return default
+        value = json.loads(row[0])
+        if table == 'articles':
+            value['text'] = article_text(value)
+        return value
 
     def put(self, table, key, payload):
         assert table in {'sessions', 'settings'}
@@ -64,6 +70,7 @@ class WorkspaceStore:
 
     def update_article(self, article):
         article = {k: v for k, v in article.items() if k != 'objects'}
+        article['text'] = article_text(article)
         with self.connect() as db:
             current = db.execute('SELECT payload FROM articles WHERE id=?',(article['id'],)).fetchone()
             if current:
@@ -108,7 +115,7 @@ class WorkspaceStore:
             for i, block in enumerate(blocks):
                 block['id'] = f'b{i}'
             article = {'id': aid, 'version': fingerprint, 'title': title[:200] or '未命名文章', 'blocks': blocks, 'origin': origin,
-                       'map': graph, 'quality': quality, 'text': '\n\n'.join(b.get('text', b.get('caption', '')) for b in blocks)}
+                       'map': graph, 'quality': quality, 'text': article_text({'blocks':blocks})}
             db.execute('INSERT INTO articles VALUES(?,?,?)', (aid, fingerprint, json.dumps(article, ensure_ascii=False)))
         for b in blocks:
             if b['type'] == 'image':
@@ -126,7 +133,7 @@ class WorkspaceStore:
         title = str(obj.get('title', '')).strip()[:200]
         if not title:
             raise ValueError('请输入名称。')
-        if kind == 'term' and title not in block.get('text', ''):
+        if kind == 'term' and title not in block_text(block):
             raise ValueError('所选词语不在这一段原文中。')
         region = obj.get('region')
         if kind != 'term':
@@ -193,7 +200,7 @@ class WorkspaceStore:
     def summaries(self):
         with self.connect() as db:
             articles = [json.loads(r[0]) for r in db.execute('SELECT payload FROM articles ORDER BY rowid DESC')]
-        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(a['text']), 'has_map': bool(a.get('map')), 'cover': next((b.get('asset') for b in a['blocks'] if b['type']=='image'), None)} for a in articles if not a.get('superseded_by') and a.get('origin') != 'demo']
+        return [{k: a.get(k) for k in ('id', 'title', 'version', 'origin', 'source_url', 'source_status')} | {'images': sum(b['type'] == 'image' for b in a['blocks']), 'chars': len(article_text(a)), 'has_map': bool(a.get('map')), 'cover': next((b.get('asset') for b in a['blocks'] if b['type']=='image'), None)} for a in articles if not a.get('superseded_by') and a.get('origin') != 'demo']
 
     def related_versions(self, aid):
         self.article(aid)

@@ -5,6 +5,7 @@ import threading
 import time
 
 from .local_embeddings import LocalEmbeddings, MODEL_ID
+from .reading_text import block_text
 
 
 def digest(value):
@@ -42,7 +43,8 @@ class SemanticLibrary:
             visible = {a['id'] for a in self.store.summaries()}
             articles = {r['id']: json.loads(r['payload']) for r in db.execute('SELECT id,payload FROM articles') if r['id'] in visible}
             for aid, article in articles.items():
-                blocks = [b for b in article['blocks'] if b['type'] == 'text' and b.get('text', '').strip()]
+                blocks = [dict(b, text=block_text(b)) for b in article['blocks']
+                          if b['type'] == 'text' and block_text(b).strip()]
                 value = {'id': 'article:'+aid, 'article_id': aid, 'version': article['version'],
                          'title': article['title'], 'blocks': blocks, 'type': 'text'}
                 value['fingerprint'] = digest(value)
@@ -208,7 +210,7 @@ class SemanticLibrary:
     def retrieve(self, articles, question, extra_rows=None, limit=24):
         """Exact cosine search over the permitted live versions, including opt-in notes only."""
         versions = {a['id']: a['version'] for a in articles}
-        sources = {(a['id'], b['id']): b.get('text', '') for a in articles for b in a['blocks'] if b['type'] == 'text'}
+        sources = {(a['id'], b['id']): block_text(b) for a in articles for b in a['blocks'] if b['type'] == 'text'}
         if not versions or not self.encoder.available():
             return []
         live = self.documents()

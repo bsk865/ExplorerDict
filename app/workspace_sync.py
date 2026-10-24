@@ -8,6 +8,7 @@ import json
 from contextlib import closing
 from .db import Database
 from .capture_documents import document_identity, pending_article, captured_object, migrate_fragments
+from .reading_text import block_text
 
 
 def _upgrade_source(store, native, entry, link):
@@ -121,7 +122,7 @@ def synchronize(store):
             doc_key = 'workspace:' + article['id']
             batch = native.find_batch_by_source(doc_key)
             bid = batch['id'] if batch else native.create_batch(article['title'], source_key=doc_key, source_kind='workspace')
-            context = obj.get('capture_context') or next((b.get('text','') for b in article['blocks'] if b['id']==obj['block']), obj['title'])
+            context = obj.get('capture_context') or next((block_text(b) for b in article['blocks'] if b['id']==obj['block']), obj['title'])
             row = native.find_entry(bid, obj['title'], doc_key, context)
             eid = row['id'] if row else native.add_entry(batch_id=bid, term=obj['title'], context=context,
                 doc_key=doc_key, source_title=article['title'], source_url=article.get('source_url',''), capture_method='workspace')

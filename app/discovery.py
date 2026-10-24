@@ -19,6 +19,7 @@ import time
 from bs4 import BeautifulSoup
 from PIL import Image, ImageOps
 from .discovery_sources import SOURCES, CATALOG, CATALOG_VERSION, MAX_SOURCES, platform_key, diversify
+from .reading_text import article_text
 
 TOPICS = {
     '人工智能': ['人工智能', '机器学习', '大语言模型', '深度学习', 'artificial intelligence', 'machine learning', 'deep learning', 'llm', 'language model'],
@@ -330,7 +331,8 @@ class Discovery:
                     records.extend(json.loads(r[0]) for r in db.execute(f'SELECT payload FROM {table} ORDER BY rowid DESC LIMIT 60'))
             for index, record in enumerate(records):
                 text = ' '.join(str(record.get(k, '')) for k in ('title', 'note'))
-                text += ' ' + str(record.get('text', ''))[:1200] + ' ' + str(record.get('content', ''))[:1200]
+                body = article_text(record) if 'blocks' in record else str(record.get('text', ''))
+                text += ' ' + body[:1200] + ' ' + str(record.get('content', ''))[:1200]
                 text += ' ' + ' '.join(m.get('content', '') for m in record.get('messages', [])[-8:] if m.get('role') == 'user')
                 text = text.casefold()
                 for topic, aliases in TOPICS.items():

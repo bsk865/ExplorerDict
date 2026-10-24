@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from contextlib import nullcontext
 import json
 import uuid
+from .reading_text import block_text
 
 
 def now():
@@ -79,7 +80,7 @@ class StudyHub:
                     block = next((b for b in article['blocks'] if b['id'] == block_id), None)
                     if block_id and not block:
                         raise ValueError('原文位置不存在。')
-                    if quote and (not block or quote not in block.get('text', '')):
+                    if quote and (not block or quote not in block_text(block)):
                         raise ValueError('引用文字与原文不一致。')
                     item.update(version=article['version'], block=block_id, quote=quote, source='personal')
             else:

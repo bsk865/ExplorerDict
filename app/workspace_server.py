@@ -130,7 +130,8 @@ class Workspace:
                 self.work({'cancel':job['cancel']}, 'detect', {})
                 vision = self.config()['vision'].get('status')
             if vision != 'supported':
-                if required or not any(b['type']=='text' and b.get('text','').strip() for a in articles for b in a['blocks']):
+                from .reading_text import block_text
+                if required or not any(b['type']=='text' and block_text(b).strip() for a in articles for b in a['blocks']):
                     raise ValueError('当前模型未通过图片理解检测，请在设置中检查模型或重新检测。')
                 return articles
             return self.visual_index.enrich(articles,client,self.config()['signature'],job['cancel'],

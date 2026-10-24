@@ -1,11 +1,12 @@
 """Choose and label map evidence without requiring vision for text PDF pages."""
+from .reading_text import block_text
 
 
 def resolve_mode(article, mode='auto'):
     if mode not in {'auto', 'text', 'multimodal'}:
         raise ValueError('请选择正文导图或图文导图。')
     blocks = article.get('blocks', [])
-    text = [b for b in blocks if b['type'] == 'text' and b.get('text', '').strip()]
+    text = [b for b in blocks if b['type'] == 'text' and block_text(b).strip()]
     images = [b for b in blocks if b['type'] == 'image']
     pages = {b.get('page') for b in text if b.get('page')}
     complete_pdf_text = bool(images) and all(b.get('page') and b['page'] in pages for b in images)

@@ -1,28 +1,9 @@
 """Version-bound reading marks, separate from source text and retrieval indexes."""
-from html.parser import HTMLParser
 import json
 import uuid
 
 from .study_hub import now
-
-
-class _Text(HTMLParser):
-    def __init__(self):
-        super().__init__(convert_charrefs=True)
-        self.parts = []
-
-    def handle_data(self, data):
-        self.parts.append(data)
-
-
-def block_text(block):
-    # HTML parsing normalizes Windows newlines before creating text nodes.
-    source = (block.get('html') or block.get('text', '')).replace('\r\n', '\n').replace('\r', '\n')
-    if not block.get('html'):
-        return source
-    parser = _Text()
-    parser.feed(source)
-    return ''.join(parser.parts)
+from .reading_text import block_text
 
 
 class ReadingAnnotations:

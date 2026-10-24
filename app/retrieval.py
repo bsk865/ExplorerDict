@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import re
+from .reading_text import block_text
 
 CHUNK_SIZE = 1400
 OVERLAP = 180
@@ -64,7 +65,7 @@ def surrounding_text(row, articles, extra_rows, padding):
         return row
     source, base = None, 0
     if row.get('type') == 'text' and row.get('source') not in {'personal_note', 'capture_context'}:
-        source = next((b.get('text', '') for a in articles if a['id'] == row['article_id']
+        source = next((block_text(b) for a in articles if a['id'] == row['article_id']
                        for b in a['blocks'] if b['id'] == row['block']), None)
     else:
         container = next((r for r in extra_rows or [] if r['article_id'] == row['article_id']
@@ -89,7 +90,7 @@ class SourceIndex:
 
     def ensure(self, article):
         # Include image descriptions: later visual indexing invalidates this cache.
-        fingerprint = hashlib.sha256(json.dumps({k:article[k] for k in ('title','version','blocks')},
+        fingerprint = hashlib.sha256(json.dumps({'source_text_revision':2, **{k:article[k] for k in ('title','version','blocks')}},
                                                sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         with self.store.lock, self.store.connect() as db:
             row = db.execute('SELECT fingerprint FROM source_indexes WHERE article_id=?', (article['id'],)).fetchone()
@@ -97,7 +98,7 @@ class SourceIndex:
                 return
             db.execute('DELETE FROM source_chunks WHERE article_id=?', (article['id'],))
             for block in article['blocks']:
-                text = block.get('text') if block['type'] == 'text' else block.get('caption', '')
+                text = block_text(block) if block['type'] == 'text' else block.get('caption', '')
                 text = text or ''
                 fragments = list(split_text(text)) or [(0, 0, '')]
                 for start, end, quote in fragments:
