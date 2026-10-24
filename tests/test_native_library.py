@@ -301,7 +301,7 @@ class NativeLibraryTests(unittest.TestCase):
         self.host.notice.assert_called_once_with('原文版本已变化，请重新检索核对。')
         self.host.service.store.article.return_value['version'] = 'v1'
         self.open_reference(hit)
-        self.host.open_article.assert_called_once_with('a', block='p1')
+        self.host.open_article.assert_called_once_with('a', block='p1', passage=hit)
 
     def test_personal_reference_opens_note_and_retains_deleted_excerpt(self):
         self.show()

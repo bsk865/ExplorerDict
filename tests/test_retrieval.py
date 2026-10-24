@@ -80,6 +80,25 @@ class RetrievalTests(unittest.TestCase):
         self.assertTrue(any('83摄氏度' in hit['quote'] for hit in hits))
         self.assertEqual(1, len(hits))
 
+    def test_named_source_prefers_original_over_its_bibliographic_mention(self):
+        from unittest.mock import Mock
+        original = self.article('Northstar · 实验报告', 'The measured threshold was 83 degrees.')
+        other = self.article('Other experiment', 'References: Northstar. The measured threshold was 17 degrees in this other experiment.')
+        semantic = Mock()
+        semantic.retrieve.return_value = [dict(article_id=a['id'], version=a['version'], article_title=a['title'],
+            block='b0', start=0, end=len(a['text']), quote=a['text'], type='text', page=None, asset=None,
+            semantic_score=score) for a,score in ((other,.95),(original,.93))]
+        hits = SourceIndex(self.store, semantic).search([other,original], 'Northstar measured threshold', text_only=True)
+        self.assertEqual(original['id'], hits[0]['article_id'])
+        self.assertEqual(original['text'], hits[0]['quote'])
+        self.assertTrue(any(h['article_id'] == other['id'] for h in hits))
+
+    def test_title_match_does_not_turn_unrelated_body_into_keyword_evidence(self):
+        original = self.article('Northstar report', 'Background without the requested measurements.')
+        other = self.article('Other report', 'Another background paragraph.')
+        hits = self.index.search([original,other], 'Northstar', text_only=True)
+        self.assertTrue(all(h['score'] == 0 for h in hits))
+
     def test_pdf_text_hit_brings_corresponding_page_not_another_page(self):
         article = self.store.import_article('页码验证', [
             {'type':'text','text':'第一页讨论控制变量。','page':1},

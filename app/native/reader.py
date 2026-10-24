@@ -273,12 +273,42 @@ class OriginalText(QTextEdit):
         self.setExtraSelections(selections)
 
     def locate(self, block_id):
+        self.document().markContentsDirty(0, self.document().characterCount())
         position = self.anchors.get(block_id)
+        block = next((b for b in self.ranges if b['id'] == block_id), None)
+        if block:
+            position = next((a for a, b in block['spans'] if a < b), position)
         if position is not None:
             cursor = self.textCursor()
             cursor.setPosition(position)
             self.setTextCursor(cursor)
             self.ensureCursorVisible()
+
+    def locate_passage(self, passage):
+        # Late blocks can retain an empty layout after resizing page images.
+        # Reflow before calculating the target's scroll position.
+        self.document().markContentsDirty(0, self.document().characterCount())
+        block = next((b for b in self.ranges if b['id'] == passage.get('block')), None)
+        start, end = passage.get('start'), passage.get('end')
+        if (not block or type(start) is not int or type(end) is not int
+                or not 0 <= start < end <= len(block['text'])
+                or block['text'][start:end] != passage.get('quote')):
+            self.locate(passage.get('block'))
+            return False
+        spans = [(a, b) for a, b in block['spans'][start:end] if a < b]
+        if not spans:
+            self.locate(passage.get('block'))
+            return False
+        cursor = self.textCursor()
+        cursor.setPosition(spans[-1][1])
+        cursor.setPosition(spans[0][0], QTextCursor.MoveMode.KeepAnchor)
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
+        # Place the beginning of a long quotation in view, rather than its end.
+        bar = self.verticalScrollBar()
+        bar.setValue(bar.value() + self.cursorRect().top() - 12)
+        self.setFocus()
+        return True
 
 
 class ReaderPage(QWidget):
@@ -288,6 +318,7 @@ class ReaderPage(QWidget):
         self.article = bundle['article']
         self.bundle = bundle
         self.focus_block = None
+        self.focus_passage = None
         self.focus_object = None
         self.resume_assistant = host.width() >= 1000
         layout = QVBoxLayout(self)
@@ -470,7 +501,11 @@ class ReaderPage(QWidget):
         self.set_assistant_visible(self.resume_assistant)
         if value.get('translation'):
             self.translate()
-        if self.focus_block:
+        if self.focus_passage:
+            self.show_original()
+            if not self.text.locate_passage(self.focus_passage):
+                self.host.notice('引用内容已变化，已打开原段落供核对。')
+        elif self.focus_block:
             self.text.locate(self.focus_block)
         if self.focus_object:
             self.chat.set_focus(self.focus_object)

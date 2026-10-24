@@ -590,7 +590,7 @@ class LibraryPage(QWidget):
             if personal:
                 self.host.open_article(hit['article_id'], note_id=hit['note_id'])
             else:
-                self.host.open_article(hit['article_id'], object_id=hit['object_id']) if hit.get('source') == 'capture_context' else self.host.open_article(hit['article_id'], block=hit.get('block'))
+                self.host.open_article(hit['article_id'], object_id=hit['object_id']) if hit.get('source') == 'capture_context' else self.host.open_article(hit['article_id'], block=hit.get('block'), passage=hit)
         controls.addWidget(button('查看笔记' if personal else '查看抓取片段' if captured else '在原文中定位', locate, primary=True))
         layout.addLayout(controls)
         dialog.exec()

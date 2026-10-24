@@ -77,6 +77,7 @@ class NativeWindow(QMainWindow):
         self.current_page = 'discover'
         self.article_id = None
         self.article_block = None
+        self.article_passage = None
         self.article_object = None
         self.article_draft = None
         self.article_note = None
@@ -241,6 +242,8 @@ class NativeWindow(QMainWindow):
                 if self.article_block:
                     widget.focus_block = self.article_block
                     self.article_block = None
+                widget.focus_passage = self.article_passage
+                self.article_passage = None
                 title = bundle['article']['title']
             elif page == 'map' and bundle:
                 widget = MapPage(self, bundle)
@@ -388,8 +391,9 @@ class NativeWindow(QMainWindow):
         route['scroll'] = bar.value() if bar is not None else 0
         return route
 
-    def open_article(self, key, remember=True, block=None, object_id=None, note_draft=None, note_id=None):
+    def open_article(self, key, remember=True, block=None, object_id=None, note_draft=None, note_id=None, passage=None):
         self.article_block = block
+        self.article_passage = passage
         self.article_object = object_id
         self.article_draft = note_draft
         self.article_note = note_id

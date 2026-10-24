@@ -218,6 +218,16 @@ class SourceIndex:
                     if entry[2]['article_id'] == focus['article_id'] and entry[2]['block'] == focus['block']:
                         entry[0] += 1
             ranked = sorted(fused, key=lambda r:(r[0],r[1]), reverse=True)
+        # A paper mentioned in a bibliography should not outrank that paper's own
+        # passages solely because its name appears in the reference. Apply the
+        # same source-title weight to every passage, without favoring short headers.
+        titles = {a['id']: set(tokens(a['title'])) for a in articles}
+        title_frequency = Counter(term for terms in titles.values() for term in terms)
+        title_weights = {aid:sum(1/title_frequency[t] for t in terms & query) for aid,terms in titles.items()}
+        maximum = max(title_weights.values(), default=0)
+        if maximum and len(set(title_weights.values())) > 1:
+            ranked = sorted(((score*(1+title_weights.get(row['article_id'], 0)/maximum), ordinal, row)
+                             for score,ordinal,row in ranked), key=lambda r:(r[0],r[1]), reverse=True)
         if diagnostics is not None:
             diagnostics.update(matched=sum(score > 0 for score, _, _ in ranked), budget=budget,
                                mode='hybrid' if semantic_hits else 'keyword', semantic_hits=len(semantic_hits))

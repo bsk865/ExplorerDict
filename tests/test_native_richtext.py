@@ -67,6 +67,28 @@ class RichTextTests(unittest.TestCase):
         self.assertGreater(widget.textCursor().position(), 0)
         widget.close()
 
+    def test_passage_location_selects_exact_rich_text_offsets_and_shows_its_start(self):
+        widget = OriginalText()
+        widget.resize(500, 300)
+        block = {'id':'b0', 'type':'text', 'html': '<p>Before 😀</p>'*80 +
+                 '<table><tr><td>The result is <b>81.7 mM</b>.</td></tr></table><p>After</p>'*8}
+        widget.load_article({'blocks':[block]}, {})
+        widget.show()
+        self.app.processEvents()
+        text = block_text(block)
+        start = text.index('The result')
+        end = text.index('After', start)+len('After')
+        passage = dict(block='b0', start=start, end=end, quote=text[start:end])
+        self.assertTrue(widget.locate_passage(passage))
+        self.assertEqual([passage], widget.selected_segments())
+        self.assertGreater(widget.verticalScrollBar().value(), 0)
+        self.assertTrue(widget.viewport().rect().intersects(widget.cursorRect()))
+        self.assertLess(widget.cursorRect().top(), 30)
+        self.assertFalse(widget.locate_passage(dict(passage, quote='stale quote')))
+        self.assertFalse(widget.textCursor().hasSelection())
+        self.assertEqual(widget.ranges[0]['spans'][0][0], widget.textCursor().position())
+        widget.close()
+
     def test_image_resizes_and_clicks_without_moving_annotation_offsets(self):
         raw = io.BytesIO()
         Image.new('RGB', (1000, 400), '#6b8c77').save(raw, 'PNG')
