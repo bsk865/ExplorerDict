@@ -31,6 +31,8 @@ def refresh_message(state):
         return f'{failed} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。' if failed else '订阅内容已更新'
     total, failed = counts['sources'], counts['failed']
     if not total:
+        if counts.get('skipped'):
+            return '本次更新已跳过已暂停或变更的来源。'
         return '尚未启用订阅来源，请在“兴趣与来源”中添加。'
     if failed == total:
         return f'全部 {total} 个来源更新失败，保留上次内容；可在“兴趣与来源”查看。'
@@ -39,6 +41,8 @@ def refresh_message(state):
         message += f" · {counts['empty']} 个来源本期暂无新文章"
     if failed:
         message += f' · {failed} 个来源更新失败，保留上次内容'
+    if counts.get('skipped'):
+        message += f" · 已跳过 {counts['skipped']} 个已暂停或变更的来源"
     return message
 
 
@@ -211,6 +215,7 @@ class DiscoverPage(QWidget):
         self.host, self.controller = host, host.discovery
         self.service = self.controller.service
         self.detail_id = None
+        self.preferences_update = None
         self.palette = colors(host.snapshot['preferences']['palette'], host.snapshot['preferences']['mode'])
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 20, 24, 12)
@@ -339,6 +344,8 @@ class DiscoverPage(QWidget):
             QTimer.singleShot(0, lambda controller=c, visible=items[:c.limit]: controller.load_covers(visible))
         if self.detail_id and self.stack.currentWidget() is not self.feed:
             self.show_detail(self.detail_id)
+        elif self.preferences_update and self.stack.currentWidget() is not self.feed:
+            self.preferences_update()
 
     def more(self):
         self.controller.limit += 20
@@ -380,6 +387,7 @@ class DiscoverPage(QWidget):
         return card
 
     def replace_secondary(self, widget):
+        self.preferences_update = None
         while self.stack.count() > 1:
             old = self.stack.widget(1)
             old.hide()
@@ -399,6 +407,7 @@ class DiscoverPage(QWidget):
             self.back()
             return
         self.detail_id = key
+        paper = item.get('content_kind', item['kind']) == 'paper'
         scroll = QScrollArea(self.stack)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -413,12 +422,12 @@ class DiscoverPage(QWidget):
         if item.get('authors'):
             layout.addWidget(label(item['authors'], True))
         layout.addWidget(label(item.get('summary') or '来源未提供简介，请在原站阅读。'))
-        layout.addWidget(label('这里预览来源摘要。加入资料库将下载论文全文并保留原始 PDF；摘要可单独保存。' if item['kind']=='paper' else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
+        layout.addWidget(label('这里预览来源摘要。加入资料库将读取可访问的论文全文，下载 PDF 时保留原文件；摘要可单独保存。' if paper else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
         layout.addWidget(label(item['url'], True))
         actions = FlowLayout(spacing=8)
         actions.addWidget(button('打开原站', lambda: open_source(self.host, item['url'])))
         actions.addWidget(button('复制链接', lambda: copy_link(self.host, item['url'])))
-        actions.addWidget(button('翻译摘要' if item['kind'] == 'paper' else '翻译简介',
+        actions.addWidget(button('翻译摘要' if paper else '翻译简介',
                                  lambda: self.host.open_translation(item.get('summary', ''), item['title'], 'discovery:' + item['id'])))
         article_id = item.get('article_id')
         article = self.host.service.store.get('articles', article_id) if article_id else None
@@ -428,7 +437,7 @@ class DiscoverPage(QWidget):
             collect = button('获取全文并加入资料库', lambda: self.controller.collect(item), primary=True)
             collect.setEnabled(not self.controller.busy)
             actions.addWidget(collect)
-        if item['kind'] == 'paper' and not item.get('abstract_article_id') and not (article and article.get('source_status') == 'abstract'):
+        if paper and not item.get('abstract_article_id') and not (article and article.get('source_status') == 'abstract'):
             abstract = button('仅保存摘要', lambda: self.controller.collect(item, 'abstract'))
             abstract.setEnabled(not self.controller.busy)
             actions.addWidget(abstract)
@@ -511,7 +520,9 @@ class DiscoverPage(QWidget):
                 column.addWidget(label(source['url'], True))
                 status = health.get(source['id'], {})
                 last = datetime.fromtimestamp(status['updated']).strftime('%m-%d %H:%M') if status.get('updated') else '尚无成功更新'
-                column.addWidget(label(status.get('error') or status.get('message') or ('最近更新：'+last+' · '+str(status.get('count', 0))+' 条'), True))
+                history = '最近更新：'+last+' · '+str(status.get('last_count', status.get('count', 0)))+' 条' if status.get('updated') else last
+                detail = status.get('error') or status.get('message')
+                column.addWidget(label((detail+'\n' if detail else '')+history, True))
                 controls = QHBoxLayout()
                 def toggle(checked=False, sid=source['id']):
                     value = self.service.preferences()
@@ -555,3 +566,4 @@ class DiscoverPage(QWidget):
         layout.addStretch()
         scroll.setWidget(body)
         self.replace_secondary(scroll)
+        self.preferences_update = populate_sources

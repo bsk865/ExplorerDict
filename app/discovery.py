@@ -6,12 +6,15 @@ from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, urljoin, parse_qsl, urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.error import HTTPError, URLError
+from http.client import IncompleteRead, RemoteDisconnected
 from xml.etree import ElementTree as ET
 import ipaddress
 import io
 import json
 import re
 import socket
+import ssl
 import time
 from bs4 import BeautifulSoup
 from PIL import Image, ImageOps
@@ -68,6 +71,65 @@ def fetch(url, limit=2_000_000):
         if len(raw) > limit:
             raise ValueError('内容过大，请在原站阅读。')
         return raw, response.geturl(), response.headers.get_content_charset() or 'utf-8'
+
+
+def subscription_retry_delay(error):
+    """Retry temporary transport failures once; respect a publisher's backoff."""
+    if isinstance(error, HTTPError):
+        if error.code not in {408, 429, 500, 502, 503, 504}:
+            return None
+        value = error.headers.get('Retry-After') if error.headers else None
+        if value:
+            try:
+                delay = float(value)
+            except ValueError:
+                try:
+                    delay = parsedate_to_datetime(value).timestamp() - time.time()
+                except (ValueError, TypeError, OverflowError):
+                    delay = .5
+            # Longer waits belong to a later refresh, not an immediate request.
+            return max(.5, delay) if delay <= 2 else None
+        return .5
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return None
+    if isinstance(reason, ssl.SSLError):
+        return .5 if isinstance(reason, (ssl.SSLEOFError, ssl.SSLZeroReturnError)) else None
+    if isinstance(reason, socket.gaierror):
+        return .5 if reason.errno == socket.EAI_AGAIN else None
+    if isinstance(reason, (OSError, IncompleteRead, RemoteDisconnected)):
+        return .5
+    return None
+
+
+def read_subscription(source, loader):
+    for attempt in (1, 2):
+        try:
+            raw, resolved, _ = loader(source['url'])
+            return parse_feed(raw, dict(source, url=resolved)), None, attempt
+        except Exception as error:
+            delay = subscription_retry_delay(error)
+            if isinstance(error, HTTPError):
+                error.close()
+            if attempt == 2 or delay is None:
+                return [], source['name'] + '：更新失败，保留上次内容', attempt
+            time.sleep(delay)
+
+
+def item_origins(item):
+    origins = {row['source_id']: dict(row) for row in item.get('origins', []) if row.get('source_id')}
+    if item.get('source_id') and item['source_id'] not in origins:
+        origins[item['source_id']] = {key: item.get(key) for key in ('source_id', 'source', 'platform', 'kind')}
+    return origins
+
+
+def paper_content(item, sources=()):
+    from .paper_source import arxiv_identifier
+    origins = item_origins(item)
+    return (item.get('content_kind', item.get('kind')) == 'paper'
+            or any(origin.get('kind') == 'paper' for origin in origins.values())
+            or any(source['kind'] == 'paper' and source['id'] in origins for source in sources)
+            or bool(arxiv_identifier(item.get('url', ''))))
 
 
 def stamp(value):
@@ -285,12 +347,20 @@ class Discovery:
         rows = []
         for item in self.state()['items']:
             item = dict(item)
-            origins = item.get('origins') or [dict(source_id=item.get('source_id'), source=item['source'], platform=item.get('platform'))]
+            item['content_kind'] = 'paper' if paper_content(item, prefs['sources']) else item['kind']
+            origins = list(item_origins(item).values())
+            for origin in origins:
+                source = sources.get(origin['source_id'], {})
+                origin['kind'] = 'article' if origin['source_id'] == 'links' else source.get('kind') or origin.get('kind') or item['kind']
+                if source:
+                    origin.update(source=source['name'], platform=source.get('platform') or origin.get('platform'))
             active = [o for o in origins if o.get('source_id') in enabled | {'links'}]
             if source_id:
                 active = [o for o in origins if o.get('source_id') == source_id and (source_id in enabled | {'links'} or kind == 'saved')]
                 if not active:
                     continue
+            if kind in {'news', 'paper', 'article'}:
+                active = [origin for origin in active if origin['kind'] == kind]
             if active:
                 item.update(active[0])
             flag = flags.get(item['id'], {})
@@ -343,53 +413,63 @@ class Discovery:
 
     def refresh(self, loader=fetch):
         sources = [s for s in self.preferences()['sources'] if s.get('enabled')]
-        def read(source):
-            try:
-                rows = parse_feed(loader(source['url'])[0], source)
-                return rows, None
-            except Exception:
-                return [], source['name'] + '：更新失败，保留上次内容'
         with ThreadPoolExecutor(max_workers=4) as pool:
-            batches = list(pool.map(read, sources))
-        fresh = [item for items, _ in batches for item in items]
+            requested = list(zip(sources, pool.map(lambda source: read_subscription(source, loader), sources)))
+        def current_batches():
+            current = {source['id']: source for source in self.preferences()['sources'] if source.get('enabled')}
+            return [(current[source['id']], *result) for source, result in requested
+                    if source['id'] in current and all(source.get(key) == current[source['id']].get(key)
+                                                      for key in ('url', 'kind'))]
+        batches = current_batches()
         # Covers are bounded and cached. No image generation or third-party proxy.
         with self.store.lock:
             existing = {item['id']: item for item in self.state()['items']}
         candidates = []
-        cover_pool = [dict(row, score=stamp(row.get('published', ''))) for rows, _ in batches for row in rows[:3]]
+        cover_pool = [dict(row, score=stamp(row.get('published', ''))) for _, rows, _, _ in batches for row in rows[:3]]
         for item in diversify(sorted(cover_pool, key=lambda row: row['score'], reverse=True))[:12]:
             candidates.append(dict(item, cover_file=existing.get(item['id'], {}).get('cover_file', '')))
         with ThreadPoolExecutor(max_workers=4) as pool:
             covered = list(pool.map(lambda row: self.cover(row, loader, True), candidates))
-        covers = {row['id']: row for row in covered}
+        covers = {row['id']: {key: row[key] for key in ('cover_url', 'cover_file') if row.get(key)} for row in covered}
         with self.store.lock:
+            # A source can be paused, removed or changed while requests/covers are running.
+            batches = current_batches()
+            fresh = [dict(item, source=source['name'], platform=source['platform'])
+                     for source, items, _, _ in batches for item in items]
             state = self.state()
             merged = {item['id']: item for item in state['items']}
             for item in fresh:
                 old = merged.get(item['id'], {})
-                origins = {o['source_id']: o for o in old.get('origins', [])}
-                if old.get('source_id'):
-                    origins[old['source_id']] = {k: old.get(k) for k in ('source_id', 'source', 'platform')}
-                origins[item['source_id']] = {k: item.get(k) for k in ('source_id', 'source', 'platform')}
-                merged[item['id']] = dict(old, **covers.get(item['id'], item), origins=list(origins.values()))
+                origins = item_origins(old)
+                origins.update(item_origins(item))
+                merged[item['id']] = dict(old, **dict(item, **covers.get(item['id'], {})), origins=list(origins.values()))
             flags = self.store.get('settings', 'discovery-flags', {})
             ordered = sorted(merged.values(), key=lambda row: row.get('imported_at', 0), reverse=True)
-            protected = [row for row in ordered if flags.get(row['id'], {}).get('saved') or row.get('source_id') == 'links']
+            protected = [row for row in ordered if flags.get(row['id'], {}).get('saved') or 'links' in item_origins(row)]
             kept_ids = {row['id'] for row in protected}
             pool = [dict(row, platform=row.get('platform') or platform_key(row['url']), score=stamp(row.get('published', ''))) for row in ordered if row['id'] not in kept_ids]
-            kept = protected + diversify(pool)[:400]
-            state.update(items=kept, attempted=time.time(), errors=[e for _, e in batches if e],
-                         refresh_counts={'sources': len(sources), 'failed': sum(bool(error) for _, error in batches),
-                                         'empty': sum(not items and not error for items, error in batches),
+            enabled = {source['id'] for source in self.preferences()['sources'] if source.get('enabled')}
+            active = [row for row in pool if enabled.intersection(item_origins(row))]
+            dormant = [row for row in pool if not enabled.intersection(item_origins(row))]
+            kept = protected + (diversify(active) + diversify(dormant))[:400]
+            state.update(items=kept, attempted=time.time(), errors=[error for _, _, error, _ in batches if error],
+                         refresh_counts={'sources': len(batches), 'failed': sum(bool(error) for _, _, error, _ in batches),
+                                         'empty': sum(not items and not error for _, items, error, _ in batches),
                                          'articles': len(fresh)})
-            health = dict(state.get('source_health', {}))
-            for source, (items, error) in zip(sources, batches):
+            if len(batches) != len(requested):
+                state['refresh_counts']['skipped'] = len(requested) - len(batches)
+            configured = {source['id'] for source in self.preferences()['sources']}
+            health = {key: value for key, value in state.get('source_health', {}).items() if key in configured}
+            for source, items, error, attempts in batches:
                 old = health.get(source['id'], {})
                 health[source['id']] = dict(attempted=time.time(), count=len(items), error=error or '',
+                                             attempts=attempts,
+                                             last_count=old.get('last_count', old.get('count', 0)) if error else len(items),
                                              updated=old.get('updated', 0) if error else time.time(),
-                                             message='本期暂无新文章，已保留上次内容' if not error and not items else '')
+                                             message='本期暂无新文章，已保留上次内容' if not error and not items
+                                             else '重试后已更新' if not error and attempts > 1 else '')
             state['source_health'] = health
-            if any(not error for _, error in batches):
+            if any(not error for _, _, error, _ in batches):
                 state['updated'] = time.time()
             self.store.put('settings', 'discovery-state', state)
         keep_files = {row.get('cover_file') for row in kept}
@@ -407,6 +487,16 @@ class Discovery:
         item = self.cover(item, loader)
         with self.store.lock:
             state = self.state()
+            old = next((row for row in state['items'] if row['id'] == item['id']), {})
+            if paper_content(old, self.preferences()['sources']) or paper_content(item):
+                item['content_kind'] = 'paper'
+                if len(old.get('summary', '')) > len(item.get('summary', '')):
+                    for field in ('summary', 'summary_truncated', 'description_type'):
+                        if field in old:
+                            item[field] = old[field]
+            origins = item_origins(old)
+            origins.update(item_origins(item))
+            item = dict(old, **item, origins=list(origins.values()))
             state['items'] = [item] + [row for row in state['items'] if row['id'] != item['id']]
             self.store.put('settings', 'discovery-state', state)
         return item
@@ -428,15 +518,16 @@ class Discovery:
         item = next((row for row in self.state()['items'] if row['id'] == key), None)
         if not item:
             raise ValueError('该内容已不在发现列表中，请重新添加链接。')
-        if mode not in {'full', 'abstract'} or mode == 'abstract' and item['kind'] != 'paper':
+        paper = paper_content(item, self.preferences()['sources'])
+        if mode not in {'full', 'abstract'} or mode == 'abstract' and not paper:
             raise ValueError('请选择全文导入，或为论文明确选择保存摘要。')
         document = None
-        if item['kind'] == 'paper' and mode == 'abstract':
+        if paper and mode == 'abstract':
             if not item.get('summary'):
                 raise ValueError('来源没有提供摘要，请在原站下载论文后导入。')
             blocks = [{'type': 'text', 'text': ('论文摘要节选（非全文）' if item.get('summary_truncated') else '论文摘要（非全文）')+'\n'+item['summary']}]
             title, stats, status = item['title'], {}, 'abstract'
-        elif item['kind'] == 'paper':
+        elif paper:
             from .paper_source import read_paper
             title, blocks, stats, document = read_paper(item, self.store, loader)
             status = 'readable'

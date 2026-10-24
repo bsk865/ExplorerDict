@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from PySide6.QtCore import QObject, QEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 from app.native.service import NativeService
 from app.native.window import NativeWindow
 from app.native.discover import DiscoverPage, refresh_message
@@ -162,6 +162,26 @@ class NativeDiscoveryTests(unittest.TestCase):
             self.assertEqual([],self.watch.shown)
             self.assertIsNone(self.app.activeModalWidget())
         finally:release.set()
+
+    def test_source_status_updates_without_replacing_settings_or_losing_form(self):
+        page = self.window.stack.currentWidget()
+        page.show_preferences()
+        settings = page.stack.currentWidget()
+        page.subscription.url.setText('https://example.org/my-draft')
+        page.subscription.name.setText('尚未提交的来源名称')
+        state = self.service.discovery.state()
+        state['source_health'] = {'test': dict(updated=1792800000, count=10, last_count=10,
+                                              attempts=2, error='', message='重试后已更新')}
+        self.service.store.put('settings', 'discovery-state', state)
+        self.window.discovery.message = '订阅内容已更新'
+        self.window.discovery.changed.emit()
+        self.app.processEvents()
+        self.assertIs(settings, page.stack.currentWidget())
+        self.assertEqual('https://example.org/my-draft', page.subscription.url.text())
+        self.assertEqual('尚未提交的来源名称', page.subscription.name.text())
+        self.assertTrue(any('重试后已更新' in label.text() and '10 条' in label.text()
+                            for label in settings.findChildren(QLabel)))
+        self.assertEqual([], self.watch.shown)
 
 
 if __name__ == '__main__':

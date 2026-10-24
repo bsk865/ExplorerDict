@@ -10,7 +10,7 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 
 ## 从好奇心出发，发现新的内容
 
-![跨平台发现：原始来源、兴趣方向与来源筛选](docs/screenshots/diverse-discovery-20261024/discovery.png)
+![跨平台发现：原始来源、兴趣方向与来源筛选](docs/screenshots/discovery-recovery-20261024/discovery.png)
 
 启动后进入“发现”，浏览相关新闻、论文与收藏。默认订阅涵盖中文科技与社区、国际新闻、科学传播、学者观点及开放论文。同平台不同栏目合并参与交错推荐，穿插其他探索方向，避免单一平台占满列表。可以按来源筛选、增减订阅、设置兴趣和屏蔽关键词；兴趣记录保存在本机。封面来自原始来源；没有图片的内容使用文字卡片。
 
@@ -24,7 +24,7 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 
 ## 在文章旁边，继续你的问题
 
-![当前原生阅读界面：左侧原文，右侧理解与追问](docs/screenshots/native-20261023/reading.png)
+![当前原生阅读界面：左侧原文，右侧理解与追问](docs/screenshots/reading-space-20261024/public-paper-reader.png)
 
 打开文章后，通过“问本文”展开追问栏。可以围绕当前文章提问，也可以扩大到资料库；原文、标注和笔记留在眼前。
 
@@ -55,7 +55,7 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 - **偏好记忆**：六套主题、明暗模式、保存天气城市；启动先恢复城市，再更新天气。
 - **模型设置**：可编辑的模型选择、推理强度、预算滑轨及预设；API 密钥由用户自备，用 Windows DPAPI 保存。
 
-截图由真实原生窗口离屏渲染，使用自编演示资料与公开论文，无个人数据或 API 密钥。[阅读与翻译截图来源](docs/screenshots/reading-tools-20261024/README.md) · [基础页面截图来源](docs/screenshots/native-20261023/README.md)
+截图由真实原生窗口离屏渲染，使用自编演示资料与公开内容，无个人数据或 API 密钥。[发现截图来源](docs/screenshots/discovery-recovery-20261024/README.md) · [问答截图来源](docs/screenshots/reading-space-20261024/README.md) · [阅读与翻译截图来源](docs/screenshots/reading-tools-20261024/README.md) · [基础页面截图来源](docs/screenshots/native-20261023/README.md)
 
 ## 快速启动
 
