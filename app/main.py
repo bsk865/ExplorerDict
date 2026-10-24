@@ -2535,11 +2535,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--open-main", action="store_true",
                         help="启动后打开词典主界面（双击 exe / 重复启动呼出用）")
     parser.add_argument('--check-appearance', type=Path, help=argparse.SUPPRESS)
+    parser.add_argument('--check-storage-lifecycle', type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     if args.check_appearance:
         from .appearance_check import run
         return run(args.check_appearance)
+    if args.check_storage_lifecycle:
+        from .storage_check import validate
+        validate(args.check_storage_lifecycle)
 
     setup_logging(console=args.console_log or args.selftest)
     log.info("=== 探索词典启动 (pid=%s) ===", os.getpid())
@@ -2555,6 +2559,9 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("已经有一个探索词典实例在运行：本次启动退出（避免抢热键 / 并发写库）")
         return int(exit_code)
     try:
+        if args.check_storage_lifecycle:
+            from .storage_check import run
+            return run(args.check_storage_lifecycle)
         return _run_ui(args)
     finally:
         if not already_held:

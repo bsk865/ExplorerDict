@@ -12,9 +12,10 @@ from native_relocation_fixture import prepare, check, ROOT
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('executable', type=Path, nargs='?')
+    parser.add_argument('--with-companion', action='store_true')
     args = parser.parse_args()
     root = prepare()
-    report = {'directory': str(root), 'passed': False, 'capture_lifecycle_tested': False}
+    report = {'directory': str(root), 'passed': False, 'capture_lifecycle_tested': args.with_companion}
     environment = dict(os.environ, QT_QPA_PLATFORM='offscreen')
     environment.pop('EXPLORER_DICT_DATA_DIR', None)
     environment.pop('EXPLORER_DICT_STORAGE_CONFIG', None)
@@ -31,8 +32,10 @@ def main():
     try:
         for stage in ('schedule', 'reopen'):
             with (root / (stage + '-process.log')).open('w', encoding='utf-8') as log:
-                process = subprocess.Popen(command + ['--verify-relocation', str(root),
-                    '--relocation-stage', stage], cwd=cwd, env=environment, stdout=log, stderr=log)
+                options = ['--verify-relocation', str(root), '--relocation-stage', stage]
+                if args.with_companion:
+                    options += ['--relocation-capture']
+                process = subprocess.Popen(command + options, cwd=cwd, env=environment, stdout=log, stderr=log)
                 try:
                     code = process.wait(timeout=60)
                 except subprocess.TimeoutExpired:
@@ -43,6 +46,11 @@ def main():
             assert code == 0 and runtime['passed'], runtime
             assert runtime['frozen'] == bool(args.executable)
             report[stage] = runtime
+            if args.with_companion:
+                companion = json.loads((root/(stage+'-companion.json')).read_text(encoding='utf-8'))
+                assert companion['passed'] and companion['database_closed'] and companion['normal_exit'], companion
+                assert companion['frozen'] == bool(args.executable)
+                report[stage+'_companion'] = companion
             if stage == 'schedule':
                 assert check(root) == 0, 'Exit migration changed fixture contents'
                 report['exit_migration_verified'] = True

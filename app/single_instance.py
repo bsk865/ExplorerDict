@@ -77,10 +77,14 @@ def default_data_dir() -> Path:
 
     与 ``app.paths`` 共用同一个 :func:`app.paths.project_root`：源码下是项目内的
     ``data/``，frozen（PyInstaller）下是 exe 同级的 ``data/``。
+    环境变量优先，其次使用已保存的共享存储位置，与实际数据库读取一致。
     这里只解析路径，**绝不** ``mkdir``：判重 / 发呼出请求时顺手建目录会在
     只读介质或权限不足的位置留下副作用。
     """
     override = os.environ.get("EXPLORER_DICT_DATA_DIR")
+    if not override:
+        from .storage_location import read
+        override = read().get('active')
     if override:
         return Path(override)
     return project_root() / "data"

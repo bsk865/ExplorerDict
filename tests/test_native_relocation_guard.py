@@ -9,6 +9,25 @@ from app.native.relocation_check import prepare_environment
 
 
 class RelocationGuardTests(unittest.TestCase):
+    def test_companion_fixture_requires_marker_and_saved_location(self):
+        from app.storage_check import validate
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            root = Path(directory).resolve()
+            with self.assertRaises(ValueError):
+                validate(root)
+            (root / '.native-relocation-check').touch()
+            (root / 'fixture.json').write_text(json.dumps({
+                'source': str(root/'original'), 'target': str(root/'destination')}))
+            config = root/'storage-location.json'
+            config.write_text(json.dumps({'active':str(root/'original')}))
+            os.environ['EXPLORER_DICT_STORAGE_CONFIG'] = str(config)
+            self.assertEqual(root/'original', validate(root)[2])
+            self.assertFalse((root/'original').exists())
+            os.environ['EXPLORER_DICT_DATA_DIR'] = str(root.parent/'outside-fixture')
+            with self.assertRaises(ValueError):
+                validate(root)
+            self.assertFalse((root.parent/'outside-fixture').exists())
+
     def test_unmarked_directory_is_rejected_without_changing_environment(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError):

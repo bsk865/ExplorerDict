@@ -12,7 +12,10 @@ def main():
     parser.add_argument('--verify-data-copy', action='store_true')
     parser.add_argument('--verify-relocation', type=Path)
     parser.add_argument('--relocation-stage', choices=('schedule', 'reopen'), default='schedule')
+    parser.add_argument('--relocation-capture', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.relocation_capture and not args.verify_relocation:
+        parser.error('Companion relocation verification requires an isolated fixture')
     if args.verify_relocation:
         if args.data_dir or args.verify_native or args.verify_data_copy:
             parser.error('Relocation verification uses its own isolated paths')
@@ -110,7 +113,7 @@ def main():
         attach_verification(window, directory)
     if args.verify_relocation:
         from app.native.relocation_check import attach_check
-        attach_check(window, args.verify_relocation.resolve(), args.relocation_stage)
+        attach_check(window, args.verify_relocation.resolve(), args.relocation_stage, with_capture=args.relocation_capture)
     window.show()
     try:
         return app.exec()
@@ -120,7 +123,7 @@ def main():
         switch.close()
         try:
             if not args.verify_native:
-                stopped = True if args.verify_relocation else capture_bridge.stop_and_wait()
+                stopped = True if args.verify_relocation and not args.relocation_capture else capture_bridge.stop_and_wait()
                 from app.storage_location import apply_pending
                 apply_pending(directory, components_stopped=stopped)
         finally:

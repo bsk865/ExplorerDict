@@ -304,6 +304,26 @@ class TestMutexNameFollowsDataDir(unittest.TestCase):
         self.assertNotEqual(guard.name, single_instance.mutex_name_for(r"D:\tmp\other_data"))
         self.assertTrue(guard.name.startswith(MUTEX_NAME))
 
+    def test_saved_location_controls_both_mutex_and_activation_without_creating_it(self):
+        import json
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from app.single_instance import default_data_dir, mutex_name_for
+        from app.activation import event_name_for
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root/'saved-data'
+            config = root/'location.json'
+            config.write_text(json.dumps({'active': str(target)}), encoding='utf-8')
+            with patch.dict(os.environ, {'EXPLORER_DICT_STORAGE_CONFIG':str(config)}):
+                os.environ.pop('EXPLORER_DICT_DATA_DIR', None)
+                self.assertEqual(target, default_data_dir())
+                self.assertEqual(mutex_name_for(target), SingleInstance(backend=FakeMutexBackend()).name)
+                self.assertEqual(event_name_for(target), event_name_for())
+                self.assertFalse(target.exists(), 'Resolving the lock must not create a data directory')
+
 
 class TestProcessGuard(unittest.TestCase):
     """``acquire_process_guard``：同一个进程只真正 CreateMutexW 一次。"""

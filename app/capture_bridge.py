@@ -80,7 +80,7 @@ def status():
             pass
     return result
 
-def ensure_started(*, reveal=False):
+def ensure_started(*, reveal=False, lifecycle_check=None):
     global _launch
     with _lock:
         if running():
@@ -92,15 +92,24 @@ def ensure_started(*, reveal=False):
             return {'running':False,'ready':False,'label':'悬浮取词正在启动'}
         executable=project_root()/'探索词典.exe'
         command = [str(executable)]
-        if not executable.is_file():
+        if not executable.is_file() or (lifecycle_check is not None and not getattr(sys, 'frozen', False)):
             source = project_root() / 'bootstrap.py'
             if not getattr(sys, 'frozen', False) and source.is_file():
                 command = [sys.executable, str(source)]
             else:
                 raise ValueError('缺少悬浮取词组件，请重新安装应用。')
+        if lifecycle_check is not None:
+            from .storage_check import validate
+            validate(lifecycle_check)
+            command += ['--check-storage-lifecycle', str(lifecycle_check)]
+        environment = {**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT': '1'}
+        if lifecycle_check is not None:
+            # Exercise standalone startup from the saved location, without relying
+            # on the reader's inherited data-directory override.
+            environment.pop('EXPLORER_DICT_DATA_DIR', None)
         try:
             _launch=subprocess.Popen(command,cwd=project_root(),
-                                     env={**os.environ, 'PYINSTALLER_RESET_ENVIRONMENT': '1'}, creationflags=0x08000000)
+                                     env=environment, creationflags=0x08000000)
         except OSError as exc:
             raise ValueError('悬浮取词未能启动，请稍后重试。') from exc
         return {'running':False,'ready':False,'label':'悬浮取词正在启动'}
