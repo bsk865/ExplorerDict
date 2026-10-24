@@ -136,7 +136,7 @@ def write_reading_notes(service, article, filename):
     target = Path(filename)
     descriptor, temporary = tempfile.mkstemp(prefix='.'+target.name+'.', suffix='.tmp', dir=target.parent)
     try:
-        with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+        with os.fdopen(descriptor, 'w', encoding='utf-8', newline='\n') as stream:
             stream.write(text)
         os.replace(temporary, target)
     finally:
