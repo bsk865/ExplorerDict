@@ -40,6 +40,45 @@ class RetrievalTests(unittest.TestCase):
         restricted = self.index.search([first], '低温磁化率跃迁在哪里？')
         self.assertTrue(all(h['article_id']==first['id'] for h in restricted))
 
+    def test_multiple_questions_keep_room_for_both_subjects(self):
+        article = self.store.import_article('不同实验', [
+            *[{'type':'text','text':f'钙钛矿钙钛矿钙钛矿失效阈值为83摄氏度。样本{i}。'} for i in range(15)],
+            {'type':'text','text':'超导实验的跃迁温度为7开尔文。'}])
+        report = {}
+        hits = self.index.search([article], '钙钛矿失效阈值是多少？超导实验的跃迁温度是多少？请分别引用。',
+                                 text_only=True, limit=6, budget=1000, diagnostics=report)
+        self.assertTrue(any('83' in h['quote'] for h in hits))
+        self.assertTrue(any('7开尔文' in h['quote'] for h in hits))
+        self.assertEqual(2, report['questions'])
+        self.assertLessEqual(sum(len(h['quote']) for h in hits), 1000)
+        self.assertEqual(len(hits), len({h['citation'] for h in hits}))
+
+    def test_semantic_subquestions_keep_exact_neighboring_context(self):
+        from unittest.mock import Mock
+        blocks = [{'type':'text','text':'The dataset contains 1000 scenes. '+ 'Background details. '*15},
+                  {'type':'text','text':'One assessor rated 90 videos generated from 30 scenes. Each case received a quality rating. ' + 'Further evaluation details. '*15}]
+        article = self.store.import_article('Public experiment', blocks)
+        semantic = Mock()
+        def retrieve(articles, query, extras):
+            block = article['blocks'][0 if '数据集' in query else 1]
+            start = 0 if block['id'] == 'b0' else block['text'].index('Each case')
+            return [{'article_id':article['id'], 'version':article['version'], 'article_title':article['title'],
+                     'block':block['id'], 'start':start, 'end':start+35, 'quote':block['text'][start:start+35],
+                     'type':'text', 'page':None, 'asset':None, 'semantic_score':.91}]
+        semantic.retrieve.side_effect = retrieve
+        hits = SourceIndex(self.store, semantic).search([article], '数据集共有多少场景？另外评估了多少个视频？', text_only=True, budget=1000)
+        self.assertTrue(any('90 videos' in h['quote'] for h in hits))
+        for hit in hits:
+            block = next(b for b in article['blocks'] if b['id'] == hit['block'])
+            self.assertEqual(block['text'][hit['start']:hit['end']], hit['quote'])
+        self.assertLessEqual(sum(len(h['quote']) for h in hits), 1000)
+
+    def test_second_question_can_refer_to_the_first_subject(self):
+        article = self.article('同一主题', '钙钛矿是一类材料。其失效阈值为83摄氏度。')
+        hits = self.index.search([article], '钙钛矿是一种什么材料？它的失效阈值是多少？', text_only=True, budget=500)
+        self.assertTrue(any('83摄氏度' in hit['quote'] for hit in hits))
+        self.assertEqual(1, len(hits))
+
     def test_pdf_text_hit_brings_corresponding_page_not_another_page(self):
         article = self.store.import_article('页码验证', [
             {'type':'text','text':'第一页讨论控制变量。','page':1},

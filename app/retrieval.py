@@ -52,6 +52,32 @@ def source_revision(articles, notes=(), *, focus=None):
     return hashlib.sha256(json.dumps([sources, personal, selected], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
+def question_parts(question):
+    """Keep explicit questions separate; trailing writing instructions are not queries."""
+    parts = list(dict.fromkeys(part.strip() for part in re.findall(r'[^?？!！;；\n]+[?？]', question)
+                              if len(part.strip()) >= 6))
+    return parts[:4] if 2 <= len(parts) <= 4 else [question]
+
+
+def surrounding_text(row, articles, extra_rows, padding):
+    if not padding or row.get('retrieval') != ['semantic']:
+        return row
+    source, base = None, 0
+    if row.get('type') == 'text' and row.get('source') not in {'personal_note', 'capture_context'}:
+        source = next((b.get('text', '') for a in articles if a['id'] == row['article_id']
+                       for b in a['blocks'] if b['id'] == row['block']), None)
+    else:
+        container = next((r for r in extra_rows or [] if r['article_id'] == row['article_id']
+                          and r.get('note_id') == row.get('note_id') and r.get('object_id') == row.get('object_id')
+                          and r['block'] == row['block'] and r['start'] <= row['start'] and r['end'] >= row['end']), None)
+        if container:
+            source, base = container['quote'], container['start']
+    if source is None or source[row['start']-base:row['end']-base] != row['quote']:
+        return row
+    start, end = max(base, row['start']-padding), min(base+len(source), row['end']+padding)
+    return dict(row, start=start, end=end, quote=source[start-base:end-base])
+
+
 class SourceIndex:
     def __init__(self, store, semantic=None):
         self.store = store
@@ -84,7 +110,41 @@ class SourceIndex:
                     db.execute('INSERT INTO source_chunks VALUES(?,?,?)', (key, article['id'], json.dumps(payload, ensure_ascii=False)))
             db.execute('INSERT INTO source_indexes VALUES(?,?) ON CONFLICT(article_id) DO UPDATE SET fingerprint=excluded.fingerprint', (article['id'],fingerprint))
 
-    def search(self, articles, question, *, focus=None, limit=10, budget=18000, text_only=False, extra_rows=None, diagnostics=None):
+    def search(self, articles, question, *, focus=None, limit=10, budget=18000, text_only=False, extra_rows=None, diagnostics=None, _context=0, _split=True):
+        parts = question_parts(question) if _split else [question]
+        if text_only and not focus and len(parts) > 1 and limit >= len(parts):
+            batches, reports = [], []
+            for part in parts:
+                if re.match(r'^(它|他们|她们|这些|那些|这项|该|其|it\b|they\b|these\b|those\b)', part, re.I):
+                    part = parts[0] + ' ' + part
+                report = {}
+                batches.append(self.search(articles, part, limit=math.ceil(limit/len(parts)), budget=budget//len(parts),
+                                           text_only=True, extra_rows=extra_rows, diagnostics=report, _context=250, _split=False))
+                reports.append(report)
+            chosen = []
+            matched = sum(r.get('matched', 0) for r in reports)
+            for depth in range(max(map(len, batches), default=0)):
+                for batch in batches:
+                    if depth >= len(batch):
+                        continue
+                    row = batch[depth]
+                    if matched and row['score'] <= 0:
+                        continue
+                    if any(r['article_id'] == row['article_id'] and r['block'] == row['block']
+                           and r.get('note_id') == row.get('note_id') and r.get('object_id') == row.get('object_id')
+                           and min(r['end'], row['end'])-max(r['start'], row['start']) >
+                           min(r['end']-r['start'], row['end']-row['start'])*.5 for r in chosen):
+                        continue
+                    chosen.append(row)
+                    if len(chosen) >= limit:
+                        break
+                if len(chosen) >= limit:
+                    break
+            if diagnostics is not None:
+                diagnostics.update(matched=matched, budget=budget, questions=len(parts),
+                                   mode='hybrid' if any(r.get('mode') == 'hybrid' for r in reports) else 'keyword',
+                                   semantic_hits=sum(r.get('semantic_hits', 0) for r in reports))
+            return [dict(row, citation=f'S{i+1}') for i,row in enumerate(chosen)]
         for article in articles:
             self.ensure(article)
         ids = [a['id'] for a in articles]
@@ -173,6 +233,7 @@ class SourceIndex:
                 break
             if any(r['article_id']==row['article_id'] and r['block']==row['block'] and r.get('note_id')==row.get('note_id') and r.get('object_id')==row.get('object_id') and min(r['end'],row['end'])-max(r['start'],row['start']) > min(r['end']-r['start'],row['end']-row['start'])*.5 for r in chosen):
                 continue
+            row = surrounding_text(row, articles, extra_rows, _context)
             cost = len(row['quote']) + len(row.get('visual_description',''))
             if used + cost > budget:
                 remaining = max(0, budget-used)

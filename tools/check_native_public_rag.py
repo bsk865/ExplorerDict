@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -72,11 +73,14 @@ def main():
         key = controller.key
         cases = [
             ('ShareRobot-SG包含多少场景，其中自动标注和人工真值各多少？另一个视频生成评估子集包含多少场景、多少生成视频？请区分两个集合并引用原文。',
-             ('1000', '900', '100', '30', '90')),
+             ('1000', '900', '100', '30', '90'),
+             (r'1,?000 manipulation scenes', r'900 scenes contain automatically generated',
+              r'100 scenes additionally have manual ground-truth', r'30-scene generation subset',
+              r'One assessor rated 90 videos')),
             ('再核对Table 2的Human evaluation：Ours的Objects F1与Relations F1分别是多少？只回答这两个指标，区分它们，不要混入Dataset-stratified PPI。请引用。',
-             ('89.67', '82.66')),
+             ('89.67', '82.66'), (r'Ours 90\.77 88\.59 89\.67 94\.04 73\.74 82\.66',)),
         ]
-        for ordinal, (question, expected) in enumerate(cases):
+        for ordinal, (question, expected, evidence_patterns) in enumerate(cases):
             if ordinal:
                 service.rename(article['id'], 'RGraph-Eval · 原文指标复核')
             print(json.dumps(dict(phase='asking_public_paper', case=ordinal+1), ensure_ascii=False), flush=True)
@@ -88,7 +92,8 @@ def main():
             evidence = answer.get('evidence', [])
             normalized = answer['content'].replace(',', '').replace('，', '')
             item = dict(question=question, answer=answer['content'], evidence=evidence, expected=list(expected),
-                        exact_source=False, expected_values=False, model_called=answer.get('model') == config['model'])
+                        exact_source=False, expected_values=False, evidence_patterns=list(evidence_patterns),
+                        supporting_statements=False, model_called=answer.get('model') == config['model'])
             report['cases'].append(item)
             assert item['model_called'] and evidence
             current = service.store.article(article['id'])
@@ -102,6 +107,9 @@ def main():
             joined = '\n'.join(hit['quote'] for hit in evidence).replace(',', '')
             assert all(value in joined for value in expected), 'Citations do not contain expected facts'
             item['expected_values'] = True
+            statements = re.sub(r'\s+', ' ', '\n'.join(hit['quote'] for hit in evidence))
+            assert all(re.search(pattern, statements) for pattern in evidence_patterns), 'Citations lack the corresponding original statements'
+            item['supporting_statements'] = True
             assert controller.key == key and not saved.get('closed')
         report['rename_preserved_conversation'] = len(controller.session['messages']) == 4
         report['passed'] = report['rename_preserved_conversation']
