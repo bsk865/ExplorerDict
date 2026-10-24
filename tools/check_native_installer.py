@@ -33,10 +33,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('installer', type=Path)
     parser.add_argument('--isolated', action='store_true', help='Skip OS registration and shortcuts; verify file lifecycle only')
+    parser.add_argument('--upgrade-from', type=Path, help='Install this earlier package before updating to the requested installer')
     args = parser.parse_args()
     if registered():
         raise RuntimeError('An existing native installation is registered; isolated verification will not replace it.')
     installer = args.installer.resolve()
+    previous = args.upgrade_from.resolve(strict=True) if args.upgrade_from else installer
     parent = ROOT / 'artifacts/native-install-checks'
     parent.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix='install-', dir=parent))
@@ -45,20 +47,21 @@ def main():
     temp.mkdir()
     environment = dict(os.environ, TEMP=str(temp), TMP=str(temp))
     report = {'directory': str(directory), 'installer_sha256': digest(installer), 'passed': False,
-              'os_registration_tested': not args.isolated}
+              'os_registration_tested': not args.isolated, 'previous_installer_sha256': digest(previous),
+              'different_installer_versions': digest(previous) != digest(installer)}
     def execute(command, log):
         with (directory / log).open('w', encoding='utf-8') as output:
             result = subprocess.run(command, cwd=directory, env=environment, stdout=output, stderr=output, timeout=180)
         if result.returncode:
             raise RuntimeError(f'{log}: process exit {result.returncode}')
-    def install(stage):
-        execute([str(installer), '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
+    def install(stage, package=installer):
+        execute([str(package), '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER',
                  '/NOICONS', '/TASKS=', '/ISOLATEDCHECK='+('1' if args.isolated else '0'),
                  '/DIR='+str(target), '/LOG='+str(directory/(stage+'.log'))], stage+'-process.log')
         if not (target / '探索词典-原生版.exe').is_file() or (not args.isolated and not registered()):
             raise RuntimeError('Installed application or registration missing')
     try:
-        install('install')
+        install('install', previous)
         report['installed'] = True
         data = target / 'data'
         data.mkdir(exist_ok=True)
@@ -68,15 +71,32 @@ def main():
         with sqlite3.connect(database) as connection:
             connection.execute('CREATE TABLE retained (id INTEGER PRIMARY KEY, content TEXT)')
             connection.execute('INSERT INTO retained(content) VALUES (?)', ('User note fixture',))
+        sys.path.insert(0,str(ROOT))
+        from app.workspace_store import WorkspaceStore
+        from app.study_hub import StudyHub
+        workspace=WorkspaceStore(data)
+        article=workspace.import_article('升级保留资料',[{'type':'text','text':'升级后保留完整原文。'}])
+        note=StudyHub(workspace).save('notes',{'article_id':article['id'],'title':'升级保留笔记','content':'升级后保留笔记与关联。'})
+        workspace.put('settings','native-translation:article:'+article['id'],
+                      {'source':'zh','target':'en','text':'升级后保留完整原文。','result':'Keep the original text after updating.','complete':True})
         config = target / 'storage-location.json'
         config.write_text(json.dumps({'active': str(data)}), encoding='utf-8')
-        retained = {str(path): digest(path) for path in (sentinel, database, config)}
+        retained = {str(path): digest(path) for path in (sentinel, database, config,workspace.path)}
         execute([sys.executable, str(ROOT/'tools/check_native_desktop.py'), str(target/'探索词典-原生版.exe')], 'installed-workflows.log')
         report['installed_workflows'] = True
         install('update')
         if any(digest(Path(path)) != value for path, value in retained.items()):
             raise RuntimeError('Update changed retained user content')
         report['update_preserved_data'] = True
+        reopened=WorkspaceStore(data)
+        assert reopened.article(article['id'])['text']=='升级后保留完整原文。'
+        assert any(row['id']==note['id'] for row in StudyHub(reopened).notes(article['id'])['notes'])
+        assert reopened.get('settings','native-translation:article:'+article['id'])['complete']
+        report['article_note_translation_preserved'] = True
+        if args.upgrade_from:
+            execute([sys.executable,str(ROOT/'tools/check_native_desktop.py'),str(target/'探索词典-原生版.exe')],
+                    'updated-workflows.log')
+            report['updated_workflows'] = True
         uninstaller = target / 'unins000.exe'
         if not uninstaller.is_file():
             raise RuntimeError('Uninstaller missing')
