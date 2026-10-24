@@ -59,6 +59,47 @@ class LibraryAssistantTests(unittest.TestCase):
         self.assertIsNone(hit['block'])
         self.assertFalse(self.w.store.article(article['id'])['text'].strip())
 
+    def test_pronoun_question_after_restart_uses_previous_topic_and_current_sources(self):
+        from app import conversation_budget
+        body={'scope':'all','question':'它呢？'}
+        key=session(self.w,body)['key']
+        original={'messages':[{'role':'user','content':'钙钛矿失效阈值是多少？'},
+                              {'role':'assistant','content':'请回到原文核对。'}], 'draft':'它呢？'}
+        self.w.store.put('sessions',key,original)
+        conversation_budget.close(self.w.store,key,'它呢？','到达预算')
+        restored=conversation_budget.restart(self.w.store,key)
+        self.assertEqual([],restored['messages'])
+        self.assertEqual(1,len(restored['archives']))
+        hits=search(self.w,body)[3]
+        self.assertEqual({self.a['id']},{hit['article_id'] for hit in hits})
+        self.assertTrue(any('83' in hit['quote'] for hit in hits))
+        restored['messages']=[{'role':'user','content':'它呢？'}, {'role':'assistant','content':'请继续核对。'}]
+        self.w.store.put('sessions',key,restored)
+        self.assertEqual({self.a['id']},{hit['article_id'] for hit in search(self.w,body)[3]})
+        # A legacy handoff still works, and a different session never inherits it.
+        restored.pop('carryover_query')
+        self.w.store.put('sessions',key,restored)
+        self.assertTrue(search(self.w,body)[3])
+        self.assertFalse(search(self.w,dict(body,article_ids=[self.b['id']],scope='selected'))[3])
+
+    def test_restarted_retrieval_does_not_use_archived_answer_as_source(self):
+        from app import conversation_budget
+        body={'scope':'all','question':'它呢？'}
+        key=session(self.w,body)['key']
+        self.w.store.put('sessions',key,{'messages':[{'role':'user','content':'钙钛矿失效阈值？'},
+            {'role':'assistant','content':'旧回答为99摄氏度。'}]})
+        conversation_budget.close(self.w.store,key,'它呢？','到达预算')
+        conversation_budget.restart(self.w.store,key)
+        article=self.w.store.article(self.a['id'])
+        article['blocks'][0]['text']='钙钛矿失效阈值现为87摄氏度。'
+        article['text']=article['blocks'][0]['text']
+        article['version']='updated-version'
+        self.w.store.update_article(article)
+        hits=search(self.w,body)[3]
+        self.assertTrue(hits)
+        self.assertTrue(all('99' not in hit['quote'] for hit in hits))
+        self.assertTrue(any('87' in hit['quote'] for hit in hits))
+
     def test_all_scope_rejects_source_changes_during_answer(self):
         self.body.update(scope='all')
         self.body['session_key'] = session(self.w, self.body)['key']

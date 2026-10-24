@@ -133,6 +133,54 @@ class NativeMapTests(unittest.TestCase):
             full.export(target)
             self.assertIn('第8层依据', ''.join(ET.parse(target).getroot().itertext()))
 
+    def test_focused_branch_keeps_original_graph_and_exports_full_document(self):
+        import copy
+        original=copy.deepcopy(GRAPH)
+        branch=MapScene(GRAPH,{},depth=1,focus_root='b')
+        self.assertEqual({'b','c'},set(branch.nodes))
+        self.assertEqual(original,GRAPH)
+        complete=MapScene(GRAPH,{})
+        self.assertEqual({'root','a','b','c'},set(complete.nodes))
+
+    def test_large_page_opens_readable_overview_and_drills_into_branches(self):
+        import copy
+        from unittest.mock import Mock
+        from app.native.maps import MapPage
+        graph=copy.deepcopy(GRAPH)
+        for index in range(100):
+            graph['nodes'].append({'id':f'leaf{index}','parent':'c','label':f'文章细节{index}','quote':'原文依据'})
+        article={'id':'test-article','title':'长文','map':graph,'quality':{'input_mode':'text'},'objects':[]}
+        host=QWidget()
+        host.maps={}
+        host.snapshot={'preferences':{'palette':'forest','mode':'light'}}
+        host.service=Mock()
+        page=MapPage(host,{'article':article})
+        page.resize(1100,700)
+        page.show()
+        self.app.processEvents()
+        self.assertEqual(1,page.depth.currentData())
+        self.assertEqual({'root','a','b'},set(page.view.scene().nodes))
+        self.assertGreater(page.view.transform().m11(),.5)
+        page.view.scene().nodes['b'].setSelected(True)
+        self.assertTrue(page.branch.isEnabled())
+        page.branch.click()
+        self.assertEqual({'b','c'},set(page.view.scene().nodes))
+        self.assertFalse(page.back_branch.isHidden())
+        page.resize(700,420)
+        self.app.processEvents()
+        self.assertGreaterEqual(page.view.transform().m11(),.7)
+        page.back_branch.click()
+        self.assertEqual({'root','a','b'},set(page.view.scene().nodes))
+        page.depth.setCurrentIndex(3)
+        self.assertEqual(104,len(page.view.scene().nodes))
+        # The user's explicit depth choice survives progress/status changes.
+        page.controller.message='已保存'
+        page.render()
+        self.assertEqual(9,page.depth.currentData())
+        self.assertEqual(104,len(graph['nodes']))
+        page.close()
+        host.close()
+
 
 if __name__ == '__main__':
     unittest.main()

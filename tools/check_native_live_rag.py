@@ -34,6 +34,7 @@ def read_config(source):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('configuration_directory', type=Path)
+    parser.add_argument('--handoff', action='store_true', help='Exercise budget closure and a topic-dependent follow-up after restart')
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
     config = read_config(args.configuration_directory.resolve(strict=True))
@@ -45,6 +46,7 @@ def main():
     from app.native.service import NativeService
     from app.native.widgets import Tasks
     from app.native.library import LibraryController
+    from app import conversation_budget
 
     parent = ROOT/'artifacts/native-checks'
     parent.mkdir(parents=True, exist_ok=True)
@@ -54,6 +56,14 @@ def main():
     service.workspace.map_preloader.close()
     # Credentials stay in memory; all articles, sessions and requests use the isolated store.
     service.store.model_config = lambda: dict(config)
+    client_requests = []
+    original_client = service.workspace.client
+    def client():
+        client_requests.append(time.monotonic())
+        return original_client()
+    service.workspace.client = client
+    if args.handoff:
+        conversation_budget.save_policy(service.store, 8192)
     article = service.import_text('合成阅读安排', '青禾阅读小组每次阅读25分钟，然后休息5分钟。每次阅读后回到原文核对笔记。')
     note = service.hub.save('notes', {'article_id': article['id'], 'title': '个人复习心得',
                                     'content': '我的个人复习心得：休息后写下3个待核对的问题。'})
@@ -68,6 +78,8 @@ def main():
     submitted = False
     finished = False
     second = None
+    resumed = False
+    question = '青禾与蓝桥两个阅读小组每次阅读和休息各几分钟？我的个人复习心得建议写下几个待核对的问题？请区分两份原文与个人心得，并分别引用来源。'
 
     def finish(error=None):
         nonlocal finished
@@ -87,7 +99,7 @@ def main():
         app.quit()
 
     def tick():
-        nonlocal submitted, second
+        nonlocal submitted, second, resumed
         if time.monotonic()-started > 180:
             controller.stop()
             finish('request_deadline_exceeded')
@@ -97,8 +109,32 @@ def main():
             original_key = controller.key
             second = service.import_text('蓝桥阅读安排', '蓝桥阅读小组每次阅读40分钟，然后休息10分钟，结束后整理2条摘录。')
             report['new_article_in_existing_session'] = controller.key == original_key
-            controller.request('青禾与蓝桥两个阅读小组每次阅读和休息各几分钟？我的个人复习心得建议写下几个待核对的问题？请区分两份原文与个人心得，并分别引用来源。')
+            if args.handoff:
+                controller.session = {'messages':[
+                    {'role':'user', 'content':'Earlier reading notes. ' * 1000},
+                    {'role':'assistant', 'content':'Earlier notes are synthetic test material.'},
+                    {'role':'user', 'content':question},
+                    {'role':'assistant', 'content':'请继续回到原文与笔记核对具体数字。'}], 'draft':''}
+                service.store.put('sessions', controller.key, controller.session)
+            controller.request(question)
         elif submitted and not controller.busy:
+            if args.handoff and not resumed:
+                if not controller.session.get('closed'):
+                    finish('budget_did_not_close_session')
+                    return
+                report['budget_closed_without_model_request'] = not client_requests
+                old = controller.session
+                controller.restart()
+                report['archive_preserved'] = controller.session.get('archives', [])[-1]['messages'] == old['messages']
+                report['pending_question_preserved'] = controller.session.get('draft') == question
+                report['retrieval_topic_preserved'] = question in controller.session.get('carryover_query', '')
+                if not all(report[k] for k in ('budget_closed_without_model_request','archive_preserved','pending_question_preserved','retrieval_topic_preserved')):
+                    finish('handoff_state_was_not_preserved')
+                    return
+                conversation_budget.save_policy(service.store, 16384)
+                resumed = True
+                controller.request('这些分别是多少？请接着核对原文和个人心得，并引用各自来源。')
+                return
             messages = controller.session.get('messages', [])
             if not messages or messages[-1].get('role') != 'assistant':
                 finish('no_saved_assistant_answer')
@@ -107,6 +143,7 @@ def main():
             evidence = answer.get('evidence', [])
             report['answer'] = answer['content']
             report['answer_model'] = answer.get('model')
+            report['client_instances'] = len(client_requests)
             report['cited_sources'] = [{'article_id': e.get('article_id'), 'note_id': e.get('note_id'),
                                         'source': e.get('source'), 'citation': e.get('citation')} for e in evidence]
             report['article_and_note_cited'] = (any(e.get('note_id') == note['id'] for e in evidence)

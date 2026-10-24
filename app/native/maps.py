@@ -28,7 +28,18 @@ class MapView(QGraphicsView):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.auto_fit and self.scene() and self.scene().items():
-            self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self.fit_content()
+
+    def fit_content(self):
+        self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        nodes = getattr(self.scene(), 'nodes', {})
+        root = nodes.get(getattr(self.scene(), 'root', None))
+        if root is not None and self.transform().m11() < .7:
+            self.resetTransform()
+            self.scale(.7, .7)
+            center = root.sceneBoundingRect().center()
+            center.setX(center.x()+self.viewport().width()/(4*.7))
+            self.centerOn(center)
 
     def zoom(self, factor):
         if .02 <= self.transform().m11()*factor <= 8:
@@ -84,7 +95,7 @@ class MapNode(QGraphicsRectItem):
 
 
 class MapScene(QGraphicsScene):
-    def __init__(self, graph, palette, depth=9, parent=None, include_relations=False, objects=()):
+    def __init__(self, graph, palette, depth=9, parent=None, include_relations=False, objects=(), focus_root=None):
         super().__init__(parent)
         self.graph = graph
         self.nodes = {}
@@ -117,7 +128,8 @@ class MapScene(QGraphicsScene):
             sub = sum(measure(k, level+1) for k in children.get(key, []))
             spans[key] = max(height+28, sub)
             return spans[key]
-        root = graph.get('root')
+        root = focus_root if focus_root in rows else graph.get('root')
+        self.root = root
         measure(root, 0)
 
         branch_colors = ['#aa7658', '#6b8c77', '#8583a6', '#b39a58', '#6b9aab']
@@ -282,6 +294,8 @@ class MapPage(QWidget):
         self.palette = colors(host.snapshot['preferences']['palette'], host.snapshot['preferences']['mode'])
         self.selected = None
         self.graph_key = None
+        self.focus_path = []
+        self.depth_user_selected = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(heading(article['title']))
@@ -307,6 +321,12 @@ class MapPage(QWidget):
             self.depth.addItem(label, depth)
         self.depth.setCurrentIndex(3)
         tools.addWidget(self.depth)
+        self.branch = button('展开分支', self.open_branch)
+        self.branch.setEnabled(False)
+        self.back_branch = button('返回上层', self.close_branch)
+        self.back_branch.setVisible(False)
+        tools.addWidget(self.branch)
+        tools.addWidget(self.back_branch)
         tools.addWidget(button('−', lambda: self.view.zoom(.8), tip='缩小'))
         tools.addWidget(button('+', lambda: self.view.zoom(1.25), tip='放大'))
         tools.addWidget(button('', self.fit, icon=self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton), tip='适应窗口'))
@@ -348,7 +368,7 @@ class MapPage(QWidget):
         self.busy.setFixedHeight(4)
         layout.addWidget(self.busy)
         layout.addWidget(self.status)
-        self.depth.currentIndexChanged.connect(self.draw)
+        self.depth.currentIndexChanged.connect(self.change_depth)
         self.controller.changed.connect(self.render)
         self.render()
         QTimer.singleShot(0, self.fit)
@@ -371,6 +391,8 @@ class MapPage(QWidget):
         self.summary.setText(' · '.join(details))
         self.summary.setVisible(bool(details))
         status = self.controller.message or ('' if graph else '尚未生成导图')
+        if graph and len(graph.get('nodes', [])) > 80:
+            status = (status+' · ' if status else '')+'拖动画布或展开分支查看细节'
         if self.controller.job:
             minutes, seconds = divmod(self.controller.elapsed, 60)
             status += f' · 已用 {minutes} 分 {seconds:02d} 秒'
@@ -379,19 +401,43 @@ class MapPage(QWidget):
         key = json.dumps(graph, ensure_ascii=False)
         if key != self.graph_key:
             self.graph_key = key
+            if graph and not self.depth_user_selected:
+                self.depth.blockSignals(True)
+                self.depth.setCurrentIndex(0 if len(graph.get('nodes', [])) > 80 else 3)
+                self.depth.blockSignals(False)
+            ids = {node['id'] for node in (graph or {}).get('nodes', [])}
+            self.focus_path = [key for key in self.focus_path if key in ids]
+            self.draw()
+
+    def change_depth(self, *_):
+        self.depth_user_selected = True
+        self.draw()
+
+    def open_branch(self):
+        if not self.selected or not self.branch.isEnabled():
+            return
+        self.focus_path.append(self.selected['id'])
+        self.draw()
+
+    def close_branch(self):
+        if self.focus_path:
+            self.focus_path.pop()
             self.draw()
 
     def draw(self, *_):
         graph = self.controller.article.get('map') or {}
         old = self.view.scene()
         scene = MapScene(graph, self.palette, self.depth.currentData(), self,
-                         objects=self.controller.article.get('objects', []))
+                         objects=self.controller.article.get('objects', []),
+                         focus_root=self.focus_path[-1] if self.focus_path else None)
         self.view.setScene(scene)
         scene.selectionChanged.connect(self.select_node)
         if old:
             old.deleteLater()
         self.quote.setPlainText('选择节点查看原文依据')
         self.selected = None
+        self.branch.setEnabled(False)
+        self.back_branch.setVisible(bool(self.focus_path))
         self.locate.setEnabled(False)
         self.images.setVisible(False)
         self.show_relations()
@@ -400,7 +446,7 @@ class MapPage(QWidget):
     def fit(self):
         if self.view.scene() and self.view.scene().items():
             self.view.auto_fit = True
-            self.view.fitInView(self.view.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            self.view.fit_content()
 
     def select_node(self):
         selected = self.view.scene().selectedItems()
@@ -408,6 +454,10 @@ class MapPage(QWidget):
         if self.selected:
             self.quote.setPlainText(self.selected['label'] + '\n\n' + self.selected.get('quote', ''))
         self.locate.setEnabled(bool(self.selected))
+        graph = self.controller.article.get('map') or {}
+        current_root = self.focus_path[-1] if self.focus_path else graph.get('root')
+        self.branch.setEnabled(bool(self.selected and self.selected['id'] != current_root and
+            any(node.get('parent') == self.selected['id'] for node in graph.get('nodes', []))))
         self.images.setVisible(bool(self.image_evidence()))
         self.show_relations(self.selected.get('id') if self.selected else None)
 
@@ -415,8 +465,18 @@ class MapPage(QWidget):
         self.relations.clear()
         graph = self.controller.article.get('map') or {}
         labels = {n['id']: n['label'] for n in graph.get('nodes', [])}
+        branch_ids = None
+        if self.focus_path and not node:
+            branch_ids = {self.focus_path[-1]}
+            while True:
+                expanded = branch_ids | {n['id'] for n in graph.get('nodes', []) if n.get('parent') in branch_ids}
+                if expanded == branch_ids:
+                    break
+                branch_ids = expanded
         for relation in graph.get('relations', []):
             if node and node not in (relation['src'], relation['dst']):
+                continue
+            if branch_ids is not None and not branch_ids.intersection((relation['src'], relation['dst'])):
                 continue
             label = labels.get(relation['src'], '') + ' → ' + relation['label'] + ' → ' + labels.get(relation['dst'], '')
             item = QListWidgetItem(label, self.relations)
@@ -424,6 +484,7 @@ class MapPage(QWidget):
 
     def show_relation(self, item):
         self.selected = item.data(Qt.ItemDataRole.UserRole)
+        self.branch.setEnabled(False)
         self.quote.setPlainText(self.selected['label'] + '\n\n' + self.selected.get('quote', ''))
         self.locate.setEnabled(True)
         self.images.setVisible(bool(self.image_evidence()))

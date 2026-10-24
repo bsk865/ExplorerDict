@@ -89,9 +89,8 @@ def search(workspace, body, diagnostics=None):
             hits.extend(dict(h, sampled=h['score']==0) for h in found)
         return articles,key,question,[dict(h,citation=f'S{i+1}') for i,h in enumerate(hits)]
     query = question
-    if re.search(r'这[个些种项]|它|上述|前者|后者|\b(it|these|that)\b', question, re.I):
-        previous = next((m['content'] for m in reversed(saved.get('messages', [])) if m.get('role') == 'user'), '')
-        query += ' ' + previous[-1000:]
+    if conversation_budget.is_followup(question):
+        query += ' ' + conversation_budget.retrieval_topic(saved)
     hits = workspace.index.search(articles, query, text_only=True, budget=conversation_budget.retrieval_budget(workspace.store, saved, question),
                                   extra_rows=capture_rows(articles) + (note_rows(workspace, articles) if body.get('include_notes') is True else []),
                                   diagnostics=diagnostics)

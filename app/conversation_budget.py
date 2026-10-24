@@ -1,6 +1,7 @@
 """Bound workspace conversations and create local, non-generative handoffs."""
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -9,6 +10,21 @@ FLASH_NAMES = {'deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-
 DEFAULT = 16384
 MAX_BUDGET = 1000000
 OUTPUT = 4096
+
+
+def is_followup(question):
+    return bool(re.search(r'这[个些种项]|它|上述|前者|后者|\b(it|these|that)\b', question, re.I))
+
+
+def retrieval_topic(session):
+    """Keep a bounded search topic across pronoun questions and restarts."""
+    questions = [m['content'] for m in session.get('messages', []) if m.get('role') == 'user']
+    previous = questions[-1] if questions else ''
+    if previous and not is_followup(previous):
+        return previous[-1000:]
+    topic = next((question for question in reversed(questions[:-1]) if not is_followup(question)), '')
+    topic = topic or session.get('carryover_query') or session.get('carryover', '')
+    return '\n'.join(value for value in (topic, previous) if value)[-1000:]
 
 
 def policy(store):
@@ -139,7 +155,9 @@ def restart(store, key):
         archived = {k:v for k,v in old.items() if k != 'archives'}
         # Keep all old messages/evidence locally; carry only a bounded excerpt.
         excerpt = '\n'.join(m['content'] for m in old.get('messages', [])[-2:])[:1500]
+        query = retrieval_topic(old)
         s = {'messages':[], 'draft':old.get('draft',''), 'carryover':excerpt,
+             'carryover_query':query,
              'archives':old.get('archives', [])+[archived], 'article_ids':old.get('article_ids', [])}
         store.put('sessions', key, s)
         return s
