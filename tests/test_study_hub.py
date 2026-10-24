@@ -1,6 +1,9 @@
 import tempfile
 import unittest
 import threading
+from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 from pathlib import Path
 
 from app.workspace_store import WorkspaceStore
@@ -92,6 +95,51 @@ class StudyHubTests(unittest.TestCase):
             self.hub.save('tasks', {'title':'Overlap','date':'2026-10-23','time':'19:15','minutes':30})
         self.hub.save('tasks', {'title':'Adjacent','date':'2026-10-23','time':'19:30','minutes':30})
         self.assertEqual(len(self.hub.snapshot()['tasks']),2)
+
+    def test_independent_writers_cannot_both_save_overlapping_time(self):
+        other = StudyHub(WorkspaceStore(Path(self.temp.name)))
+        scanned, release, competing, finished = [threading.Event() for _ in range(4)]
+        connect = self.store.connect
+        class Connection:
+            def __init__(self, db):
+                self.db = db
+            def __getattr__(self, name):
+                return getattr(self.db, name)
+            def execute(self, sql, *args):
+                result = self.db.execute(sql, *args)
+                if sql == 'SELECT payload FROM study_tasks WHERE id<>?':
+                    rows = list(result)
+                    scanned.set()
+                    if not release.wait(3):
+                        raise RuntimeError('Schedule check was not released')
+                    return rows
+                return result
+        @contextmanager
+        def gated_connect():
+            with connect() as db:
+                yield Connection(db)
+        def save(hub, title, is_competitor=False):
+            if is_competitor:
+                competing.set()
+            try:
+                hub.save('tasks', dict(title=title,date='2026-10-28',time='14:00',minutes=30))
+                return 'saved'
+            except ValueError:
+                return 'conflict'
+            finally:
+                if is_competitor:
+                    finished.set()
+        with patch.object(self.store, 'connect', gated_connect), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(save, self.hub, 'First')
+            try:
+                self.assertTrue(scanned.wait(3))
+                second = pool.submit(save, other, 'Second', True)
+                self.assertTrue(competing.wait(3))
+                finished.wait(.3)
+            finally:
+                release.set()
+            self.assertEqual(['saved','conflict'], [first.result(3), second.result(3)])
+        self.assertEqual(['First'], [t['title'] for t in self.hub.snapshot()['tasks']])
 
     def test_split_keeps_total_time_and_links(self):
         task=self.hub.save('tasks', {'title':'Read','date':'2026-10-23','time':'19:00','minutes':60,'article_ids':[self.article['id']]})

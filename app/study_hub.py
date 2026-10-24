@@ -16,6 +16,13 @@ def text(value, limit, label, required=True):
     return value.strip()
 
 
+class PlanConflict(ValueError):
+    def __init__(self, task, existing):
+        self.proposed = {k: task[k] for k in ('title', 'date', 'time', 'minutes')}
+        self.existing = {k: existing[k] for k in ('title', 'date', 'time', 'minutes')}
+        super().__init__('这段时间与「'+existing['title']+'」重叠，请调整时间。')
+
+
 class StudyHub:
     def __init__(self, store):
         self.store = store
@@ -47,6 +54,9 @@ class StudyHub:
         if kind not in {'themes', 'notes', 'tasks'} or not isinstance(body, dict):
             raise ValueError('无法保存此内容。')
         with self.store.lock, (self.store.connect() if _db is None else nullcontext(_db)) as db:
+            if kind == 'tasks' and _db is None:
+                # Protect the conflict check and write across separate processes.
+                db.execute('BEGIN IMMEDIATE')
             key = body.get('id')
             if kind == 'notes' and not key and body.get('draft_id'):
                 text(body['draft_id'], 80, '草稿编号')
@@ -125,7 +135,7 @@ class StudyHub:
                             continue
                         other_start = datetime.strptime(other['date']+' '+other['time'], '%Y-%m-%d %H:%M')
                         if start < other_start + timedelta(minutes=other['minutes']) and end > other_start:
-                            raise ValueError('这段时间与「'+other['title']+'」重叠，请调整时间。')
+                            raise PlanConflict(item, other)
             encoded = json.dumps(item, ensure_ascii=False)
             if kind == 'notes':
                 db.execute('INSERT INTO study_notes VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
@@ -165,6 +175,7 @@ class StudyHub:
         if not isinstance(tasks, list) or not 1 <= len(tasks) <= 60 or any(not isinstance(t, dict) for t in tasks):
             raise ValueError('小探尚未给出有效计划，请补充时间要求后重试。')
         with self.store.lock, self.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             saved = []
             for raw in tasks:
                 if raw.get('id') or raw.get('status', 'todo') != 'todo':
@@ -182,6 +193,7 @@ class StudyHub:
 
     def undo_plan(self, key):
         with self.store.lock, self.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT payload FROM study_batches WHERE id=?', (key,)).fetchone()
             if not row:
                 raise ValueError('这份计划不存在。')
@@ -199,6 +211,7 @@ class StudyHub:
 
     def split_task(self, key, minutes):
         with self.store.lock, self.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT payload FROM study_tasks WHERE id=?', (key,)).fetchone()
             if not row:
                 raise ValueError('任务已删除。')

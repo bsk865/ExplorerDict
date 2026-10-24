@@ -5,10 +5,12 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QObject, QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QWidget
 from app.native.service import NativeService
-from app.native.advisor import AdvisorController
+from app.native.advisor import AdvisorController, AdvisorDialog
 
 
 class NativeAdvisorTests(unittest.TestCase):
@@ -75,6 +77,54 @@ class NativeAdvisorTests(unittest.TestCase):
         self.assertIsNone(self.controller.job)
         self.assertEqual(self.day + '安排阅读', self.controller.value['request'])
         self.assertFalse(self.service.hub.snapshot()['tasks'])
+
+    def test_running_plan_reports_rearrangement_without_resetting_request(self):
+        self.controller.draft('保留安排需求')
+        self.controller.job = 'fixture'
+        self.service.workspace.jobs['fixture'] = dict(status='running', cancel=threading.Event(), message='安排时间有重叠，正在避开冲突重新安排…')
+        self.controller.poll()
+        self.assertIn('避开冲突', self.controller.message)
+        self.assertEqual('保留安排需求', self.controller.value['request'])
+        self.assertEqual('fixture', self.controller.job)
+        self.service.workspace.jobs['fixture']['status'] = 'cancelled'
+
+    def test_preference_controls_scroll_the_panel_without_changing_values(self):
+        host = QWidget()
+        host.advisor = self.controller
+        host.snapshot = dict(preferences=dict(palette='forest',mode='light'),articles=[])
+        self.controller.draft('暂存的规划需求')
+        dialog = AdvisorDialog(host)
+        dialog.resize(520,450)
+        dialog.show()
+        dialog.preferences.setChecked(True)
+        dialog.limited.setChecked(True)
+        self.app.processEvents()
+        self.assertGreaterEqual(dialog.preference_panel.viewport().height(),180)
+        self.assertTrue(dialog.request.isHidden())
+        dialog.preference_panel.widget().setMinimumHeight(600)
+        self.app.processEvents()
+        bar = dialog.preference_panel.verticalScrollBar()
+        self.assertGreater(bar.maximum(),0)
+        for key in ('start_date','start_time','daily_minutes'):
+            control = dialog.limit_fields[key]
+            original = control.text()
+            bar.setValue(0)
+            control.setFocus()
+            event = QWheelEvent(QPointF(10,10),QPointF(control.mapToGlobal(QPoint(10,10))),QPoint(),
+                QPoint(0,-120),Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier,Qt.ScrollPhase.NoScrollPhase,False)
+            QApplication.sendEvent(control,event)
+            self.assertEqual(original,control.text())
+            self.assertGreater(bar.value(),0)
+        control = dialog.limit_fields['daily_minutes']
+        original = control.value()
+        QTest.keyClick(control,Qt.Key.Key_Up)
+        self.assertEqual(original+1,control.value())
+        dialog.preferences.setChecked(False)
+        self.assertTrue(dialog.request.isVisible())
+        self.assertEqual('暂存的规划需求',dialog.request.toPlainText())
+        self.assertEqual('暂存的规划需求',self.controller.value['request'])
+        dialog.close()
+        host.close()
 
 
 if __name__ == '__main__':

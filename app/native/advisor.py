@@ -4,9 +4,10 @@ from copy import deepcopy
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtCore import Qt, QDate, QTime
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QTextBrowser, QPlainTextEdit, QLabel, QListWidget, QListWidgetItem, QWidget, QToolButton, QCheckBox, QDateEdit, QTimeEdit, QSpinBox, QGridLayout, QScrollArea, QLayout)
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QTextBrowser, QPlainTextEdit, QLabel, QListWidget, QListWidgetItem, QWidget, QToolButton, QCheckBox, QGridLayout, QScrollArea, QLayout)
 from .surfaces import QDialog, QMessageBox
 from .widgets import button
+from .widgets import PageSpinBox as QSpinBox, PageDateEdit as QDateEdit, PageTimeEdit as QTimeEdit
 from ..paths import resource_root
 
 
@@ -75,6 +76,10 @@ class AdvisorController(QObject):
         with self.host.service.workspace.lock:
             job = dict(self.host.service.workspace.jobs.get(self.job, {}))
         if job.get('status') == 'running':
+            message = job.get('message') or '小探正在安排…'
+            if message != self.message:
+                self.message = message
+                self.changed.emit()
             return
         self.timer.stop()
         self.job = None
@@ -90,7 +95,7 @@ class AdvisorController(QObject):
             else:
                 self.value.update(request='', history=[])
                 self.result = result
-                self.message = f"已添加 {len(result.get('tasks', []))} 项安排"
+                self.message = ('已避开时间冲突，' if result.get('rescheduled') else '') + f"已添加 {len(result.get('tasks', []))} 项安排"
                 self.plans_changed.emit()
             self.persist()
         else:
@@ -122,7 +127,9 @@ class AdvisorDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 20)
         layout.setSpacing(12)
-        intro = QHBoxLayout()
+        self.intro = QWidget()
+        intro = QHBoxLayout(self.intro)
+        intro.setContentsMargins(0,0,0,0)
         avatar = QLabel()
         palette = host.snapshot.get('preferences', {}).get('palette', 'clay')
         avatar.setPixmap(QPixmap(str(resource_root() / 'web/assets/generated' / (palette + '-xiaotan-avatar.webp'))).scaled(
@@ -133,7 +140,7 @@ class AdvisorDialog(QDialog):
         title.setObjectName('heading')
         intro.addWidget(title)
         intro.addStretch()
-        layout.addLayout(intro)
+        layout.addWidget(self.intro)
         self.history = QTextBrowser()
         self.history.setOpenLinks(False)
         self.history.setStyleSheet('QTextBrowser {border:0; padding:6px;}')
@@ -259,10 +266,29 @@ class AdvisorDialog(QDialog):
         self.undo.setEnabled(not c.job)
         self.send.setText('继续规划' if c.value.get('history') else '交给小探')
         self.rendering = False
+        self.adapt()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self,'send'):
+            self.adapt()
+
+    def adapt(self):
+        compact = self.height() < 560
+        editing = compact and self.preferences.isChecked()
+        self.layout().setContentsMargins(*( (16,12,16,12) if compact else (24,22,24,20) ))
+        self.layout().setSpacing(6 if compact else 12)
+        for widget in (self.intro,self.history,self.request,self.status):
+            widget.setVisible(not editing)
+        self.reset.setVisible(not editing and bool(self.controller.value.get('history')))
+        self.undo.setVisible(not editing and bool(self.controller.result and self.controller.result.get('batch_id')))
+        self.preference_panel.setMaximumHeight(16777215 if editing else 240)
+        self.layout().setStretchFactor(self.preference_panel,1 if editing else 0)
 
     def toggle_preferences(self, expanded):
         self.preference_panel.setVisible(expanded)
         self.preferences.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.adapt()
 
     def toggle_limits(self, enabled):
         self.availability_panel.setVisible(enabled)

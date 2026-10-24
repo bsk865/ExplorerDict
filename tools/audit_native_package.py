@@ -14,6 +14,8 @@ def audit(directory):
         '_native_runtime/PySide6/plugins/platforms/qwindows.dll',
         '_native_runtime/web/assets/native-icons.json',
         '_native_runtime/web/assets/brand-mark.svg',
+        '_native_runtime/assets/native-chevron.svg',
+        '_native_runtime/assets/native-chevron-up.svg',
         '_runtime/web/index.html',
     ]
     errors = ['missing: ' + name for name in required if not (directory / name).is_file()]

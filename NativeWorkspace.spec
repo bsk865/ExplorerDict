@@ -7,7 +7,8 @@ data = [(str(root/'web/index.html'), 'web'),
         (str(root/'web/assets/generated'), 'web/assets/generated'),
         (str(root/'models/multilingual-e5-small'), 'models/multilingual-e5-small'),
         (str(root/'assets/app.ico'), 'assets'),
-        (str(root/'assets/native-chevron.svg'), 'assets')]
+        (str(root/'assets/native-chevron.svg'), 'assets'),
+        (str(root/'assets/native-chevron-up.svg'), 'assets')]
 data += [(str(path), 'web') for path in (root/'web').glob('*.css')]
 data += [(str(path), 'web/assets') for path in (root/'web/assets').glob('*brand-mark.svg')]
 data += [(str(root/'web/assets/native-icons.json'), 'web/assets')]

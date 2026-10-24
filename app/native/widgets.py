@@ -2,7 +2,7 @@
 import logging
 from PySide6.QtCore import QObject, Signal, QRunnable, QThreadPool, Qt, QRect, QSize
 from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
-from PySide6.QtWidgets import QPushButton, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QLayout, QPlainTextEdit, QComboBox, QListView, QSlider, QAbstractScrollArea, QApplication
+from PySide6.QtWidgets import QPushButton, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QLayout, QPlainTextEdit, QComboBox, QListView, QSlider, QAbstractScrollArea, QApplication, QSpinBox, QDateEdit, QTimeEdit
 from ..paths import resource_root
 from .. import reading_preferences
 
@@ -25,6 +25,21 @@ class PageComboBox(QComboBox):
 
 
 class PageSlider(QSlider):
+    def wheelEvent(self, event):
+        scroll_page(self, event)
+
+
+class PageSpinBox(QSpinBox):
+    def wheelEvent(self, event):
+        scroll_page(self, event)
+
+
+class PageDateEdit(QDateEdit):
+    def wheelEvent(self, event):
+        scroll_page(self, event)
+
+
+class PageTimeEdit(QTimeEdit):
     def wheelEvent(self, event):
         scroll_page(self, event)
 
@@ -247,6 +262,16 @@ def stylesheet(preferences):
         QComboBox QAbstractItemView {{ background:{bg}; color:{ink}; border:1px solid {border}; border-radius:6px; padding:5px; outline:0; selection-background-color:{soft}; selection-color:{ink}; }}
         QComboBox QAbstractItemView::item {{ min-height:34px; padding:3px 10px; border:0; border-radius:4px; }}
         QComboBox QAbstractItemView::item:selected {{ background:{soft}; color:{ink}; }}
+        QSpinBox, QTimeEdit, QDateEdit {{ padding-right:28px; }}
+        QSpinBox::up-button, QTimeEdit::up-button {{ subcontrol-origin:border; subcontrol-position:top right; width:24px; border:0; border-top-right-radius:5px; background:{soft}; }}
+        QSpinBox::down-button, QTimeEdit::down-button {{ subcontrol-origin:border; subcontrol-position:bottom right; width:24px; border:0; border-bottom-right-radius:5px; background:{soft}; }}
+        QSpinBox::up-arrow, QTimeEdit::up-arrow {{ image:url("{(resource_root() / 'assets/native-chevron-up.svg').as_posix()}"); width:10px; height:6px; }}
+        QSpinBox::down-arrow, QTimeEdit::down-arrow, QDateEdit::down-arrow {{ image:url("{(resource_root() / 'assets/native-chevron.svg').as_posix()}"); width:10px; height:6px; }}
+        QDateEdit::drop-down {{ subcontrol-origin:border; subcontrol-position:top right; width:26px; border:0; border-top-right-radius:5px; border-bottom-right-radius:5px; background:{soft}; }}
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover, QTimeEdit::up-button:hover, QTimeEdit::down-button:hover, QDateEdit::drop-down:hover {{ background:{border}; }}
+        QCalendarWidget QWidget#qt_calendar_navigationbar, QCalendarWidget QToolButton {{ background:{soft}; color:{ink}; border:0; }}
+        QCalendarWidget QToolButton {{ padding:6px; }}
+        QCalendarWidget QAbstractItemView {{ background:{bg}; color:{ink}; selection-background-color:{accent}; selection-color:{bg}; outline:0; }}
         QScrollBar:vertical {{ background:{bg}; width:10px; margin:0; }}
         QScrollBar::handle:vertical {{ background:{border}; min-height:24px; border-radius:5px; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
