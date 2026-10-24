@@ -1,4 +1,4 @@
-"""Export selected visible conversation ranges for the competition archive."""
+"""Export selected visible conversation ranges for the project development archive."""
 import argparse
 from datetime import datetime, timezone, timedelta
 import hashlib

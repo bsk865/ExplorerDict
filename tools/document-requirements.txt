@@ -1,0 +1,3 @@
+# Technical PDF and project architecture figure.
+reportlab==4.4.9
+Pillow==12.3.0
