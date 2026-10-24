@@ -267,5 +267,6 @@ def stylesheet(preferences):
         QTabBar::tab {{ background:{soft}; padding:7px 10px; border:0; }}
         QTabBar::tab:selected {{ background:{bg}; border-bottom:2px solid {accent}; }}
         QScrollArea {{ border:0; background:transparent; }}
+        QGraphicsView#imageView {{ background:{bg}; border:1px solid {border}; border-radius:6px; }}
         QToolTip {{ background:{bg}; color:{ink}; border:1px solid {border}; }}
     '''
