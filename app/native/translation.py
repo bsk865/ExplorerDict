@@ -211,7 +211,7 @@ class TranslationPage(QWidget):
         outer.addWidget(self.incoming)
         split = QSplitter(Qt.Orientation.Horizontal)
         self.original, self.result = QPlainTextEdit(), QPlainTextEdit()
-        self.original.setPlaceholderText('输入或粘贴原文，也可以从发现页或阅读页带入内容。')
+        self.original.setPlaceholderText('本文待翻译的内容' if self.article_bound else '输入或粘贴需要翻译的内容。')
         self.original.setAccessibleName('待翻译原文')
         self.result.setPlaceholderText('译文显示在这里')
         self.result.setAccessibleName('译文')

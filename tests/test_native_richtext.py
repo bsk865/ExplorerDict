@@ -103,6 +103,50 @@ class RichTextTests(unittest.TestCase):
         self.assertEqual(['b0'], clicked)
         widget.close()
 
+    def test_fixed_width_table_fits_narrow_reader_without_changing_source_or_quotes(self):
+        html = '<table width="1200"><tr><td width="600">Alpha</td><td width="600">Beta😀</td></tr></table>'
+        block = {'id':'b0', 'type':'text', 'html':html}
+        widget = OriginalText()
+        widget.resize(340, 450)
+        widget.load_article({'blocks':[block, {'id':'b1','type':'text','text':'After the table.'}]}, {})
+        widget.show()
+        QTest.qWait(40)
+        self.assertEqual(0, widget.horizontalScrollBar().maximum())
+        self.assertEqual(html, block['html'])
+        start = block_text(block).index('Beta😀')
+        widget.annotate([{'style':'yellow', 'segments':[{'block':'b0','start':start,'end':start+5}]}])
+        selections = widget.extraSelections()
+        widget.setTextCursor(selections[0].cursor)
+        self.assertEqual('Beta😀', widget.selected_segments()[0]['quote'])
+        widget.resize(800, 500)
+        QTest.qWait(40)
+        self.assertEqual(0, widget.horizontalScrollBar().maximum())
+        self.assertIn('After the table.', widget.toPlainText())
+        widget.close()
+
+    def test_long_formula_fits_viewport_and_copies_original_math(self):
+        expression = ''.join('<mi>x</mi><mo>+</mo>' for _ in range(30)) + '<mn>1</mn>'
+        block = {'id':'b0', 'type':'text', 'html':'<p>Formula: <math><mrow>'+expression+'</mrow></math></p>'}
+        widget = OriginalText()
+        widget.resize(360, 450)
+        widget.load_article({'blocks':[block]}, {})
+        widget.show()
+        QTest.qWait(40)
+        self.assertEqual(0, widget.horizontalScrollBar().maximum())
+        clicked = []
+        widget.formulaClicked.connect(clicked.append)
+        point = next(QPoint(x, y) for y in range(5, 150, 5) for x in range(5, 330, 5)
+                     if widget.anchorAt(QPoint(x, y)).startswith('native-formula:'))
+        QTest.mouseClick(widget.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.assertEqual(1, len(clicked))
+        self.assertIn(clicked[0], widget.formula_html)
+        cursor = widget.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        widget.setTextCursor(cursor)
+        self.assertEqual(block_text(block), widget.createMimeDataFromSelection().text().strip())
+        self.assertIn('<math>', widget.createMimeDataFromSelection().html())
+        widget.close()
+
 
 if __name__ == '__main__':
     unittest.main()

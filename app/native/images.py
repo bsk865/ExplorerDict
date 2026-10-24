@@ -1,8 +1,8 @@
 """Native image inspection and normalized region selection."""
 from math import isfinite
-from PySide6.QtCore import Qt, QRectF, QPointF, Signal
+from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QByteArray, QBuffer, QIODevice
 from PySide6.QtGui import QPixmap, QPen, QColor, QBrush
-from PySide6.QtWidgets import (QVBoxLayout, QGraphicsView, QGraphicsScene, QLabel)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGraphicsView, QGraphicsScene, QLabel)
 from .surfaces import QDialog
 from .widgets import button, FlowLayout
 
@@ -122,6 +122,35 @@ class ImageView(QGraphicsView):
         self.region = None
         self.outline.setRect(QRectF())
         self.selected.emit(None)
+
+
+class FormulaPanel(QWidget):
+    """Inspect wide formulas inside the article without opening a window."""
+    def __init__(self, image, close):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        controls = FlowLayout(spacing=8)
+        raw = QByteArray()
+        buffer = QBuffer(raw)
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        image.save(buffer, 'PNG')
+        buffer.close()
+        self.view = ImageView(bytes(raw))
+        self.view.set_panning(True)
+        for control in (button('返回原文', close), button('−', lambda: self.view.zoom(.8), tip='缩小'),
+                        button('+', lambda: self.view.zoom(1.25), tip='放大'),
+                        button('适应窗口', self.view.fit), button('原始大小', self.actual_size)):
+            controls.addWidget(control)
+        layout.addLayout(controls)
+        layout.addWidget(self.view, 1)
+        hint = QLabel('拖动查看公式；Ctrl＋滚轮缩放。')
+        hint.setObjectName('muted')
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+    def actual_size(self):
+        # Math resources are rendered at twice their displayed resolution.
+        self.view.zoom(.5 / self.view.transform().m11())
 
 
 class ImageDialog(QDialog):

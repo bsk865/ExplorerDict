@@ -1,7 +1,7 @@
 """Native original-text rendering and version-bound annotations."""
 from bs4 import BeautifulSoup
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QMimeData, QEvent, QSize
-from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextBlockFormat, QColor, QImage, QTextImageFormat, QPixmap, QIcon
+from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextBlockFormat, QColor, QImage, QTextImageFormat, QPixmap, QIcon, QTextTable, QTextLength
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter, QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QTabBar, QScrollArea, QStackedWidget)
 from .surfaces import QDialog
 from ..reading_annotations import block_text
@@ -64,6 +64,7 @@ def source_spans(source, rendered, start, atoms=None):
 
 class OriginalText(QTextEdit):
     imageClicked = Signal(str)
+    formulaClicked = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -137,8 +138,39 @@ class OriginalText(QTextEdit):
                 cursor.insertBlock()
                 cursor.insertText(block.get('caption', ''))
             cursor.insertBlock()
+        self.fit_tables(self.document().rootFrame())
+        block = self.document().begin()
+        while block.isValid():
+            fragments = block.begin()
+            while not fragments.atEnd():
+                fragment = fragments.fragment()
+                fmt = fragment.charFormat().toImageFormat()
+                if fmt.isValid() and fmt.name().startswith('math:') and fmt.width() > 0:
+                    self.images.append((fragment.position(), fmt.width(), fmt.height()))
+                    fmt.setAnchor(True)
+                    fmt.setAnchorHref('native-formula:' + fmt.name())
+                    fmt.setToolTip('点击放大查看公式')
+                    formula_cursor = QTextCursor(self.document())
+                    formula_cursor.setPosition(fragment.position())
+                    formula_cursor.setPosition(fragment.position()+fragment.length(), QTextCursor.MoveMode.KeepAnchor)
+                    formula_cursor.setCharFormat(fmt)
+                fragments += 1
+            block = block.next()
+        self.resize_images()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         self.setTextCursor(cursor)
+
+    def fit_tables(self, frame):
+        for child in frame.childFrames():
+            if isinstance(child, QTextTable):
+                fmt = child.format()
+                fmt.setWidth(QTextLength(QTextLength.Type.PercentageLength, 100))
+                constraints = fmt.columnWidthConstraints()
+                if constraints:
+                    fmt.setColumnWidthConstraints([QTextLength(QTextLength.Type.PercentageLength, 100 / child.columns())
+                                                   for _ in range(child.columns())])
+                child.setFormat(fmt)
+            self.fit_tables(child)
 
     def createMimeDataFromSelection(self):
         original = super().createMimeDataFromSelection()
@@ -195,9 +227,12 @@ class OriginalText(QTextEdit):
         if pressed and event.button() == Qt.MouseButton.LeftButton:
             point, anchor = pressed
             released = event.position().toPoint()
-            if (anchor.startswith('native-image:') and anchor == self.anchorAt(released)
+            if (anchor.startswith(('native-image:', 'native-formula:')) and anchor == self.anchorAt(released)
                     and (released-point).manhattanLength() < QApplication.startDragDistance()):
-                self.imageClicked.emit(anchor.removeprefix('native-image:'))
+                if anchor.startswith('native-formula:'):
+                    self.formulaClicked.emit(anchor.removeprefix('native-formula:'))
+                else:
+                    self.imageClicked.emit(anchor.removeprefix('native-image:'))
 
     def selected_segments(self):
         cursor = self.textCursor()
@@ -351,6 +386,8 @@ class ReaderPage(QWidget):
         self.tabs = QTabWidget()
         self.chat = ChatPanel(self)
         self.text.imageClicked.connect(self.open_image)
+        self.text.formulaClicked.connect(self.open_formula)
+        self.formula_page = None
         self.tabs.addTab(self.chat, '理解与追问')
         self.notes = NotesPanel(self)
         self.tabs.addTab(self.notes, '我的笔记')
@@ -624,10 +661,23 @@ class ReaderPage(QWidget):
             self.choose_object(obj)
             self.chat.open_image()
 
+    def open_formula(self, name):
+        from .images import FormulaPanel
+        image = self.text.document().resource(2, QUrl(name))
+        if name not in self.text.formula_html or not isinstance(image, QImage) or image.isNull():
+            return
+        if self.formula_page is not None:
+            self.reading_tools.removeWidget(self.formula_page)
+            self.formula_page.deleteLater()
+        self.formula_page = FormulaPanel(image, self.show_original)
+        self.reading_tools.addWidget(self.formula_page)
+        self.reading_tools.setCurrentWidget(self.formula_page)
+        self.selection_bar.hide()
+
     def translate(self):
         selected = self.text.selected_segments()
         text = '\n\n'.join(segment['quote'] for segment in selected) if selected else '\n\n'.join(
-            block['text'] for block in self.article['blocks'] if block['type'] == 'text' and block.get('text'))
+            block_text(block) for block in self.article['blocks'] if block['type'] == 'text')
         if not text.strip():
             self.host.notice('这份资料尚无可翻译的文本，请先补充正文。')
             return

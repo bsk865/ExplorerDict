@@ -140,6 +140,24 @@ class TranslationUI(unittest.TestCase):
             start.assert_not_called()
         self.assertIsNone(QApplication.activeModalWidget())
 
+    def test_html_only_article_translation_uses_its_visible_text_and_keeps_other_result_separate(self):
+        article = self.service.store.import_article('富文本文章', [dict(type='text', html='<p>Hello <b>world</b>.</p>')])
+        other = self.service.import_text('另一篇文章', 'Other article.')
+        other_controller = self.window.translation_for('article:'+other['id'])
+        other_controller.state.update(text='Other article.', result='另一篇的译文', complete=True)
+        other_controller.flush()
+        self.window.open_article(article['id'])
+        self.wait(lambda: not self.window.navigation_busy)
+        reader = self.window.stack.currentWidget()
+        with patch.object(self.service.workspace, 'start') as start:
+            reader.translate()
+            start.assert_not_called()
+        self.assertEqual('Hello world.', reader.translation_page.original.toPlainText())
+        self.assertEqual('', reader.translation_page.result.toPlainText())
+        self.assertEqual('article:'+article['id'], reader.translation_page.controller.scope)
+        self.assertIsNone(QApplication.activeModalWidget())
+        self.assertEqual('另一篇的译文', other_controller.state['result'])
+
     def test_articles_keep_translations_languages_and_background_jobs_separate(self):
         first = self.service.import_text('Article A', 'First original.')
         second = self.service.import_text('Article B', 'Second original.')

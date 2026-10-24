@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 from app.native.service import NativeService
 from app.native.materials import reading_markdown
 
@@ -43,6 +44,33 @@ class NativeMaterialTests(unittest.TestCase):
         self.assertIn('# 新的标题', exported)
         self.assertIn('随文心得', exported)
         self.assertIn('原文', exported)
+
+    def test_export_flushes_only_this_articles_translation_and_uses_its_title(self):
+        from PySide6.QtWidgets import QApplication, QWidget
+        from app.native.translation import TranslationController
+        from app.native.materials import export_notes
+        application = QApplication.instance() or QApplication([])
+        article = self.service.import_text('阅读成果', 'Original text.')
+        host = QWidget()
+        host.service = self.service
+        host.notice = Mock()
+        host.run = lambda action, done: done(action())
+        controller = TranslationController(host, 'article:'+article['id'])
+        controller.prefill(article['text'], article['title'])
+        controller.state.update(result='还未等待定时器的译文', complete=True)
+        controller.save_timer.start()
+        other = Mock()
+        host.translation_controllers = {controller.scope:controller, 'article:other':other}
+        target = Path(self.temp.name)/'阅读成果.md'
+        with patch('app.native.materials.QFileDialog.getSaveFileName', return_value=(str(target), 'Markdown (*.md)')) as picker:
+            export_notes(host, article)
+        self.assertIn('阅读成果 · 阅读笔记.md', picker.call_args.args)
+        self.assertIn('还未等待定时器的译文', target.read_text(encoding='utf-8'))
+        other.flush.assert_not_called()
+        host.notice.assert_called_once_with('阅读笔记已导出')
+        host.close()
+        host.deleteLater()
+        application.processEvents()
 
 
 if __name__ == '__main__':

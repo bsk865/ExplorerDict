@@ -1,5 +1,5 @@
 """Article versions, source acquisition and portable reading notes."""
-import base64
+import re
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import (QMenu, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QLabel)
@@ -7,6 +7,12 @@ from .surfaces import QInputDialog, QFileDialog, QDialog
 from .dialogs import EditForm
 from .widgets import button
 from .external_links import open_source, copy_link
+from ..reading_export import reading_markdown, article_versions, write_reading_notes
+from ..reading_annotations import block_text
+
+
+def text_length(article):
+    return sum(len(block_text(block)) for block in article['blocks'] if block['type'] == 'text')
 
 
 def article_info(host, article, parent=None):
@@ -19,7 +25,7 @@ def article_info(host, article, parent=None):
     title.setStyleSheet('font-size:18px; font-weight:500;')
     layout.addWidget(title)
     images = sum(block['type'] == 'image' for block in article['blocks'])
-    summary = QLabel(f"{len(article.get('text', '')):,} 字 · {images} 张图片")
+    summary = QLabel(f"{text_length(article):,} 字 · {images} 张图片")
     summary.setObjectName('muted')
     layout.addWidget(summary)
     url = QUrl(article.get('source_url', ''))
@@ -88,10 +94,11 @@ def versions(host, article):
     dialog.resize(560, 420)
     layout = QVBoxLayout(dialog)
     rows = QListWidget()
-    for key in sorted(host.service.store.related_versions(article['id'])):
-        value = host.service.store.article(key)
-        item = QListWidgetItem(value['title'] + (' · 当前' if key == article['id'] else '') + '\n' + value['version'][:12], rows)
-        item.setData(Qt.ItemDataRole.UserRole, key)
+    for index, value in enumerate(article_versions(host.service, article), 1):
+        images = sum(block['type'] == 'image' for block in value['blocks'])
+        label = f"{value['title']} · 第{index}版" + (' · 正在阅读' if value['id'] == article['id'] else '')
+        item = QListWidgetItem(label + f"\n{text_length(value):,} 字 · {images} 张图片", rows)
+        item.setData(Qt.ItemDataRole.UserRole, value['id'])
     def open_version(item):
         dialog.accept()
         host.open_article(item.data(Qt.ItemDataRole.UserRole))
@@ -102,35 +109,14 @@ def versions(host, article):
     dialog.exec()
 
 
-def reading_markdown(service, article):
-    lines = ['# '+article['title'], '版本：'+article['version']]
-    for block in article['blocks']:
-        if block['type'] == 'text':
-            lines.append(block['text'])
-        elif block.get('asset'):
-            mime, raw = service.store.asset(block['asset'])
-            lines.append('!['+block.get('caption', '原图')+'](data:'+mime+';base64,'+base64.b64encode(raw).decode()+')')
-    for obj in [None, *article['objects']]:
-        key = article['id']+':'+article['version']+':'+(obj['id'] if obj else '')
-        session = service.store.get('sessions', key, {})
-        if obj:
-            lines.extend(['## '+obj['title'], '来源：'+obj['block'], obj.get('note', '')])
-        else:
-            lines.append('## 文章笔记')
-        lines.append(session.get('note', ''))
-        lines.extend(('**我**' if message['role'] == 'user' else '**小探**')+'\n\n'+message['content'] for message in session.get('messages', []))
-    lines.append('## 随文心得')
-    for note in service.hub.notes(article['id'])['notes']:
-        lines.extend(['### '+note.get('title', '心得'), note.get('quote', ''), note['content']])
-    return '\n\n'.join(line for line in lines if line) + '\n'
-
-
 def export_notes(host, article):
-    filename, _ = QFileDialog.getSaveFileName(host, '导出阅读笔记', '阅读笔记.md', 'Markdown (*.md)')
+    controller = getattr(host, 'translation_controllers', {}).get('article:'+article['id'])
+    if controller:
+        controller.flush()
+    name = re.sub(r'[<>:"/\\|?*]', '_', article['title'][:60]).rstrip('. ') or '文章'
+    filename, _ = QFileDialog.getSaveFileName(host, '导出阅读笔记', name+' · 阅读笔记.md', 'Markdown (*.md)')
     if filename:
-        def write():
-            Path(filename).write_text(reading_markdown(host.service, article), encoding='utf-8')
-        host.run(write, lambda _: host.notice('阅读笔记已导出'))
+        host.run(lambda: write_reading_notes(host.service, article, filename), lambda _: host.notice('阅读笔记已导出'))
 
 
 def link_image(host, article):
