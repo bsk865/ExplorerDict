@@ -2,15 +2,16 @@
 import json
 import time
 from pathlib import Path
-from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRectF, QSize
+from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRectF, QSize, QPointF
 from PySide6.QtGui import QColor, QPen, QBrush, QPainterPath, QPainter, QImage, QTextDocument, QPixmap
 from PySide6.QtSvg import QSvgGenerator
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel, QTextBrowser, QStyle, QTabWidget, QProgressBar)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel, QTextBrowser, QStyle, QTabWidget, QProgressBar, QLineEdit, QScrollArea, QFrame)
 from .surfaces import QFileDialog, QDialog
 from .widgets import PageComboBox as QComboBox
 from .widgets import button, heading, FlowLayout
 from ..map_input import resolve_mode, markdown
 from ..reading_preferences import colors
+from .. import map_customization
 
 
 class MapView(QGraphicsView):
@@ -76,6 +77,21 @@ class MapView(QGraphicsView):
 
 
 class MapNode(QGraphicsRectItem):
+    def itemChange(self, change, value):
+        result = super().itemChange(change, value)
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged and self.scene():
+            self.scene().refresh_edges()
+        return result
+
+    def mousePressEvent(self, event):
+        self.drag_start = QPointF(self.pos())
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if self.pos() != getattr(self, 'drag_start', self.pos()):
+            self.scene().nodeMoved.emit(self.data(0)['id'], self.pos())
+
     def paint(self, painter, option, widget=None):
         pen = QPen(self.pen())
         if self.isSelected() or self.hasFocus():
@@ -86,6 +102,15 @@ class MapNode(QGraphicsRectItem):
         painter.drawRoundedRect(self.rect(), 8, 8)
 
     def keyPressEvent(self, event):
+        arrows = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0),
+                  Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}
+        if event.key() in arrows and self.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable:
+            x, y = arrows[event.key()]
+            step = 20 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 5
+            self.moveBy(x*step, y*step)
+            self.scene().nodeMoved.emit(self.data(0)['id'], self.pos())
+            event.accept()
+            return
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
             self.scene().clearSelection()
             self.setSelected(True)
@@ -95,10 +120,14 @@ class MapNode(QGraphicsRectItem):
 
 
 class MapScene(QGraphicsScene):
-    def __init__(self, graph, palette, depth=9, parent=None, include_relations=False, objects=(), focus_root=None):
+    nodeMoved = Signal(str, object)
+
+    def __init__(self, graph, palette, depth=9, parent=None, include_relations=False, objects=(), focus_root=None, positions=None, movable=False):
         super().__init__(parent)
         self.graph = graph
         self.nodes = {}
+        self.edges = []
+        self.constructing = True
         self.setBackgroundBrush(QColor(palette.get('bg', '#ffffff')))
         ink = QColor(palette.get('ink', '#302d29'))
         border = QColor(palette.get('line', '#d6c8b8'))
@@ -121,7 +150,7 @@ class MapScene(QGraphicsScene):
             visited.add(key)
             levels[key] = level
             doc = QTextDocument()
-            doc.setPlainText(rows[key]['label'])
+            doc.setPlainText(rows[key]['label']+('\n〔手动修改〕' if rows[key].get('manual_label') else ''))
             doc.setTextWidth(184)
             height = max(54, doc.size().height()+20)
             sizes[key] = height
@@ -145,8 +174,10 @@ class MapScene(QGraphicsScene):
             self.addItem(rect)
             rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
             rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable)
+            rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+            rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, movable)
             rect.setData(0, rows[key])
-            text = self.addText(rows[key]['label'])
+            text = self.addText(rows[key]['label']+('\n〔手动修改〕' if rows[key].get('manual_label') else ''))
             text.setTextWidth(184)
             text.setDefaultTextColor(ink)
             text.setParentItem(rect)
@@ -174,9 +205,15 @@ class MapScene(QGraphicsScene):
                 path.cubicTo(x+240, y+sizes[key]/2, x+240, target.center().y(), target.left(), target.center().y())
                 edge = self.addPath(path, QPen(QColor(child_color) if child_color else border, 1.2))
                 edge.setZValue(-1)
+                self.edges.append((key, child, edge))
                 cursor += spans[child]
         if root in spans:
             draw(root, 0)
+        for key, offset in (positions or {}).items():
+            if key in self.nodes and map_customization.valid_position(offset):
+                self.nodes[key].setPos(QPointF(*offset))
+        self.constructing = False
+        self.refresh_edges()
         if include_relations and graph.get('relations'):
             top = self.itemsBoundingRect().bottom()+50
             title = self.addText('原文关系')
@@ -191,6 +228,23 @@ class MapScene(QGraphicsScene):
                 text.setPos(0, top)
                 top += text.boundingRect().height()+16
         self.setSceneRect(self.itemsBoundingRect().adjusted(-24, -24, 24, 24))
+
+    def refresh_edges(self):
+        if self.constructing:
+            return
+        for src, dst, edge in self.edges:
+            left = self.nodes[src].mapRectToScene(self.nodes[src].rect())
+            right = self.nodes[dst].mapRectToScene(self.nodes[dst].rect())
+            path = QPainterPath()
+            path.moveTo(left.right(), left.center().y())
+            middle = (left.right()+right.left())/2
+            path.cubicTo(middle, left.center().y(), middle, right.center().y(), right.left(), right.center().y())
+            edge.setPath(path)
+        self.setSceneRect(self.itemsBoundingRect().adjusted(-24, -24, 24, 24))
+
+    def set_movable(self, enabled):
+        for node in self.nodes.values():
+            node.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, enabled)
 
     def export(self, filename):
         bounds = self.sceneRect()
@@ -228,6 +282,7 @@ class MapController(QObject):
         self.message = ''
         self.started = None
         self.elapsed = 0
+        self.undo_stack = []
         self.mode = (article.get('quality') or {}).get('input_mode') or resolve_mode(article)
         self.timer = QTimer(self)
         self.timer.setInterval(300)
@@ -279,6 +334,41 @@ class MapController(QObject):
         self.message = '正在停止…'
         self.changed.emit()
 
+    def customize(self, **changes):
+        if self.job:
+            return False
+        try:
+            article, before, after = map_customization.save(self.host.service.store, self.article, **changes)
+        except ValueError as exc:
+            self.message = str(exc)
+            self.changed.emit()
+            return False
+        self.article = article
+        if before != after:
+            self.undo_stack.append((map_customization.fingerprint(article['map']), before, after))
+            self.undo_stack = self.undo_stack[-20:]
+        self.message = '已保存在本文导图中'
+        self.changed.emit()
+        return True
+
+    def can_undo(self):
+        return bool(self.undo_stack and self.undo_stack[-1][0] == map_customization.fingerprint(self.article.get('map'))
+                    and self.undo_stack[-1][2] == map_customization.customization(self.article))
+
+    def undo(self):
+        if self.job or not self.can_undo():
+            return
+        _, before, _ = self.undo_stack[-1]
+        try:
+            article, _, _ = map_customization.save(self.host.service.store, self.article, replacement=before)
+        except ValueError as exc:
+            self.message = str(exc)
+        else:
+            self.article = article
+            self.undo_stack.pop()
+            self.message = '已撤销上一步调整'
+        self.changed.emit()
+
 
 class MapPage(QWidget):
     def __init__(self, host, bundle):
@@ -294,6 +384,8 @@ class MapPage(QWidget):
         self.palette = colors(host.snapshot['preferences']['palette'], host.snapshot['preferences']['mode'])
         self.selected = None
         self.graph_key = None
+        self.source_key = None
+        self.position_key = None
         self.focus_path = []
         self.depth_user_selected = False
         layout = QVBoxLayout(self)
@@ -332,6 +424,18 @@ class MapPage(QWidget):
         tools.addWidget(button('', self.fit, icon=self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton), tip='适应窗口'))
         tools.addWidget(button('导出', self.export))
         layout.addLayout(tools)
+        arrange = QHBoxLayout()
+        self.arrange = button('调整布局')
+        self.arrange.setCheckable(True)
+        self.arrange.toggled.connect(self.toggle_arrange)
+        self.arrange.setToolTip('开启后可拖动节点；方向键微调，Shift + 方向键加快移动')
+        self.reset_layout = button('恢复布局', lambda: self.controller.customize(reset_layout=True))
+        self.undo = button('撤销', self.controller.undo)
+        arrange.addWidget(self.arrange)
+        arrange.addWidget(self.reset_layout)
+        arrange.addWidget(self.undo)
+        arrange.addStretch()
+        layout.addLayout(arrange)
         scope = QLabel('正文导图只研读正文；图文导图同时识别并核对图片，需要模型支持图片。扫描页需使用图文导图。')
         scope.setWordWrap(True)
         scope.setObjectName('muted')
@@ -343,8 +447,28 @@ class MapPage(QWidget):
         aside = QVBoxLayout(detail)
         self.quote = QTextBrowser()
         self.quote.setOpenLinks(False)
+        self.quote.setMinimumHeight(110)
+        self.edit_label = button('修改节点文字', self.begin_edit)
+        aside.addWidget(self.edit_label)
+        self.editor = QWidget()
+        edit_layout = QVBoxLayout(self.editor)
+        edit_layout.setContentsMargins(0, 0, 0, 0)
+        self.label_input = QLineEdit()
+        self.label_input.setMaxLength(96)
+        self.label_input.setAccessibleName('节点文字')
+        self.label_input.returnPressed.connect(self.save_label)
+        edit_layout.addWidget(self.label_input)
+        edit_controls = FlowLayout(spacing=6)
+        edit_controls.addWidget(button('保存', self.save_label, primary=True))
+        edit_controls.addWidget(button('取消', self.editor.hide))
+        self.restore_label = button('恢复原文字', self.reset_label)
+        edit_controls.addWidget(self.restore_label)
+        edit_layout.addLayout(edit_controls)
+        self.editor.hide()
+        aside.addWidget(self.editor)
         aside.addWidget(self.quote, 1)
         self.relations = QListWidget()
+        self.relations.setMinimumHeight(90)
         self.relations.setWordWrap(True)
         self.relations.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.relations.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -356,7 +480,13 @@ class MapPage(QWidget):
         self.images = button('查看原图依据', self.open_images)
         self.images.setVisible(False)
         aside.addWidget(self.images)
-        split.addWidget(detail)
+        self.detail_scroll = QScrollArea()
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.detail_scroll.setMinimumWidth(210)
+        self.detail_scroll.setWidget(detail)
+        split.addWidget(self.detail_scroll)
         split.setSizes([750, 290])
         split.setChildrenCollapsible(False)
         layout.addWidget(split, 1)
@@ -378,7 +508,16 @@ class MapPage(QWidget):
         self.rebuild.setEnabled(not self.controller.job)
         self.stop.setEnabled(bool(self.controller.job))
         self.mode.setEnabled(not self.controller.job)
-        graph = self.controller.article.get('map')
+        article = self.controller.article
+        graph = map_customization.display_graph(article) if article.get('map') else None
+        editable = bool(graph and not self.controller.job and not article.get('superseded_by'))
+        self.arrange.setEnabled(editable)
+        self.reset_layout.setEnabled(editable and bool(map_customization.positions(article)))
+        self.undo.setEnabled(editable and self.controller.can_undo())
+        self.edit_label.setEnabled(editable and bool(self.selected and 'parent' in self.selected))
+        self.editor.setEnabled(editable)
+        if self.controller.job and self.arrange.isChecked():
+            self.arrange.setChecked(False)
         details = []
         if graph:
             details.append('正文导图 · 未分析图片' if (self.controller.article.get('quality') or {}).get('input_mode') == 'text' else '图文导图' if graph.get('visual_sources') else '正文导图')
@@ -388,6 +527,8 @@ class MapPage(QWidget):
             details.append('全文分 ' + str(graph['segments']) + ' 段研读')
         if graph and graph.get('visual_sources'):
             details.append('含原图依据')
+        if map_customization.customization(article):
+            details.append('已手动整理')
         self.summary.setText(' · '.join(details))
         self.summary.setVisible(bool(details))
         status = self.controller.message or ('' if graph else '尚未生成导图')
@@ -396,18 +537,61 @@ class MapPage(QWidget):
         if self.controller.job:
             minutes, seconds = divmod(self.controller.elapsed, 60)
             status += f' · 已用 {minutes} 分 {seconds:02d} 秒'
+        elif self.arrange.isChecked():
+            status = (status+' · ' if status else '')+'拖动节点调整位置，松开后自动保存'
         self.status.setText(status)
         self.busy.setVisible(bool(self.controller.job))
         key = json.dumps(graph, ensure_ascii=False)
+        source_key = map_customization.fingerprint(article.get('map'))
         if key != self.graph_key:
+            same_source = source_key == self.source_key
+            self.source_key = source_key
             self.graph_key = key
-            if graph and not self.depth_user_selected:
+            if graph and not same_source and not self.depth_user_selected:
                 self.depth.blockSignals(True)
                 self.depth.setCurrentIndex(0 if len(graph.get('nodes', [])) > 80 else 3)
                 self.depth.blockSignals(False)
             ids = {node['id'] for node in (graph or {}).get('nodes', [])}
             self.focus_path = [key for key in self.focus_path if key in ids]
-            self.draw()
+            self.draw(preserve=same_source)
+        position_key = map_customization.positions(article)
+        if position_key != self.position_key:
+            self.position_key = position_key
+            scene = self.view.scene()
+            if scene:
+                for key, item in scene.nodes.items():
+                    item.setPos(QPointF(*position_key.get(key, [0, 0])))
+
+    def toggle_arrange(self, enabled):
+        self.arrange.setText('结束调整' if enabled else '调整布局')
+        if self.view.scene():
+            self.view.scene().set_movable(enabled)
+        if enabled:
+            self.view.auto_fit = False
+        self.render()
+
+    def move_node(self, key, position):
+        if not self.controller.customize(node_id=key, position=[position.x(), position.y()]):
+            self.view.scene().nodes[key].setPos(QPointF(*map_customization.positions(self.controller.article).get(key, [0, 0])))
+
+    def begin_edit(self):
+        if self.selected and 'parent' in self.selected and not self.controller.job:
+            self.label_input.setText(self.selected['label'])
+            self.restore_label.setEnabled(bool(self.selected.get('manual_label')))
+            self.editor.show()
+            self.label_input.setFocus()
+            self.label_input.selectAll()
+            QTimer.singleShot(0, lambda: self.detail_scroll.ensureWidgetVisible(self.editor))
+
+    def save_label(self):
+        if self.selected and 'parent' in self.selected:
+            if self.controller.customize(node_id=self.selected['id'], label=self.label_input.text()):
+                self.editor.hide()
+
+    def reset_label(self):
+        if self.selected and self.selected.get('original_label'):
+            if self.controller.customize(node_id=self.selected['id'], label=self.selected['original_label']):
+                self.editor.hide()
 
     def change_depth(self, *_):
         self.depth_user_selected = True
@@ -424,24 +608,39 @@ class MapPage(QWidget):
             self.focus_path.pop()
             self.draw()
 
-    def draw(self, *_):
-        graph = self.controller.article.get('map') or {}
+    def draw(self, *_, preserve=False):
+        graph = map_customization.display_graph(self.controller.article)
         old = self.view.scene()
+        transform = self.view.transform()
+        center = self.view.mapToScene(self.view.viewport().rect().center())
+        auto_fit = self.view.auto_fit
+        selected = self.selected.get('id') if preserve and self.selected and 'parent' in self.selected else None
         scene = MapScene(graph, self.palette, self.depth.currentData(), self,
                          objects=self.controller.article.get('objects', []),
-                         focus_root=self.focus_path[-1] if self.focus_path else None)
+                         focus_root=self.focus_path[-1] if self.focus_path else None,
+                         positions=map_customization.positions(self.controller.article), movable=self.arrange.isChecked())
         self.view.setScene(scene)
         scene.selectionChanged.connect(self.select_node)
+        scene.nodeMoved.connect(self.move_node)
         if old:
             old.deleteLater()
         self.quote.setPlainText('选择节点查看原文依据')
         self.selected = None
+        self.editor.hide()
+        self.edit_label.setEnabled(False)
         self.branch.setEnabled(False)
         self.back_branch.setVisible(bool(self.focus_path))
         self.locate.setEnabled(False)
         self.images.setVisible(False)
         self.show_relations()
-        self.fit()
+        if preserve:
+            self.view.setTransform(transform)
+            self.view.centerOn(center)
+            self.view.auto_fit = auto_fit
+        else:
+            self.fit()
+        if selected in scene.nodes:
+            scene.nodes[selected].setSelected(True)
 
     def fit(self):
         if self.view.scene() and self.view.scene().items():
@@ -451,10 +650,14 @@ class MapPage(QWidget):
     def select_node(self):
         selected = self.view.scene().selectedItems()
         self.selected = selected[0].data(0) if selected else None
+        self.editor.hide()
+        self.edit_label.setEnabled(bool(self.selected) and not self.controller.job
+                                   and not self.controller.article.get('superseded_by'))
         if self.selected:
-            self.quote.setPlainText(self.selected['label'] + '\n\n' + self.selected.get('quote', ''))
+            original = '\n手动修改 · 原文字：'+self.selected['original_label'] if self.selected.get('manual_label') else ''
+            self.quote.setPlainText(self.selected['label'] + original + '\n\n' + self.selected.get('quote', ''))
         self.locate.setEnabled(bool(self.selected))
-        graph = self.controller.article.get('map') or {}
+        graph = map_customization.display_graph(self.controller.article)
         current_root = self.focus_path[-1] if self.focus_path else graph.get('root')
         self.branch.setEnabled(bool(self.selected and self.selected['id'] != current_root and
             any(node.get('parent') == self.selected['id'] for node in graph.get('nodes', []))))
@@ -463,7 +666,7 @@ class MapPage(QWidget):
 
     def show_relations(self, node=None):
         self.relations.clear()
-        graph = self.controller.article.get('map') or {}
+        graph = map_customization.display_graph(self.controller.article)
         labels = {n['id']: n['label'] for n in graph.get('nodes', [])}
         branch_ids = None
         if self.focus_path and not node:
@@ -484,6 +687,8 @@ class MapPage(QWidget):
 
     def show_relation(self, item):
         self.selected = item.data(Qt.ItemDataRole.UserRole)
+        self.editor.hide()
+        self.edit_label.setEnabled(False)
         self.branch.setEnabled(False)
         self.quote.setPlainText(self.selected['label'] + '\n\n' + self.selected.get('quote', ''))
         self.locate.setEnabled(True)
@@ -553,7 +758,7 @@ class MapPage(QWidget):
             self.host.notice('该依据跨越多个段落，请在原文中核对。')
 
     def export(self):
-        graph = self.controller.article.get('map')
+        graph = map_customization.display_graph(self.controller.article)
         if not graph:
             self.host.notice('请先生成导图')
             return
@@ -569,7 +774,8 @@ class MapPage(QWidget):
                     self.host.notice('无法保存，请选择其他位置。')
                 return
             scene = MapScene(graph, self.palette, include_relations=True,
-                             objects=self.controller.article.get('objects', []))
+                             objects=self.controller.article.get('objects', []),
+                             positions=map_customization.positions(self.controller.article))
             try:
                 scene.export(filename)
                 self.host.notice('完整导图已导出')

@@ -20,7 +20,8 @@ def resolve_mode(article, mode='auto'):
 
 
 def markdown(article):
-    graph = article.get('map') or {}
+    from .map_customization import display_graph
+    graph = display_graph(article)
     nodes = {n['id']: n for n in graph.get('nodes', [])}
     children = {}
     for node in nodes.values():
@@ -33,6 +34,8 @@ def markdown(article):
         visited.add(key)
         node = nodes[key]
         lines.append('  '*level+'- '+node['label'].replace('\n', ' '))
+        if node.get('manual_label'):
+            lines.append('  '*(level+1)+'手动修改；原标签：'+node['original_label'].replace('\n', ' '))
         if node.get('quote'):
             lines.append('  '*(level+1)+'依据：'+node['quote'].replace('\n', ' '))
         for child in children.get(key, []):
