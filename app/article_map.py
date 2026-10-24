@@ -93,6 +93,16 @@ PDF 的断行连字符、页码或图注可能处在一句话中间，不能把�
 {"quotes":[{"claim_index":0,"line_start":1,"line_end":3}],"selections":[{"selection_index":0,"line_start":4,"line_end":5}]}。repair_fields=true 时该 quotes 项另附修正后的 subject、predicate、object。
 """
 
+REPAIR_READING = GROUNDING + """
+你是独立阅读者，没有收到导图草稿。回到完整原文，仅修正 reading_corrections 指定的信息项。
+independent_reading_claims 是原独立阅读清单中需要修正的条目，claim_index 为其原编号。
+保留原文主体、对象、条件、否定、程度、时间与可选性。“将考虑”不能改为确定执行，“部分开展”不能改为全部完成。
+可以纠正关系方向或 relation_required：单一完整动作、描述与非强制说明可以作为 relation_required=false 的完整信息，predicate 为“记录信息”，object 为空。
+不得遗漏、重复、新增编号，不得删除不方便表达的信息；引用必须直接支持修正后的完整含义。
+只返回 JSON：{"claims":[{"claim_index":0,"subject":"完整主体或信息","predicate":"关系短句","object":"完整对象","relation_required":true,"quote":{"line_start":1,"line_end":3}}]}。
+subject 最多96字符，predicate 最多48字符。修正后仍由独立复核回到原文判断，不能自行宣称通过。
+"""
+
 REVIEW = GROUNDING + """
 你现在得到：原文、独立阅读清单和生成草稿。回到原文裁定差异，不能把草稿当作证据。
 逐节点检查标题/概念及分支归属，逐关系检查方向、完整端点、自然关系词、条件、否定、程度与可选性。
@@ -143,7 +153,7 @@ def parse_object(content: str) -> dict:
 def payload(model: str, *, stage: str, text: str, selected_words=(), draft=None,
             reading=None, feedback=(), reasoning_effort="", thinking="") -> dict:
     """三种调用各自独立消息；独立阅读消息从不包含生成草稿。"""
-    if stage not in {"read", "repair-quotes", "generate", "review"}:
+    if stage not in {"read", "repair-quotes", "repair-reading", "generate", "review"}:
         raise ValueError("未知导图阶段")
     if not text.strip() or len(text) > MAX_TEXT_CHARS:
         raise ArticleMapError(f"全文导图支持最多 {MAX_TEXT_CHARS} 字；原文未被截断，请先选用完整的较短材料")
@@ -153,6 +163,9 @@ def payload(model: str, *, stage: str, text: str, selected_words=(), draft=None,
         material["reading_corrections"] = list(feedback)
     if stage == "repair-quotes":
         material['independent_reading_quotes'] = reading
+    if stage == "repair-reading":
+        material['independent_reading_claims'] = reading
+        material['reading_corrections'] = list(feedback)
     if stage == "generate" and feedback:
         material["corrections"] = list(feedback)
         if draft:
@@ -163,7 +176,7 @@ def payload(model: str, *, stage: str, text: str, selected_words=(), draft=None,
         material.update({"draft": draft, "independent_reading": reading})
     from .api_client import _with_reasoning, _with_thinking
     result = {"model": model, "temperature": 0.0,
-              "messages": [{"role": "system", "content": {"read": READ, "repair-quotes": REPAIR_QUOTES, "generate": GENERATE, "review": REVIEW}[stage]},
+              "messages": [{"role": "system", "content": {"read": READ, "repair-quotes": REPAIR_QUOTES, "repair-reading": REPAIR_READING, "generate": GENERATE, "review": REVIEW}[stage]},
                            {"role": "user", "content": json.dumps(material, ensure_ascii=False)}]}
     if thinking == "enabled":
         result.pop("temperature",None)
@@ -307,6 +320,48 @@ def repair_reading_quotes(client, reading, text: str, selected_words=(), progres
             seen.add(index)
         if seen != expected:
             raise ArticleMapError('引用定位结果遗漏信息项')
+    return validate_reading(corrected, text, selected_words)
+
+
+def reading_correction_indices(reading, feedback):
+    """Only fully indexed claim corrections can preserve the remaining reading."""
+    if not reading or not isinstance(feedback, list) or not feedback:
+        return None
+    indices = set()
+    for issue in feedback:
+        if not isinstance(issue, dict):
+            return None
+        index = issue.get('claim_index')
+        if type(index) is not int or not 0 <= index < len(reading['claims']) or not str(issue.get('issue') or '').strip():
+            return None
+        if 'selection_index' in issue:
+            return None
+        indices.add(index)
+    return indices
+
+
+def repair_reading_claims(client, reading, feedback, text, selected_words=(), cancel=None):
+    indices = reading_correction_indices(reading, feedback)
+    if indices is None:
+        raise ArticleMapError('阅读修正没有明确的信息项编号')
+    if cancel is not None and cancel.is_set():
+        raise ValueError('已停止生成导图。')
+    response = client.full_article_map(stage='repair-reading', text=text, selected_words=selected_words,
+        reading=[dict(reading['claims'][index], claim_index=index) for index in sorted(indices)], feedback=feedback)
+    if cancel is not None and cancel.is_set():
+        raise ValueError('已停止生成导图。')
+    if not isinstance(response, dict):
+        raise ArticleMapError('阅读修正结果不是对象')
+    corrected = deepcopy(reading)
+    seen = set()
+    for claim in _list(response, 'claims', MAX_RELATIONS):
+        index = claim.get('claim_index')
+        if type(index) is not int or index not in indices or index in seen:
+            raise ArticleMapError('阅读修正含无效或重复编号')
+        corrected['claims'][index] = {key: value for key, value in claim.items() if key != 'claim_index'}
+        seen.add(index)
+    if seen != indices:
+        raise ArticleMapError('阅读修正遗漏信息项')
     return validate_reading(corrected, text, selected_words)
 
 
@@ -488,6 +543,14 @@ def run(client, *, text: str, selected_words=(), on_attempt=None, progress=None,
         check_cancel()
         draft, review, raw = None, {}, {}
         try:
+            if reading is not None and reader_feedback:
+                if reading_correction_indices(reading, reader_feedback) is None:
+                    reading = None
+                else:
+                    progress('正在核对文章中的限定与条件…')
+                    reading = repair_reading_claims(client, reading, reader_feedback, text, selected_words, cancel)
+                    reader_feedback = []
+                    save_stage()
             if reading is None:
                 progress('正在阅读文章…')
                 read_args = {"stage":"read", "text":text, "selected_words":selected_words}
@@ -536,10 +599,14 @@ def run(client, *, text: str, selected_words=(), on_attempt=None, progress=None,
         previous_draft = draft or raw
         if draft is not None and not feedback:
             return draft, {"approved": True, "rounds": round_no, "independent_reading": reading, "review": review}
+        reuse_pending = False
         if review.get("reader_issues"):
             reader_feedback = list(review["reader_issues"])
-            reading = None  # 清单也必须回到原文重读，仍不发送生成草稿。
-        pending_draft = None
+            if reading_correction_indices(reading, reader_feedback) is None:
+                reading = None  # 无法定位的清单问题仍完整重读，不发送生成草稿。
+            elif draft is not None:
+                reuse_pending = not review_issues(draft, reading, dict(review, reader_issues=[]))
+        pending_draft = draft if reuse_pending else None
         save_stage()
     raise ApiError("schema", "全文导图复核未通过，草稿已保留，原图未替换：" + "；".join(feedback[:4]))
 

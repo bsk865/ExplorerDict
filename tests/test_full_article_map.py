@@ -281,29 +281,100 @@ class TestArticleMapContract(unittest.TestCase):
             am.run(model,text="文"*(am.MAX_TEXT_CHARS+1))
         self.assertEqual(model.calls,[])
 
-    def test_reader_retries_receive_corrections_without_generation_draft(self):
+    def test_indexed_reader_corrections_preserve_other_claims_and_require_review(self):
         f=FIXTURES[0]
         correction={"claim_index":0,"issue":"完整动作不要机械拆为句法关系"}
         class ReaderClient(FixtureClient):
+            reviews = 0
             def full_article_map(self,**kwargs):
-                if kwargs["stage"]=="read" and self.rounds:
-                    self_reader_feedback=kwargs.get("feedback")
-                    if self_reader_feedback != [correction]:
-                        raise AssertionError("重读没有收到独立清单纠错")
-                    if "draft" in kwargs or "reading" in kwargs:
-                        raise AssertionError("重读不能收到生成草稿")
+                if kwargs['stage']=='repair-reading':
+                    self.calls.append(copy.deepcopy(kwargs))
+                    return {'claims':[dict(reading_for(f)['claims'][0], claim_index=0)]}
                 result=super().full_article_map(**kwargs)
-                if kwargs["stage"]=="review" and self.rounds==1:
-                    result["reader_issues"]=[correction]
+                if kwargs['stage']=='review':
+                    self.reviews += 1
+                    if self.reviews==1:
+                        result['reader_issues']=[correction]
                 return result
         model=ReaderClient(f)
         _,quality=am.run(model,text=f["text"],selected_words=f["selected_words"])
         self.assertEqual(quality["rounds"],2)
+        self.assertEqual([call['stage'] for call in model.calls], ['read','generate','review','repair-reading','review'])
+        repair=model.calls[3]
+        self.assertEqual(repair['feedback'],[correction])
+        self.assertEqual([item['claim_index'] for item in repair['reading']],[0])
+        self.assertNotIn('draft',repair)
+        self.assertEqual(model.calls[2]['reading'],model.calls[4]['reading'])
+        p=am.payload('configured',stage='repair-reading',text=f['text'],reading=repair['reading'],
+                     feedback=[correction],draft={'secret_draft':'do not read'})
+        material=json.loads(p['messages'][1]['content'])
+        self.assertEqual(material['reading_corrections'],[correction])
+        self.assertEqual(f['text'],''.join(line['text'] for line in material['source_lines']))
+        self.assertNotIn('secret_draft',json.dumps(p))
+
+    def test_unindexed_reader_correction_still_requires_complete_independent_rereading(self):
+        f=FIXTURES[0]
+        correction='原文有重要信息遗漏，请重新独立阅读'
+        class ReaderClient(FixtureClient):
+            def full_article_map(self,**kwargs):
+                result=super().full_article_map(**kwargs)
+                if kwargs['stage']=='review' and self.rounds==1:
+                    result['reader_issues']=[correction]
+                return result
+        model=ReaderClient(f)
+        am.run(model,text=f['text'],selected_words=f['selected_words'])
+        self.assertEqual([call['stage'] for call in model.calls], ['read','generate','review','read','generate','review'])
+        self.assertEqual(model.calls[3]['feedback'],[correction])
+        self.assertNotIn('draft',model.calls[3])
+        self.assertNotIn('reading',model.calls[3])
         p=am.payload("configured",stage="read",text=f["text"],feedback=[correction],
                      draft={"secret_draft":"do not read"})
         material=json.loads(p["messages"][1]["content"])
         self.assertEqual(material["reading_corrections"],[correction])
         self.assertNotIn("secret_draft",json.dumps(p))
+
+    def test_reader_claim_repair_rejects_missing_extra_duplicate_and_false_quotes(self):
+        f=FIXTURES[0]
+        reading=am.validate_reading(reading_for(f),f['text'],f['selected_words'])
+        feedback=[{'claim_index':0,'issue':'保留原文程度'}]
+        valid=dict(reading['claims'][0],claim_index=0)
+        bad_quote=dict(valid,quote='source does not contain this')
+        for claims in ([], [valid,valid], [dict(valid,claim_index=999)], [bad_quote]):
+            with self.subTest(claims=claims),self.assertRaises(am.ArticleMapError):
+                am.repair_reading_claims(mock.Mock(full_article_map=mock.Mock(return_value={'claims':claims})),
+                                         reading,feedback,f['text'],f['selected_words'])
+
+    def test_interrupted_indexed_reading_repair_resumes_before_semantic_review(self):
+        f=FIXTURES[0]
+        correction={'claim_index':0,'issue':'保留原文限定'}
+        saved=[]
+        class Interrupted(FixtureClient):
+            def full_article_map(self,**kwargs):
+                if kwargs['stage']=='repair-reading':
+                    raise ApiError('network','修正期间连接中断')
+                result=super().full_article_map(**kwargs)
+                if kwargs['stage']=='review':
+                    result['reader_issues']=[correction]
+                return result
+        with self.assertRaises(ApiError):
+            am.run(Interrupted(f),text=f['text'],selected_words=f['selected_words'],checkpoint=saved.append)
+        self.assertIsNotNone(saved[-1]['reading'])
+        self.assertIsNotNone(saved[-1]['pending_draft'])
+        class Resumed(FixtureClient):
+            def full_article_map(self,**kwargs):
+                if kwargs['stage']=='repair-reading':
+                    self.calls.append(copy.deepcopy(kwargs))
+                    return {'claims':[dict(reading_for(f)['claims'][0],claim_index=0)]}
+                return super().full_article_map(**kwargs)
+        model=Resumed(f)
+        model.rounds=1  # The checkpoint already contains the first generated draft.
+        _,quality=am.run(model,text=f['text'],selected_words=f['selected_words'],resume=saved[-1])
+        self.assertEqual([call['stage'] for call in model.calls],['repair-reading','review'])
+        self.assertTrue(quality['approved'])
+        refused=Resumed(f,fail_always=True)
+        refused.rounds=1
+        with self.assertRaises(ApiError):
+            am.run(refused,text=f['text'],selected_words=f['selected_words'],resume=saved[-1])
 
     def test_invalid_reader_quote_retries_with_specific_feedback(self):
         f=FIXTURES[0]

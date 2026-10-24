@@ -56,7 +56,16 @@ def run(store, client, *, text, title, version, signature, selected_words=(), ca
         with store.connect() as db:
             row=db.execute('SELECT payload FROM map_parts WHERE id=?',(cache_key,)).fetchone()
         if row:
-            result=json.loads(row[0]); part,quality=result['graph'],result['quality']
+            try:
+                result=json.loads(row[0]); part,quality=result['graph'],result['quality']
+                if not isinstance(quality,dict) or quality.get('approved') is not True:
+                    raise ValueError('Cached segment has no approved review')
+                part=article_map.validate_draft(part,source,words)
+            except (ValueError,KeyError,TypeError):
+                row=None
+                with store.lock, store.connect() as db:
+                    db.execute('DELETE FROM map_parts WHERE id=?',(cache_key,))
+        if row:
             progress(f'第 {i+1}/{len(pieces)} 段已整理')
         else:
             def attempt(round_no,draft,issues,review):

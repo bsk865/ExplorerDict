@@ -1473,7 +1473,7 @@ class DeepSeekClient:
         kind = getattr(self, 'request_kind', 'model')
         # Long-paper reasoning must not be cancelled at the old 30-second limit.
         # The workspace still bounds the complete map and cancellation stays live.
-        ceiling = 120 if kind in {'map-read', 'map-repair-quotes', 'map-generate', 'map-review'} else 60
+        ceiling = 120 if kind in {'map-read', 'map-repair-quotes', 'map-repair-reading', 'map-generate', 'map-review'} else 60
         retries = min(2, self.retry_policy.max_retries)
         attempt_timeout = min(self.timeout, ceiling)
         budget = min(attempt_timeout * (retries + 1) + self.retry_policy.max_delay * retries,

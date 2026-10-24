@@ -1,4 +1,5 @@
 import hashlib
+import json
 import tempfile
 import threading
 import unittest
@@ -72,6 +73,24 @@ class LongMapTests(unittest.TestCase):
         self.assertEqual(len(self.calls),1)
         graph,_=self.generate()
         self.assertEqual(len(self.calls),graph['segments'])
+
+    def test_invalid_or_unapproved_cached_segment_is_regenerated_without_losing_other_parts(self):
+        self.generate()
+        with self.store.connect() as db:
+            key,version,payload=db.execute('SELECT id,version,payload FROM map_parts LIMIT 1').fetchone()
+        invalid_quote=json.loads(payload)
+        invalid_quote['graph']['nodes'][0]['quote']='原文不存在的依据'
+        unapproved=json.loads(payload)
+        unapproved['quality']['approved']=False
+        for replacement in ('{broken',json.dumps(invalid_quote),json.dumps(unapproved)):
+            with self.subTest(replacement=replacement):
+                with self.store.connect() as db:
+                    db.execute('UPDATE map_parts SET payload=? WHERE id=?',(replacement,key))
+                count=len(self.calls)
+                graph,quality=self.generate()
+                self.assertTrue(quality['approved'])
+                self.assertEqual(len(self.calls)-count,1)
+                self.assertTrue(all(node['quote'] in self.text for node in graph['nodes']))
 
     def test_failed_forced_rebuild_clears_all_old_parts_and_resumes_new_progress(self):
         self.generate()
