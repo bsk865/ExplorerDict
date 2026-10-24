@@ -74,7 +74,7 @@ def main():
         reader = window.stack.currentWidget()
         reader.translate()
         controller = reader.translation_page.controller
-        controller.state.update(result='83 degrees Celsius', complete=True)
+        controller.state.update(source='zh', target='en', result='83 degrees Celsius', complete=True)
         controller.flush()
         controller.changed.emit()
         settle()
