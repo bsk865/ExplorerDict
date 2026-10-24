@@ -2,7 +2,6 @@
 import json
 from pathlib import Path
 import sys
-import tkinter as tk
 
 
 def validate(directory):
@@ -27,6 +26,7 @@ def validate(directory):
 
 
 def run(directory):
+    import tkinter as tk
     from .main import build_app, _attach_activation
     from . import capture_bridge, reading_preferences, map_customization
     from .workspace_store import WorkspaceStore
