@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt
+from PySide6.QtCore import QUrl
 from PySide6.QtTest import QTest
 from app.native.service import NativeService
 from app.native.window import NativeWindow
@@ -79,6 +80,50 @@ class NativeRouteHistoryTests(unittest.TestCase):
         self.window.go_back()
         self.wait(lambda: self.window.stack.currentWidget() is not old)
         self.assertEqual('', self.window.stack.currentWidget().theme)
+
+    def test_return_from_conversation_reference_restores_detail_and_list_position(self):
+        key = self.article['id']+':'+self.article['version']+':'
+        hit = dict(article_id=self.article['id'], article_title=self.article['title'],
+                   version=self.article['version'], block='b0', quote='用于返回路径验证的原文。')
+        self.service.store.put('sessions', key, {'archives':[{'messages':[
+            dict(role='user', content='历史搜索词'),
+            dict(role='assistant', content='历史回答。\n\n'*60, evidence=[hit])]}],
+            'messages':[dict(role='user', content='当前问题')], 'draft':'待继续问题'})
+        for index in range(18):
+            self.service.store.put('sessions', key+str(index), {'messages':[dict(role='user', content='历史搜索词')]})
+        self.window.content_filters = {'kind':'conversations', 'query':'历史搜索词', 'article':''}
+        self.window.navigate('content')
+        self.wait(lambda: not self.window.navigation_busy)
+        page = self.window.stack.currentWidget()
+        self.app.processEvents()
+        page.scroll.verticalScrollBar().setValue(120)
+        list_position = page.scroll.verticalScrollBar().value()
+        self.assertGreater(list_position, 0)
+        record = next(record for record, _ in page.rows if record['id'] == key)
+        page.details(record)
+        self.app.processEvents()
+        page.detail.browser.verticalScrollBar().setValue(160)
+        detail_position = page.detail.browser.verticalScrollBar().value()
+        self.assertGreater(detail_position, 0)
+        page.detail.open_reference(QUrl('content-source:0'))
+        self.wait(lambda: not self.window.navigation_busy and isinstance(self.window.stack.currentWidget(), ReaderPage))
+        self.window.go_back()
+        self.wait(lambda: not self.window.navigation_busy and isinstance(self.window.stack.currentWidget(), ContentPage))
+        self.app.processEvents()
+        restored = self.window.stack.currentWidget()
+        self.assertIsNotNone(restored.detail)
+        self.assertEqual(key, restored.detail.record['id'])
+        self.assertEqual(detail_position, restored.detail.browser.verticalScrollBar().value())
+        self.assertEqual('历史搜索词', restored.search.text())
+        self.window.refresh()
+        self.wait(lambda: not self.window.navigation_busy and self.window.stack.currentWidget() is not restored)
+        restored = self.window.stack.currentWidget()
+        self.app.processEvents()
+        self.assertEqual(key, restored.detail.record['id'])
+        self.assertEqual(detail_position, restored.detail.browser.verticalScrollBar().value())
+        restored.back_to_list()
+        self.app.processEvents()
+        self.assertEqual(list_position, restored.scroll.verticalScrollBar().value())
 
     def test_delete_note_keeps_all_library_scope(self):
         note = self.service.hub.notes(self.article['id'])['notes'][0]

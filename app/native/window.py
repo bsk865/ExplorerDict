@@ -208,6 +208,8 @@ class NativeWindow(QMainWindow):
         version = self.generation
         page, article = self.current_page, self.article_id
         restored = self.pending_route if self.pending_route and (self.pending_route['page'], self.pending_route['article']) == (page, article) else None
+        if restored is None and isinstance(previous, ContentPage) and previous.route == page and previous.detail:
+            restored = self.navigation_state()
         def read():
             snapshot = self.service.snapshot()
             bundle = self.service.article(article) if page in {'reader', 'map'} and article and self.service.store.get('articles', article) else None
@@ -269,6 +271,11 @@ class NativeWindow(QMainWindow):
                     kind = restored.get('kind', kind)
                 widget = ContentPage(self, bundle, kind)
                 widget.route = page
+                if restored and restored.get('content_detail'):
+                    record = next((r for r, _ in widget.rows if r['id'] == restored['content_detail']), None)
+                    if record:
+                        widget.details(record)
+                        widget.list_scroll = restored.get('content_list_scroll', 0)
                 title = '笔记管理' if kind == 'notes' else '内容管理'
             elif page in {'shelf', 'reader', 'map'}:
                 if page in {'reader', 'map'}:
@@ -347,7 +354,7 @@ class NativeWindow(QMainWindow):
         if isinstance(widget, ShelfPage):
             return widget.articles.verticalScrollBar()
         if isinstance(widget, ContentPage):
-            return widget.scroll.verticalScrollBar()
+            return widget.active_scroll()
         if isinstance(widget, StudyPage):
             scroll = widget.findChild(QScrollArea)
             return scroll.verticalScrollBar() if scroll else None
@@ -363,6 +370,9 @@ class NativeWindow(QMainWindow):
             route['theme'] = widget.theme
         if isinstance(widget, ContentPage):
             route['kind'] = widget.kind
+            if widget.detail:
+                route['content_detail'] = widget.detail.record['id']
+                route['content_list_scroll'] = widget.list_scroll
         if isinstance(widget, LibraryPage):
             route['library'] = deepcopy(self.library.body)
         if isinstance(widget, ReaderPage):

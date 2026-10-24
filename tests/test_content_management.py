@@ -42,6 +42,23 @@ class ContentManagementTests(unittest.TestCase):
         self.assertFalse(inventory(self.store)['batches'])
         self.assertEqual(len(self.hub.snapshot()['tasks']),1)
 
+    def test_conversation_inventory_includes_archived_search_and_source_identity(self):
+        self.store.put('sessions', self.key, {'messages':[{'role':'user', 'content':'当前问题'}],
+            'archives':[{'messages':[{'role':'user', 'content':'历史里的唯一搜索词'},
+                {'role':'assistant', 'content':'旧回答', 'evidence':[{'quote':'旧引用原文'}]}]}], 'draft':'待继续草稿'})
+        record = inventory(self.store)['conversations'][0]
+        self.assertEqual(3, record['count'])
+        self.assertEqual(1, record['archives'])
+        self.assertEqual(self.article['id'], record['article_id'])
+        self.assertEqual(self.obj['id'], record['object_id'])
+        self.assertIn('历史里的唯一搜索词', record['search_text'])
+        self.assertIn('旧引用原文', record['search_text'])
+        self.assertIn('待继续草稿', record['search_text'])
+        self.store.put('sessions', 'library:all', {'messages':[{'role':'user', 'content':'全库问题'}]})
+        library = next(row for row in inventory(self.store)['conversations'] if row['id'] == 'library:all')
+        self.assertEqual('资料库问答 · 全部资料', library['title'])
+        self.assertEqual('', library['article_id'])
+
     def test_theme_delete_keeps_notes_and_article(self):
         theme=self.hub.save('themes',{'title':'Theme'})
         self.hub.assign(theme['id'],[self.article['id']])

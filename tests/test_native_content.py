@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QPlainTextEdit
+from PySide6.QtCore import QUrl
 from app.native.content import ContentPage
 from app.native.dialogs import NoteForm
 from app.native.service import NativeService
@@ -114,6 +115,53 @@ class NativeContentTests(unittest.TestCase):
         self.host.resume_draft.assert_called_once_with(draft)
         next(b for b in row.findChildren(QPushButton) if b.toolTip() == '删除').click()
         self.host.delete.assert_called_once_with('native_drafts', draft['id'], draft['title'])
+        page.close()
+
+    def test_conversation_details_preserve_archives_draft_citations_and_list_state_without_dialog(self):
+        key = self.a['id']+':'+self.a['version']+':'
+        hit = dict(article_id=self.a['id'], article_title=self.a['title'], version=self.a['version'], block='b0', quote='阅读材料甲')
+        self.service.store.put('sessions', key, dict(messages=[dict(role='user', content='当前问题')],
+            archives=[dict(messages=[dict(role='user', content='历史问题'),
+                                    dict(role='assistant', content='历史回答 [S1]', evidence=[hit])])],
+            note='保留的会话笔记', draft='尚未发送的问题'))
+        page = ContentPage(self.host, self.service.inventory(), 'conversations')
+        page.resize(600, 500)
+        page.show()
+        page.search.setText('历史问题')
+        self.assertEqual('1 项', page.count.text())
+        page.details(page.rows[0][0])
+        self.app.processEvents()
+        text = page.detail.browser.toPlainText()
+        for expected in ('先前对话 1', '历史问题', '历史回答', '阅读材料甲', '当前对话', '当前问题', '保留的会话笔记', '尚未发送的问题'):
+            self.assertIn(expected, text)
+        self.assertIsNone(QApplication.activeModalWidget())
+        page.detail.open_reference(QUrl('https://example.org'))
+        self.host.open_article.assert_not_called()
+        page.detail.open_reference(QUrl('content-source:-1'))
+        self.host.open_article.assert_not_called()
+        page.detail.open_reference(QUrl('content-source:0'))
+        self.host.open_article.assert_called_once_with(self.a['id'], block='b0', object_id=None)
+        page.back_to_list()
+        self.app.processEvents()
+        self.assertEqual('历史问题', page.search.text())
+        self.assertIs(page.pages.currentWidget(), page.listing)
+        self.assertIsNone(page.detail)
+        page.close()
+
+    def test_missing_or_changed_reference_keeps_saved_quote_and_shows_inline_message(self):
+        key = self.a['id']+':'+self.a['version']+':'
+        evidence = [dict(article_id='deleted', article_title='旧文章', quote='已删除资料的原文'),
+                    dict(article_id=self.a['id'], version='previous', block='b0', quote='旧版本的原文'),
+                    dict(article_id=self.a['id'], source='personal_note', note_id='deleted', quote='已删除的笔记')]
+        self.service.store.put('sessions', key, {'archives':[{'messages':[dict(role='assistant', content='旧回答', evidence=evidence)]}]})
+        page = ContentPage(self.host, self.service.inventory(), 'conversations')
+        page.details(page.rows[0][0])
+        for index, expected in enumerate(('原资料已删除', '原文版本已变化', '原笔记已删除')):
+            page.detail.open_reference(QUrl('content-source:'+str(index)))
+            self.assertIn(expected, page.detail.status.text())
+        self.assertIn('已删除资料的原文', page.detail.browser.toPlainText())
+        self.host.open_article.assert_not_called()
+        self.assertIsNone(QApplication.activeModalWidget())
         page.close()
 
     def test_legacy_edit_preserves_conversation_and_draft(self):

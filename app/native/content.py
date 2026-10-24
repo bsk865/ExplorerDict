@@ -1,7 +1,6 @@
 """Searchable management rows matching the original local content inventory."""
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QLineEdit, QScrollArea, QSizePolicy, QTextBrowser, QLabel)
-from .surfaces import QDialog
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QLineEdit, QScrollArea, QSizePolicy, QLabel, QStackedWidget)
 from .widgets import PageComboBox as QComboBox
 from .widgets import heading, button
 from .navigation import icon
@@ -39,7 +38,15 @@ class ContentPage(QWidget):
         self.route = 'content'
         self.colors = colors(host.snapshot['preferences']['palette'], host.snapshot['preferences']['mode'])
         self.rows = []
-        layout = QVBoxLayout(self)
+        self.detail = None
+        self.list_scroll = 0
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self.pages = QStackedWidget()
+        outer.addWidget(self.pages)
+        self.listing = QWidget()
+        self.pages.addWidget(self.listing)
+        layout = QVBoxLayout(self.listing)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QHBoxLayout()
         title_box = heading('笔记管理')
@@ -176,7 +183,7 @@ class ContentPage(QWidget):
         self.host.content_filters = {'kind':self.kind, 'query':self.search.text(), 'article':article}
         count = 0
         for record, row in self.rows:
-            text = ' '.join(str(record.get(k) or '') for k in ('title', 'content', 'request', 'article_title', 'description'))
+            text = ' '.join(str(record.get(k) or '') for k in ('title', 'content', 'request', 'article_title', 'description', 'search_text'))
             match = query in text.casefold() and (not article or record.get('article_id') == article)
             row.setVisible(match)
             count += match
@@ -204,7 +211,7 @@ class ContentPage(QWidget):
         elif self.kind == 'tasks':
             detail = f"{record.get('date') or '日期待定'} {record.get('time') or ''} · {'已完成' if record['status'] == 'done' else '待完成'}"
         elif self.kind == 'conversations':
-            detail = f"{record.get('count', 0)} 条消息 · {record.get('archives', 0)} 段回顾"
+            detail = f"{record.get('count', 0)} 条消息 · {record.get('archives', 0)} 段先前对话"
         elif self.kind == 'batches':
             detail = f"{len(record.get('tasks', []))} 项安排 · {'已撤销' if record.get('undone') else '已创建'}"
         if detail:
@@ -241,7 +248,10 @@ class ContentPage(QWidget):
     def open_source(self, record):
         key = self.source(record)
         if key:
-            self.host.open_article(key, block=record.get('block'))
+            if record.get('object_id'):
+                self.host.open_article(key, block=record.get('block'), object_id=record['object_id'])
+            else:
+                self.host.open_article(key, block=record.get('block'))
 
     def remove(self, record):
         kind = record['source'] + '_note' if self.kind == 'legacy_notes' else self.kind
@@ -281,19 +291,23 @@ class ContentPage(QWidget):
             self.host.refresh()
 
     def details(self, record):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(record.get('title') or '查看内容')
-        dialog.resize(620, 480)
-        layout = QVBoxLayout(dialog)
-        text = QTextBrowser()
-        text.setOpenLinks(False)
-        lines = [record.get(k) for k in ('title', 'article_title', 'content', 'description', 'request')]
-        if self.kind == 'conversations':
-            saved = self.host.service.store.get('sessions', record['id'], {})
-            lines += [('我：' if m.get('role') == 'user' else '小探：') + m.get('content', '') for m in saved.get('messages', [])]
-        elif self.kind == 'batches':
-            lines += [f"{t.get('date', '')} {t.get('time', '')}  {t['title']}" for t in record.get('tasks', [])]
-        text.setPlainText('\n\n'.join(line for line in lines if line))
-        layout.addWidget(text)
-        layout.addWidget(button('关闭', dialog.accept), alignment=Qt.AlignmentFlag.AlignRight)
-        dialog.exec()
+        from .content_detail import ContentDetail
+        self.back_to_list()
+        self.list_scroll = self.scroll.verticalScrollBar().value()
+        self.detail = ContentDetail(self, record)
+        self.pages.addWidget(self.detail)
+        self.pages.setCurrentWidget(self.detail)
+
+    def back_to_list(self):
+        if self.detail is None:
+            return
+        old, self.detail = self.detail, None
+        old.hide()
+        self.pages.setCurrentWidget(self.listing)
+        self.pages.removeWidget(old)
+        old.deleteLater()
+        position = self.list_scroll
+        QTimer.singleShot(0, self, lambda: self.scroll.verticalScrollBar().setValue(position))
+
+    def active_scroll(self):
+        return (self.detail.browser if self.detail else self.scroll).verticalScrollBar()

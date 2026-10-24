@@ -7,6 +7,16 @@ from .study_activity import StudyActivity
 from .reading_annotations import ReadingAnnotations
 
 
+def conversation_content(session):
+    parts = []
+    for section in [*session.get('archives', []), session]:
+        parts.extend(section.get(key, '') for key in ('draft', 'note', 'handoff'))
+        for message in section.get('messages', []):
+            parts.append(message.get('content', ''))
+            parts.extend(hit.get('quote', '') for hit in message.get('evidence', []))
+    return '\n'.join(part for part in parts if isinstance(part, str) and part)
+
+
 def inventory(store):
     hub = StudyHub(store)
     StudyActivity(store)
@@ -29,15 +39,23 @@ def inventory(store):
         for row in db.execute('SELECT id,payload FROM sessions'):
             session = json.loads(row['payload'])
             aid = row['id'].split(':')[0]
-            title = articles.get(aid,{}).get('title','资料库问答')
+            article = articles.get(aid, {})
+            title = article.get('title') or ('资料库问答 · 全部资料' if row['id'].startswith('library:all') else '资料库问答')
             oid = row['id'].split(':')[-1]
-            if oid in objects:
+            if oid in objects and objects[oid].get('article_id') == aid:
                 title += ' · '+objects[oid]['title']
+            source = {'article_id':aid if article else '', 'article_title':article.get('title', ''),
+                      'object_id':oid if oid in objects and objects[oid].get('article_id') == aid else ''}
             if session.get('messages') or session.get('draft') or session.get('archives') or session.get('handoff'):
-                data['conversations'].append({'id':row['id'],'title':title,'count':len(session.get('messages',[])), 'archives':len(session.get('archives',[]))})
+                total = sum(len(part.get('messages', [])) for part in [*session.get('archives', []), session])
+                data['conversations'].append({'id':row['id'], 'title':title, **source,
+                    'count':total, 'archives':len(session.get('archives',[])), 'search_text':conversation_content(session),
+                    'content':next((m.get('content', '') for m in reversed(session.get('messages', [])) if m.get('role') == 'user'), '') or session.get('draft', '')})
             if session.get('note'):
-                data['legacy_notes'].append({'id':row['id'],'title':title,'content':session['note'],'source':'session'})
-        data['legacy_notes'] += [{'id':o['id'],'title':o['title'],'content':o['note'],'source':'object'} for o in objects.values() if o.get('note')]
+                data['legacy_notes'].append({'id':row['id'],'title':title,'content':session['note'],'source':'session', **source})
+        data['legacy_notes'] += [{'id':o['id'],'title':o['title'],'content':o['note'],'source':'object',
+                                 'article_id':o['article_id'], 'block':o.get('block'), 'object_id':o['id']}
+                                for o in objects.values() if o.get('note')]
         data['batches'] = [json.loads(r[0]) for r in db.execute('SELECT payload FROM study_batches ORDER BY rowid DESC')]
         data['maps'] = [{'id':a['id'],'title':a['title']} for a in articles.values() if a.get('map') or db.execute('SELECT 1 FROM attempts WHERE article_id=?',(a['id'],)).fetchone()]
         data['reading'] = [{'id':r['article_id'],'title':articles.get(r['article_id'],{}).get('title','旧资料')} for r in db.execute('SELECT article_id FROM study_reading')]
