@@ -1,9 +1,9 @@
 """Readable source snapshots: semantic blocks, native MathML, no active HTML."""
 from __future__ import annotations
 import re
+from copy import copy
 from urllib.parse import urljoin, urlsplit, urldefrag
-from urllib.request import Request, build_opener
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, Tag, NavigableString, Comment
 
 ALLOWED = set('p pre code h1 h2 h3 h4 h5 h6 strong em b i u sub sup span br blockquote ul ol li table thead tbody tfoot tr th td caption math semantics mrow mi mo mn mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose mpadded mstyle mmultiscripts mprescripts none'.split())
 MATH_ATTRS = set('display mathvariant stretchy fence separator accent accentunder columnalign rowalign columnspacing rowspacing colspan rowspan linethickness notation lspace rspace width height depth voffset scriptlevel'.split())
@@ -27,8 +27,21 @@ def safe_markup(fragment):
 
 def readable_blocks(html, url, store, load_image=None):
     soup = BeautifulSoup(html, 'html.parser')
-    wechat = urlsplit(url).hostname == 'mp.weixin.qq.com'
-    article = (soup.select_one('#js_content') if wechat else None) or soup.find('article') or soup.find('main')
+    hostname=(urlsplit(url).hostname or '').lower()
+    wechat = hostname == 'mp.weixin.qq.com'
+    article = soup.select_one('#js_content') if wechat else None
+    selectors=()
+    if hostname == 'ithome.com' or hostname.endswith('.ithome.com'):
+        selectors=('h1','#paragraph') if soup.select_one('#paragraph') else ()
+    elif hostname == 'sciencedaily.com' or hostname.endswith('.sciencedaily.com'):
+        selectors=('h1','#story_text','#story_source','#journal_references') if soup.select_one('#story_text') else ()
+    if selectors:
+        article=soup.new_tag('article')
+        for selector in selectors:
+            source=soup.select_one(selector)
+            if source:
+                article.append(copy(source))
+    article = article or soup.select_one('[itemprop="articleBody"]') or soup.find('article') or soup.find('main')
     if article is None:
         raise ValueError('这页没有明确的文章区域。请导入原文件，或继续在原网页阅读；不把局部抓取冒充全文。')
     access = soup.find('meta', attrs={'itemprop':'isAccessibleForFree'})
@@ -41,7 +54,58 @@ def readable_blocks(html, url, store, load_image=None):
             node.decompose()
     blocks=[]
     stats={'math':0,'images':0,'missing_images':0}
+    images={}
+
+    def split_images(node):
+        """Split at images while preserving inline formatting on both sides."""
+        if isinstance(node, Tag) and node.name == 'img':
+            return [(True, node)]
+        if not isinstance(node, Tag) or not node.find('img'):
+            return [(False, copy(node))]
+        result=[]
+        fragment=copy(node)
+        fragment.clear()
+        for child in node.contents:
+            for is_image, part in split_images(child):
+                if is_image:
+                    if fragment.contents:
+                        result.append((False,fragment))
+                        fragment=copy(node)
+                        fragment.clear()
+                    result.append((True,part))
+                else:
+                    fragment.append(part)
+        if fragment.contents:
+            result.append((False,fragment))
+        return result
+
+    def emit_image(im, owner):
+        figure=im.find_parent('figure')
+        caption=figure.find('figcaption') if figure else None
+        label=caption.get_text(' ',strip=True) if caption else im.get('alt') or '原文插图'
+        address=next((im.get(key) for key in ('data-src','data-original','data-lazy-src','src') if im.get(key)), '')
+        if not address and im.get('srcset'):
+            address=im['srcset'].split(',')[0].strip().split()[0]
+        image_url=urljoin(url,address)
+        anchor=im.get('id') or owner.get('id','')
+        try:
+            parts=urlsplit(image_url)
+            if not address or not load_image or parts.scheme not in {'http','https'} or not parts.hostname or parts.username or parts.password:
+                raise ValueError('Image source not available')
+            if image_url not in images:
+                images[image_url]=store.image(load_image(image_url))
+            aid,size=images[image_url]
+            blocks.append({'type':'image','asset':aid,'caption':label,'width':size[0],'height':size[1],'source_anchor':anchor})
+            stats['images']+=1
+        except Exception:
+            blocks.append({'type':'text','text':'[图片暂未保存] '+label,'image_missing':True,'source_anchor':anchor})
+            stats['missing_images']+=1
+
     def emit(node):
+        if node.find('img'):
+            for is_image,part in split_images(node):
+                emit_image(part,node) if is_image else emit(part)
+            return
         html=safe_markup(node)
         clean=BeautifulSoup(html,'html.parser')
         text=re.sub(r'\s+',' ',clean.get_text()).strip()
@@ -50,25 +114,22 @@ def readable_blocks(html, url, store, load_image=None):
         stats['math']+=len(clean.find_all('math'))
         blocks.append({'type':'text','text':text,'html':html,'heading':int(node.name[1]) if node.name in {'h1','h2','h3','h4','h5','h6'} else 0,'source_anchor':node.get('id','')})
     def walk(node):
+        if isinstance(node,Comment):
+            return
+        if isinstance(node,NavigableString):
+            if str(node).strip():
+                wrapper=soup.new_tag('p')
+                wrapper.append(copy(node))
+                emit(wrapper)
+            return
         if not isinstance(node,Tag):
             return
-        if node.name=='figure' and node.find('img'):
-            caption=node.find('figcaption')
-            caption_text=caption.get_text(' ',strip=True) if caption else ''
-            for im in node.find_all('img'):
-                image_url=urljoin(url,im.get('src',''))
-                label=caption_text or im.get('alt') or '原文插图'
-                try:
-                    if not load_image or urlsplit(image_url).scheme not in {'http','https'} or urlsplit(image_url).netloc!=urlsplit(url).netloc:
-                        raise ValueError('Image source not available')
-                    aid,size=store.image(load_image(image_url))
-                    blocks.append({'type':'image','asset':aid,'caption':label,'width':size[0],'height':size[1],'source_anchor':node.get('id','')})
-                    stats['images']+=1
-                except Exception:
-                    blocks.append({'type':'text','text':'[图片暂未保存] '+label,'image_missing':True,'source_anchor':node.get('id','')})
-                    stats['missing_images']+=1
+        if node.name=='img':
+            emit_image(node,node.parent)
             return
-        if node.name in {'p','h1','h2','h3','h4','h5','h6','table','blockquote','li'}:
+        if node.name=='figcaption' and node.find_parent('figure') and node.find_parent('figure').find('img'):
+            return  # The image block already carries its original caption.
+        if node.name in {'p','h1','h2','h3','h4','h5','h6','table','blockquote','li','span','strong','em','b','i','u','sub','sup'}:
             emit(node);return
         if node.name in {'pre','code'}:
             blocks.append({'type':'text','text':node.get_text().strip('\n'), 'html':safe_markup(node),
@@ -88,14 +149,10 @@ def capture_source(store,url):
     parts=urlsplit(url)
     if parts.scheme not in {'https','http'} or not parts.netloc or parts.username or parts.password:
         raise ValueError('请提供文章的 HTTP/HTTPS 原网页地址。')
-    opener=build_opener()
+    from .discovery import fetch
     def load(address,max_size):
-        request=Request(address,headers={'User-Agent':'Mozilla/5.0','Accept':'text/html,image/*;q=0.9,*/*;q=0.5'})
-        with opener.open(request,timeout=25) as response:
-            body=response.read(max_size+1)
-            if len(body)>max_size:
-                raise ValueError('页面或图片过大，请导入原文件。')
-            return body,response.headers.get_content_charset() or 'utf-8'
+        body,_,charset=fetch(address,max_size)
+        return body,charset
     raw,charset=load(url,5_000_000)
     title,blocks,stats=readable_blocks(raw.decode(charset,errors='replace'),url,store,lambda u:load(u,24_000_000)[0])
     a=store.import_article(title,blocks,origin='web')

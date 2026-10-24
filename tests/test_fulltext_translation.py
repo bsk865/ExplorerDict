@@ -1,10 +1,12 @@
 import json
+import io
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 import pymupdf
+from PIL import Image
 from app.native.service import NativeService
 from app.discovery import entry
 from app.translation import chunks, validate, translate
@@ -66,6 +68,27 @@ class FullPaperTests(unittest.TestCase):
         self.assertIn(_quote({'quote': quote}, text), text)
         self.assertIn('arXiv [cs.RO] 2026', text)
         self.assertEqual(1, len([b for b in blocks if b['type'] == 'image']))
+
+    def test_discovery_news_and_html_papers_persist_their_original_inline_images(self):
+        picture=io.BytesIO()
+        Image.new('RGB',(25,15),'green').save(picture,'PNG')
+        html=('<article><h1>Public article</h1><section><h2>Introduction</h2><p>'+('Full original paragraph. '*30)+
+              '<img data-src="https://cdn.example.org/figure.png" alt="Original chart">Final paragraph.</p></section></article>').encode()
+        for kind in ('news','paper'):
+            with self.subTest(kind=kind):
+                item=entry('https://example.org/'+kind,'Public article','Publisher',kind)
+                self.native.store.put('settings','discovery-state',{'items':[item],'updated':0})
+                requested=[]
+                def loader(address,limit):
+                    requested.append((address,limit))
+                    return (picture.getvalue() if 'figure.png' in address else html),address,'utf-8'
+                article=self.native.discovery.import_item(item['id'],loader)
+                self.assertIn(('https://cdn.example.org/figure.png',24_000_000),requested)
+                self.assertEqual(article['source_stats']['images'],1)
+                images=[b for b in article['blocks'] if b['type']=='image']
+                self.assertEqual(len(images),1)
+                self.assertTrue(self.native.store.asset(images[0]['asset'])[1])
+                self.assertIn('Final paragraph.',article['text'])
 
 
 class TranslationTests(unittest.TestCase):

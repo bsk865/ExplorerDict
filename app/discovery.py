@@ -440,7 +440,8 @@ class Discovery:
         else:
             from .reader_source import readable_blocks
             raw, final, charset = loader(item['url'], 5_000_000)
-            title, blocks, stats = readable_blocks(raw.decode(charset, errors='replace'), final, self.store)
+            title, blocks, stats = readable_blocks(raw.decode(charset, errors='replace'), final, self.store,
+                                                  lambda address:loader(address,24_000_000)[0])
             status = 'readable'
         article = self.store.import_article(title, blocks, origin='web')
         article.update(source_url=item['url'], source_status=status, source_stats=stats)

@@ -40,5 +40,5 @@ def read_paper(item, store, loader):
     sections = article.select('section') if article else []
     if not sections or len(article.get_text(' ', strip=True)) <= len(item.get('summary', '')) + 500:
         raise ValueError('此来源只提供摘要或受限页面，尚未取得全文。请导入原始 PDF，或明确选择仅保存摘要。')
-    title, blocks, stats = readable_blocks(html, final, store)
+    title, blocks, stats = readable_blocks(html, final, store,lambda address:loader(address,24_000_000)[0])
     return title, blocks, stats, None
