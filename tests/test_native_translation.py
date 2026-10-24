@@ -221,6 +221,87 @@ class TranslationUI(unittest.TestCase):
         self.assertEqual('保留译文', self.service.store.get('settings', b.storage_key)['result'])
         self.assertEqual('保留译文', b.state['result'])
 
+    def test_article_translation_resumes_after_reopening_and_can_restart(self):
+        from app.api_client import ApiError
+        from app.native.translation import TranslationController, TranslationPage
+        first = self.service.import_text('Long article', 'A' * 2400 + 'Last paragraph.')
+        second = self.service.import_text('Other article', 'Other original.')
+        controller = self.window.translation_for('article:' + first['id'])
+        controller.prefill(first['text'], first['title'])
+        client = Mock(base_url='https://example.org/v1', model='test-model', reasoning_effort='high', thinking='')
+        client.chat.side_effect = ['第一段译文', ApiError('network', 'Interrupted')]
+        with patch.object(self.service.workspace, 'client', return_value=client):
+            controller.start()
+            self.wait(lambda: controller.job is None)
+        saved = self.service.store.get('settings', controller.storage_key)
+        self.assertEqual(['第一段译文'], saved['checkpoint']['parts'])
+        self.assertFalse(saved['complete'])
+        restored = TranslationController(self.window, controller.scope)
+        page = TranslationPage(self.window, restored)
+        self.assertEqual('继续翻译', page.start.text())
+        self.assertFalse(page.restart.isHidden())
+        other = self.window.translation_for('article:' + second['id'])
+        self.assertEqual('', other.state['result'])
+        self.assertNotIn('checkpoint', other.state)
+        client.chat.reset_mock()
+        client.chat.side_effect = ['末段译文']
+        with patch.object(self.service.workspace, 'client', return_value=client):
+            page.start.click()
+            self.wait(lambda: restored.job is None)
+        self.assertEqual(1, client.chat.call_count)
+        self.assertEqual('Last paragraph.', client.chat.call_args.args[0][1]['content'])
+        self.assertEqual('第一段译文\n\n末段译文', page.result.toPlainText())
+        self.assertEqual('重新翻译', page.start.text())
+        self.assertTrue(page.restart.isHidden())
+        # Explicit restart from an incomplete saved draft must discard all old segments.
+        restarted = TranslationController(self.window, controller.scope)
+        restarted.state.update(saved)
+        restart_page = TranslationPage(self.window, restarted)
+        client.chat.reset_mock()
+        client.chat.side_effect = ['新第一段', '新末段']
+        with patch.object(self.service.workspace, 'client', return_value=client):
+            restart_page.restart.click()
+            self.wait(lambda: restarted.job is None)
+        self.assertEqual(2, client.chat.call_count)
+        self.assertEqual('新第一段\n\n新末段', restarted.state['result'])
+        self.assertEqual('', other.state['result'])
+        page.deleteLater()
+        restart_page.deleteLater()
+
+    def test_shutdown_saves_completed_segments_before_next_reply_returns(self):
+        from app.native.translation import TranslationController
+        article = self.service.import_text('Long article', 'A' * 2400 + 'Last paragraph.')
+        controller = self.window.translation_for('article:' + article['id'])
+        controller.prefill(article['text'], article['title'])
+        entered, released = threading.Event(), threading.Event()
+        client = Mock(base_url='https://example.org/v1', model='test-model', reasoning_effort='high', thinking='')
+        def reply(messages, **kwargs):
+            if messages[1]['content'] == 'Last paragraph.':
+                entered.set()
+                released.wait(3)
+                return '不能在停止后写入的末段'
+            return '已完成的第一段'
+        client.chat.side_effect = reply
+        try:
+            with patch.object(self.service.workspace, 'client', return_value=client):
+                controller.start()
+                self.wait(entered.is_set)
+                job_id = controller.job
+                # No timer poll is required before exiting: shutdown reads the live checkpoint.
+                controller.shutdown()
+                saved = self.service.store.get('settings', controller.storage_key)
+                self.assertEqual('已完成的第一段', saved['result'])
+                self.assertEqual(['已完成的第一段'], saved['checkpoint']['parts'])
+                self.assertFalse(saved['complete'])
+                released.set()
+                self.wait(lambda: self.service.workspace.jobs[job_id]['status'] != 'running')
+                controller.poll()
+        finally:
+            released.set()
+        restored = TranslationController(self.window, controller.scope)
+        self.assertEqual('已完成的第一段', restored.state['result'])
+        self.assertEqual(['已完成的第一段'], restored.state['checkpoint']['parts'])
+
     def test_discovery_and_floating_text_cannot_replace_article_translation(self):
         article = self.service.import_text('Bound article', 'Article text.')
         self.window.open_article(article['id'])

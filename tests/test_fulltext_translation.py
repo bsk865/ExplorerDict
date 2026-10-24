@@ -92,6 +92,54 @@ class FullPaperTests(unittest.TestCase):
 
 
 class TranslationTests(unittest.TestCase):
+    def client(self):
+        return Mock(base_url='https://example.org/v1',model='test-model',reasoning_effort='high',thinking='')
+
+    def test_network_failure_resumes_only_unfinished_parts(self):
+        client=self.client()
+        body={'source':'en','target':'zh','text':'A'*2400+'Tail.'}
+        first={'cancel':threading.Event()}
+        client.chat.side_effect=['第一段译文',ApiError('network','Interrupted')]
+        with self.assertRaises(ApiError):translate(client,first,body)
+        self.assertEqual(first['partial'],'第一段译文')
+        checkpoint=first['checkpoint']
+        client.chat.reset_mock();client.chat.side_effect=['末段译文']
+        resumed={'cancel':threading.Event()}
+        translate(client,resumed,dict(body,resume=checkpoint))
+        self.assertEqual(client.chat.call_count,1)
+        self.assertEqual(client.chat.call_args.args[0][1]['content'],'Tail.')
+        self.assertEqual(resumed['result']['text'],'第一段译文\n\n末段译文')
+        self.assertTrue(resumed['result']['complete'])
+
+    def test_progress_cannot_cross_source_language_or_model_settings(self):
+        body={'source':'en','target':'zh','text':'A'*2400+'Tail.'}
+        client=self.client();client.chat.side_effect=['Original first',ApiError('network','Interrupted')]
+        initial={'cancel':threading.Event()}
+        with self.assertRaises(ApiError):translate(client,initial,body)
+        for change in ('text','source','target','base_url','model','reasoning_effort','thinking','malformed'):
+            with self.subTest(change=change):
+                new=self.client();new.chat.side_effect=['New first','New last']
+                updated=dict(body,resume=initial['checkpoint'])
+                if change=='text':updated['text']='B'*2400+'Tail.'
+                elif change=='source':updated['source']='auto'
+                elif change=='target':updated['target']='ja'
+                elif change=='malformed':updated['resume']=dict(initial['checkpoint'],parts=[''])
+                else:setattr(new,change,'different-setting')
+                job={'cancel':threading.Event()}
+                translate(new,job,updated)
+                self.assertEqual(new.chat.call_count,2)
+                self.assertEqual(job['result']['text'],'New first\n\nNew last')
+
+    def test_fully_checkpointed_result_recovers_without_a_duplicate_request(self):
+        client=self.client();client.chat.return_value='译文'
+        body={'source':'en','target':'zh','text':'Original.'}
+        first={'cancel':threading.Event()};translate(client,first,body)
+        client.chat.reset_mock()
+        resumed={'cancel':threading.Event()};translate(client,resumed,dict(body,resume=first['checkpoint']))
+        client.chat.assert_not_called()
+        self.assertEqual(resumed['result']['text'],'译文')
+        self.assertTrue(resumed['result']['complete'])
+
     def test_chunks_preserve_all_unicode_and_whitespace(self):
         text = ('机器人\n\nTranslate this sentence. 数学公式 x+y=3。\n' * 200) + '尾声'
         self.assertEqual(text, ''.join(chunks(text)))

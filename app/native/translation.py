@@ -53,6 +53,7 @@ class TranslationController(QObject):
         self.state.update(values)
         if changed:
             self.state.update(result='', complete=False)
+            self.state.pop('checkpoint',None)
             self.message = ''
         self.save_timer.start()
 
@@ -86,7 +87,7 @@ class TranslationController(QObject):
         self.flush()
         self.changed.emit()
 
-    def start(self):
+    def start(self, *, restart=False):
         if self.job:
             return
         if not self.flush():
@@ -94,14 +95,21 @@ class TranslationController(QObject):
             self.changed.emit()
             return
         try:
-            result = self.host.service.workspace.start('translate', {key:self.state[key] for key in ('source', 'target', 'text')})
+            body={key:self.state[key] for key in ('source','target','text')}
+            if not restart and not self.state.get('complete') and self.state.get('checkpoint'):
+                body['resume']=self.state['checkpoint']
+            result = self.host.service.workspace.start('translate', body)
         except ValueError as exc:
             self.message = str(exc)
         else:
-            self.state.update(result='', complete=False)
+            if not body.get('resume'):
+                self.state['result']=''
+                self.state.pop('checkpoint',None)
+            self.state['complete']=False
             self.job = result['job']
             self.message = '正在准备翻译…'
             self.timer.start()
+            self.flush()
         self.changed.emit()
 
     def poll(self):
@@ -109,8 +117,13 @@ class TranslationController(QObject):
             job = dict(self.host.service.workspace.jobs.get(self.job, {}))
         if job.get('partial') is not None:
             self.state['result'] = job['partial']
+        checkpoint_changed = job.get('checkpoint') is not None and job['checkpoint'] != self.state.get('checkpoint')
+        if checkpoint_changed:
+            self.state['checkpoint']=job['checkpoint']
         self.message = job.get('message', self.message)
         if job.get('status') == 'running':
+            if checkpoint_changed:
+                self.flush()
             self.changed.emit()
             return
         self.timer.stop()
@@ -139,9 +152,12 @@ class TranslationController(QObject):
         if self.job:
             self.stop()
             with self.host.service.workspace.lock:
-                partial = self.host.service.workspace.jobs.get(self.job, {}).get('partial')
+                snapshot = dict(self.host.service.workspace.jobs.get(self.job, {}))
+                partial = snapshot.get('partial')
             if partial is not None:
                 self.state.update(result=partial, complete=False)
+            if snapshot.get('checkpoint') is not None:
+                self.state['checkpoint']=snapshot['checkpoint']
         self.timer.stop()
         self.flush()
 
@@ -217,10 +233,11 @@ class TranslationPage(QWidget):
         outer.addWidget(self.status)
         actions = FlowLayout(spacing=10)
         self.start = button('开始翻译', self.controller.start, primary=True)
+        self.restart = button('重新翻译',lambda:self.controller.start(restart=True))
         self.stop = button('停止', self.controller.stop)
         self.copy = button('复制译文', self.copy_result)
         self.export = button('保存译文', self.save_result)
-        for control in (self.start, self.stop, self.copy, self.export):
+        for control in (self.start, self.restart, self.stop, self.copy, self.export):
             actions.addWidget(control)
         outer.addLayout(actions)
         note = QLabel('译文自动保存在本文中，不替换原文。' if self.article_bound else '译文自动保存在本机，不替换原文。')
@@ -265,6 +282,10 @@ class TranslationPage(QWidget):
         self.target.setEnabled(not busy)
         self.swap.setEnabled(not busy and self.source.currentData() != 'auto')
         self.start.setEnabled(not busy)
+        checkpoint=state.get('checkpoint')
+        resumable=not state.get('complete') and isinstance(checkpoint,dict) and bool(checkpoint.get('parts'))
+        self.start.setText('重新翻译' if state.get('complete') else '继续翻译' if resumable else '开始翻译')
+        self.restart.setVisible(resumable and not busy)
         self.stop.setVisible(busy)
         self.copy.setEnabled(bool(state['result']))
         self.export.setEnabled(bool(state['result']))
