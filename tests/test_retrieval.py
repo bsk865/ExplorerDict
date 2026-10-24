@@ -68,6 +68,75 @@ class RetrievalTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute('SELECT count(*) FROM source_chunks').fetchone()[0],1)
 
+    def test_cached_passages_follow_renames_and_versions_without_text_changes(self):
+        article = self.article('旧标题', '阈值为83摄氏度。')
+        self.index.search([article], '阈值')
+        article.update(title='新标题', version='new-source-version')
+        self.store.update_article(article)
+        hit = self.index.search([self.store.article(article['id'])], '阈值')[0]
+        self.assertEqual('新标题', hit['article_title'])
+        self.assertEqual('new-source-version', hit['version'])
+
+    def test_article_response_cannot_restore_deleted_source_conversation(self):
+        from unittest.mock import Mock
+        article = self.article('删除中', '阈值为83摄氏度。')
+        workspace = Workspace(Path(self.temp.name))
+        client = Mock(model='test')
+        client.chat.side_effect = lambda _: (self.store.delete_articles({article['id']}) or '阈值为83摄氏度。[S1]')
+        workspace.client = lambda: client
+        job = {'cancel':threading.Event()}
+        workspace.work(job, 'chat', {'article_id':article['id'], 'question':'阈值是多少？'})
+        self.assertEqual('error', job['status'])
+        self.assertIsNone(self.store.get('sessions', article['id']+':'+article['version']+':'))
+
+    def test_article_response_rejects_changed_text_even_if_version_was_retained(self):
+        from unittest.mock import Mock
+        article = self.article('修订中', '阈值为83摄氏度。')
+        workspace = Workspace(Path(self.temp.name))
+        def revise(_):
+            article['blocks'][0]['text'] = '阈值修订为87摄氏度。'
+            self.store.update_article(article)
+            return '阈值为83摄氏度。[S1]'
+        workspace.client = lambda: Mock(model='test', chat=revise)
+        job = {'cancel':threading.Event()}
+        workspace.work(job, 'chat', {'article_id':article['id'], 'question':'阈值是多少？'})
+        self.assertEqual('error', job['status'])
+        self.assertIsNone(self.store.get('sessions', article['id']+':'+article['version']+':'))
+
+    def test_unrelated_new_term_does_not_interrupt_reading_answer(self):
+        from unittest.mock import Mock
+        article = self.article('继续阅读', '阈值为83摄氏度。')
+        workspace = Workspace(Path(self.temp.name))
+        def save_term(_):
+            self.store.object(article['id'], {'type':'term', 'block':'b0', 'title':'阈值'})
+            return '阈值为83摄氏度。[S1]'
+        workspace.client = lambda: Mock(model='test', chat=save_term)
+        job = {'cancel':threading.Event()}
+        workspace.work(job, 'chat', {'article_id':article['id'], 'question':'阈值是多少？'})
+        self.assertEqual('done', job['status'], job.get('message'))
+
+    def test_article_followup_after_restart_retrieves_previous_topic(self):
+        from unittest.mock import Mock
+        from app import conversation_budget
+        text = '普通阅读背景。'*5000 + '钙钛矿失效阈值为83摄氏度。' + '其他材料说明。'*3000
+        article = self.article('长篇研读', text)
+        workspace = Workspace(Path(self.temp.name))
+        key = article['id']+':'+article['version']+':'
+        self.store.put('sessions', key, {'messages':[
+            {'role':'user', 'content':'钙钛矿失效阈值是多少？'},
+            {'role':'assistant', 'content':'请回到原文核对。'}]})
+        conversation_budget.close(self.store, key, '它具体是多少？', '本段对话已满')
+        conversation_budget.restart(self.store, key)
+        client = Mock(model='test')
+        client.chat.return_value = '阈值为83摄氏度。[S1]'
+        workspace.client = lambda: client
+        job = {'cancel':threading.Event()}
+        workspace.work(job, 'chat', {'article_id':article['id'], 'question':'它具体是多少？'})
+        self.assertEqual('done', job['status'], job.get('message'))
+        evidence = job['result']['messages'][-1]['evidence']
+        self.assertIn('83摄氏度', evidence[0]['quote'])
+        self.assertEqual(text[evidence[0]['start']:evidence[0]['end']], evidence[0]['quote'])
+
     def test_unknown_citation_is_not_promoted_to_evidence(self):
         with self.assertRaises(ValueError):
             referenced_evidence('未经提供的结论[S99]', [{'citation':'S1','quote':'原文'}])

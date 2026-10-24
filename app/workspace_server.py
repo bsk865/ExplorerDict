@@ -302,8 +302,17 @@ class Workspace:
                 articles = [a] if scope == 'article' or obj else [self.store.article(row['id']) for row in self.store.summaries()]
                 articles = self.prepare_images(articles,client,job,
                     focus=obj if obj and obj['type']!='term' else None,required=bool(obj and obj['type']!='term'))
+                from .retrieval import source_revision
+                a = next(article for article in articles if article['id'] == a['id'])
+                obj = next((o for o in a['objects'] if o['id'] == oid), None)
+                if (oid and not obj) or key != a['id'] + ':' + a['version'] + ':' + oid:
+                    raise ValueError('资料在回答期间已变化，请重新提问。')
+                revision = source_revision(articles, focus=obj)
                 job['message'] = '正在查找相关原文与图表…'
-                evidence = self.index.search(articles, question + (' ' + obj['title'] if obj else ''), focus=obj, budget=conversation_budget.retrieval_budget(self.store, session, question))
+                query = question + (' ' + obj['title'] if obj else '')
+                if conversation_budget.is_followup(question):
+                    query += ' ' + conversation_budget.retrieval_topic(session)
+                evidence = self.index.search(articles, query, focus=obj, budget=conversation_budget.retrieval_budget(self.store, session, question))
                 vision = self.config()['vision'].get('status')
                 needs_image = bool(obj and obj['type'] != 'term')
                 if (needs_image or any(e['type']=='image' for e in evidence)) and vision not in {'supported','unsupported'}:
@@ -368,6 +377,12 @@ class Workspace:
                         if job['cancel'].is_set():
                             job['status'] = 'cancelled'
                             return
+                        current = ([self.store.article(a['id'])] if scope == 'article' or obj else
+                                   [self.store.article(row['id']) for row in self.store.summaries()])
+                        current_focus = next((o for article in current if article['id'] == a['id']
+                                              for o in article['objects'] if o['id'] == oid), None)
+                        if source_revision(current, focus=current_focus) != revision:
+                            raise ValueError('资料在回答期间已变化，请重新提问。')
                         # Draft changes and response commits must not overwrite each other.
                         latest = self.store.get('sessions', key, {})
                         session['messages'] = latest.get('messages', session['messages']) + [{'role': 'user', 'content': question}, {'role': 'assistant', 'content': answer, 'evidence': evidence, 'model': client.model}]

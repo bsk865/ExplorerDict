@@ -111,6 +111,48 @@ class LibraryAssistantTests(unittest.TestCase):
         saved = self.w.store.get('sessions', self.body['session_key'], {})
         self.assertEqual([], saved.get('messages', []))
 
+    def test_all_scope_rejects_note_edits_and_deletion_during_answer(self):
+        from app.study_hub import StudyHub
+        hub = StudyHub(self.w.store)
+        for mutation in ('edit', 'delete', 'rename'):
+            with self.subTest(mutation=mutation):
+                note = hub.save('notes', {'article_id':self.a['id'], 'title':'个人测量', 'content':'ZEBRAXYZ心得阈值为91摄氏度。'})
+                self.body = dict(scope='all', include_notes=True, question='ZEBRAXYZ阈值是多少？')
+                self.body['session_key'] = session(self.w, self.body)['key']
+                self.w.store.put('sessions', self.body['session_key'], {'messages':[], 'draft':'保留我的问题'})
+                def changed(*args, **kwargs):
+                    if mutation == 'delete':
+                        hub.delete('notes', note['id'])
+                    else:
+                        hub.save('notes', {'id':note['id'], **({'content':'ZEBRAXYZ阈值已改为95摄氏度。'} if mutation == 'edit' else {'title':'修订后的笔记'})})
+                    return '个人笔记记为91摄氏度。[S1]'
+                self.client.chat.side_effect = changed
+                self.assertEqual('error', self.run_chat()['status'])
+                saved = self.w.store.get('sessions', self.body['session_key'])
+                self.assertEqual([], saved['messages'])
+                self.assertEqual('保留我的问题', saved['draft'])
+                hub.delete('notes', note['id'])
+
+    def test_note_snapshot_precedes_retrieval_and_unused_notes_do_not_invalidate(self):
+        from app.study_hub import StudyHub
+        from unittest.mock import patch
+        hub = StudyHub(self.w.store)
+        note = hub.save('notes', {'article_id':self.a['id'], 'content':'ZEBRAXYZ阈值为91摄氏度。'})
+        self.body = dict(scope='all', include_notes=True, question='ZEBRAXYZ')
+        self.body['session_key'] = session(self.w, self.body)['key']
+        original = self.w.index.search
+        def changed(*args, **kwargs):
+            hits = original(*args, **kwargs)
+            hub.save('notes', {'id':note['id'], 'content':'ZEBRAXYZ阈值为95摄氏度。'})
+            return hits
+        with patch.object(self.w.index, 'search', side_effect=changed):
+            self.assertEqual('error', self.run_chat()['status'])
+        self.client.chat.assert_not_called()
+        self.body.update(include_notes=False, question='钙钛矿失效阈值是多少？')
+        self.body['session_key'] = session(self.w, self.body)['key']
+        self.client.chat.side_effect = lambda _: (hub.save('notes', {'id':note['id'], 'content':'无关笔记更新。'}) and '阈值为83摄氏度。[S1]')
+        self.assertEqual('done', self.run_chat()['status'])
+
     def test_scope_and_separate_session(self):
         j = self.run_chat()
         self.assertEqual(j['status'], 'done')

@@ -4,7 +4,7 @@ import json
 import re
 from collections import Counter
 from .retrieval import tokens, split_text
-from .retrieval import referenced_evidence
+from .retrieval import referenced_evidence, source_revision
 from . import conversation_budget
 
 
@@ -64,13 +64,12 @@ def capture_rows(articles):
     return rows
 
 
-def source_revision(articles):
-    return [(a['id'], a['version'], [(o['id'], o.get('capture_context', ''))
-             for o in a.get('objects', [])]) for a in articles]
-
-
 def search(workspace, body, diagnostics=None):
-    articles, key = selection(workspace, body)
+    with workspace.store.lock:
+        articles, key = selection(workspace, body)
+        notes = note_rows(workspace, articles) if body.get('include_notes') is True else []
+        if diagnostics is not None:
+            diagnostics['source_revision'] = source_revision(articles, notes)
     question = str(body.get('question', '')).strip()
     if not question or len(question) > 6000:
         raise ValueError('请输入 1 至 6000 字的问题。')
@@ -92,7 +91,7 @@ def search(workspace, body, diagnostics=None):
     if conversation_budget.is_followup(question):
         query += ' ' + conversation_budget.retrieval_topic(saved)
     hits = workspace.index.search(articles, query, text_only=True, budget=conversation_budget.retrieval_budget(workspace.store, saved, question),
-                                  extra_rows=capture_rows(articles) + (note_rows(workspace, articles) if body.get('include_notes') is True else []),
+                                  extra_rows=capture_rows(articles) + notes,
                                   diagnostics=diagnostics)
     return articles, key, question, [h for h in hits if h['score'] > 0]
 
@@ -101,13 +100,14 @@ def answer(workspace, job, body):
     job['message'] = '正在本机查找所选资料中的原文…'
     diagnostics = {}
     articles, key, question, hits = search(workspace, body, diagnostics)
-    revision = source_revision(articles)
+    revision = diagnostics['source_revision']
     if body.get('session_key') != key:
         raise ValueError('资料版本已变化，请重新打开资料库问答。')
     saved = workspace.store.get('sessions', key, {'messages': [], 'draft': ''})
     with workspace.store.lock:
         live_articles, live_key = selection(workspace, body)
-        if live_key != key or source_revision(live_articles) != revision:
+        live_notes = note_rows(workspace, live_articles) if body.get('include_notes') is True else []
+        if live_key != key or source_revision(live_articles, live_notes) != revision:
             raise ValueError('资料版本已变化，请重新提问。')
         saved['article_ids'] = [a['id'] for a in articles]
         workspace.store.put('sessions', key, saved)
@@ -158,7 +158,8 @@ def answer(workspace, job, body):
     with workspace.store.lock:
         # Deletion/version changes during a request must not resurrect removed content.
         current_articles, current_key = selection(workspace, body)
-        if current_key != key or source_revision(current_articles) != revision:
+        current_notes = note_rows(workspace, current_articles) if body.get('include_notes') is True else []
+        if current_key != key or source_revision(current_articles, current_notes) != revision:
             raise ValueError('资料在回答期间已变化，请重新提问。')
         if job['cancel'].is_set():
             return

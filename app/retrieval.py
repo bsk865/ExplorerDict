@@ -37,6 +37,21 @@ def split_text(text):
         start = max(start + 1, end - OVERLAP)
 
 
+def source_revision(articles, notes=(), *, focus=None):
+    """Fingerprint the actual material used, including edits that retain a version."""
+    sources = [{'id':a['id'], 'version':a['version'], 'title':a['title'],
+                'blocks':a['blocks'], 'source_status':a.get('source_status'),
+                'captures':[{k:o.get(k) for k in ('id','capture_context')}
+                            for o in sorted(a.get('objects', []), key=lambda o:o['id'])]
+                           if a.get('source_status') == 'pending_source' else []}
+               for a in sorted(articles, key=lambda a:a['id'])]
+    personal = [{k:n.get(k) for k in ('article_id','version','note_id','note_title','origin','block','start','end','quote')}
+                for n in sorted(notes, key=lambda n:(n['note_id'], n['start']))]
+    selected = ({k:focus.get(k) for k in ('id','type','title','block','asset','region','capture_context')}
+                if focus else None)
+    return hashlib.sha256(json.dumps([sources, personal, selected], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
 class SourceIndex:
     def __init__(self, store, semantic=None):
         self.store = store
@@ -48,7 +63,8 @@ class SourceIndex:
 
     def ensure(self, article):
         # Include image descriptions: later visual indexing invalidates this cache.
-        fingerprint = hashlib.sha256(json.dumps(article['blocks'], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        fingerprint = hashlib.sha256(json.dumps({k:article[k] for k in ('title','version','blocks')},
+                                               sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         with self.store.lock, self.store.connect() as db:
             row = db.execute('SELECT fingerprint FROM source_indexes WHERE article_id=?', (article['id'],)).fetchone()
             if row and row[0] == fingerprint:
