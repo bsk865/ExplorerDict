@@ -2,7 +2,8 @@
 from pathlib import Path
 from threading import Event
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar, QListWidget
+from PySide6.QtWidgets import (QVBoxLayout, QLabel, QProgressBar, QListWidget)
+from .surfaces import QDialog
 from .widgets import button
 
 

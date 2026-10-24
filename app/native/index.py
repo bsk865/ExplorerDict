@@ -1,6 +1,7 @@
 """Local semantic index status and source-chunk inspection."""
 from PySide6.QtCore import QObject, Signal, QTimer, Qt
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QListWidget, QListWidgetItem, QLabel, QMessageBox
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QListWidget, QListWidgetItem, QLabel)
+from .surfaces import QMessageBox
 from .widgets import button, heading
 
 

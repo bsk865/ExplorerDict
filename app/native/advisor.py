@@ -4,9 +4,8 @@ from copy import deepcopy
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtCore import Qt, QDate, QTime
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTextBrowser, QPlainTextEdit,
-                              QLabel, QListWidget, QListWidgetItem, QMessageBox, QWidget, QToolButton,
-                              QCheckBox, QDateEdit, QTimeEdit, QSpinBox, QGridLayout, QScrollArea, QLayout)
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QTextBrowser, QPlainTextEdit, QLabel, QListWidget, QListWidgetItem, QWidget, QToolButton, QCheckBox, QDateEdit, QTimeEdit, QSpinBox, QGridLayout, QScrollArea, QLayout)
+from .surfaces import QDialog, QMessageBox
 from .widgets import button
 from ..paths import resource_root
 

@@ -3,7 +3,8 @@ import base64
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QMenu, QInputDialog, QFileDialog, QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QLabel
+from PySide6.QtWidgets import (QMenu, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QLabel)
+from .surfaces import QInputDialog, QFileDialog, QDialog
 from .dialogs import EditForm
 from .widgets import button
 

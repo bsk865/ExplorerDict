@@ -217,6 +217,16 @@ def stylesheet(preferences):
     return f'''
         QWidget {{ color:{ink}; font-family:"Microsoft YaHei UI"; font-size:13px; }}
         QMainWindow, QDialog, QWidget#page {{ background:{bg}; }}
+        QWidget#dialogHeader {{ background:{bg}; border-bottom:1px solid {border}; }}
+        QLabel#dialogTitle {{ font-size:17px; font-weight:600; }}
+        QPushButton#dialogClose {{ padding:0; border:0; font-size:23px; border-radius:5px; }}
+        QWidget#infoCard {{ background:{soft}; border:1px solid {border}; border-radius:8px; }}
+        QWidget#infoCard QLabel {{ border:0; background:transparent; }}
+        QMenu {{ background:{bg}; color:{ink}; border:1px solid {border}; padding:5px; }}
+        QMenu::item {{ padding:8px 22px; border-radius:4px; }}
+        QMenu::item:selected {{ background:{soft}; }}
+        QTreeView, QListView {{ background:{bg}; color:{ink}; border:1px solid {border}; selection-background-color:{soft}; selection-color:{ink}; }}
+        QTreeView::item {{ min-height:32px; padding:2px 6px; }}
         QWidget#sidebar {{ background:{c.get('quiet', soft)}; border-right:1px solid {border}; }}
         QLabel#heading {{ font-size:23px; font-weight:600; }}
         QLabel#brand {{ font-size:21px; font-weight:600; }}

@@ -1,9 +1,8 @@
 """Compact, labelled forms for existing content types."""
 from datetime import date, timedelta
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit,
-                              QSpinBox, QComboBox, QListWidget, QListWidgetItem, QDialogButtonBox, QLabel,
-                              QHBoxLayout)
+from PySide6.QtWidgets import (QVBoxLayout, QFormLayout, QLineEdit, QPlainTextEdit, QSpinBox, QComboBox, QListWidget, QListWidgetItem, QDialogButtonBox, QLabel, QHBoxLayout)
+from .surfaces import QDialog
 from .widgets import PageComboBox as QComboBox
 from .widgets import button
 from .navigation import icon

@@ -2,9 +2,8 @@
 from html import escape
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QRegularExpression
 from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QColor
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget,
-                              QListWidgetItem, QCheckBox, QTextBrowser, QScrollArea,
-                              QPlainTextEdit, QLabel, QDialog, QDialogButtonBox, QMenu, QMessageBox)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QCheckBox, QTextBrowser, QScrollArea, QPlainTextEdit, QLabel, QDialogButtonBox, QMenu)
+from .surfaces import QDialog, QMessageBox
 from .widgets import button, heading, FlowLayout
 from .. import library_assistant, conversation_budget, reading_preferences
 from .dialogs import EditForm

@@ -4,9 +4,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRectF, QSize
 from PySide6.QtGui import QColor, QPen, QBrush, QPainterPath, QPainter, QImage, QTextDocument, QPixmap
 from PySide6.QtSvg import QSvgGenerator
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene,
-                              QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel,
-                              QTextBrowser, QFileDialog, QStyle, QDialog, QTabWidget)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel, QTextBrowser, QStyle, QTabWidget)
+from .surfaces import QFileDialog, QDialog
 from .widgets import PageComboBox as QComboBox
 from .widgets import button, heading
 from ..reading_preferences import colors

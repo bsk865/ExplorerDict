@@ -2,9 +2,8 @@
 import json
 from PySide6.QtCore import Qt, QMimeData, Signal, QSize, QPoint
 from PySide6.QtGui import QDrag, QPainter, QPen, QColor, QTextLayout, QTextOption, QPixmap
-from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QListWidget,
-                              QListWidgetItem, QAbstractItemView, QSplitter, QMenu, QLabel, QStyledItemDelegate, QDialog,
-                              QScrollArea, QSizePolicy)
+from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QAbstractItemView, QSplitter, QMenu, QLabel, QStyledItemDelegate, QScrollArea, QSizePolicy)
+from .surfaces import QDialog
 from .widgets import button, heading
 from .dialogs import EditForm
 from .materials import article_menu

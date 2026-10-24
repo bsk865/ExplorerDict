@@ -2,8 +2,8 @@
 import sqlite3
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                              QLabel, QButtonGroup, QSizePolicy)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QButtonGroup, QSizePolicy)
+from .surfaces import QDialog
 from .widgets import button, stylesheet
 from ..paths import resource_root
 from .. import reading_preferences

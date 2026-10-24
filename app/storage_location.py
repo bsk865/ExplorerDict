@@ -78,7 +78,7 @@ def apply_pending(source, *, components_stopped=True):
         if any(p.is_symlink() or (hasattr(p,'is_junction') and p.is_junction()) for p in source.rglob('*')):
             raise ValueError('目录包含链接，请先移除链接或选择其他目录。')
         target.mkdir(parents=True, exist_ok=True)
-        ignored = {'workspace-session-v7.json','capture-status.json'}
+        ignored = {'workspace-session-v7.json','capture-status.json', '.reader-instance.json', '.reader-instance.tmp'}
         for item in source.iterdir():
             if item.name in ignored or item.name.endswith(('-wal','-shm')):
                 continue

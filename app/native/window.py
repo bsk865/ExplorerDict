@@ -3,9 +3,8 @@ from datetime import date, timedelta
 from copy import deepcopy
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                              QLineEdit, QStackedWidget, QButtonGroup, QMessageBox,
-                              QFileDialog, QInputDialog, QSizeGrip, QStyle, QScrollArea)
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QStackedWidget, QButtonGroup, QSizeGrip, QStyle, QScrollArea)
+from .surfaces import QMessageBox, QFileDialog, QInputDialog
 from .widgets import Tasks, button, stylesheet
 from .dialogs import EditForm, TaskForm, NoteForm
 from .shelf import ShelfPage
@@ -30,6 +29,9 @@ class TitleBar(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 4, 0)
         row.addWidget(QLabel('探索词典'))
+        version = QLabel('发现版 · 2026.10.24')
+        version.setObjectName('muted')
+        row.addWidget(version)
         row.addStretch()
         for icon, title, action in [(QStyle.StandardPixmap.SP_TitleBarMinButton, '最小化', window.showMinimized),
                                      (QStyle.StandardPixmap.SP_TitleBarMaxButton, '最大化 / 还原', self.maximize),

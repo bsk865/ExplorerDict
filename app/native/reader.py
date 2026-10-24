@@ -2,8 +2,8 @@
 from bs4 import BeautifulSoup
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QMimeData, QEvent, QSize
 from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextBlockFormat, QColor, QImage, QTextImageFormat, QPixmap, QIcon
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter,
-                              QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QDialog, QTabBar, QScrollArea)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter, QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QTabBar, QScrollArea)
+from .surfaces import QDialog
 from ..reading_annotations import block_text
 from .widgets import button, heading
 from .dialogs import EditForm

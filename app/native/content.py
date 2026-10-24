@@ -1,7 +1,7 @@
 """Searchable management rows matching the original local content inventory."""
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox,
-                              QLineEdit, QScrollArea, QSizePolicy, QDialog, QTextBrowser, QLabel)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QLineEdit, QScrollArea, QSizePolicy, QTextBrowser, QLabel)
+from .surfaces import QDialog
 from .widgets import PageComboBox as QComboBox
 from .widgets import heading, button
 from .navigation import icon

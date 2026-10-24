@@ -5,8 +5,8 @@ from xml.etree import ElementTree
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel,
-                              QButtonGroup, QGridLayout, QDialog, QSizePolicy)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QButtonGroup, QGridLayout, QSizePolicy)
+from .surfaces import QDialog
 from ..paths import resource_root
 from ..reading_preferences import colors
 from .widgets import button

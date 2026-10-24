@@ -1,6 +1,7 @@
 """Native model, context and storage settings using shared persistence."""
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QWidget, QFormLayout, QLineEdit, QLabel, QFileDialog, QSlider, QScrollArea
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QFormLayout, QLineEdit, QLabel, QSlider, QScrollArea)
+from .surfaces import QDialog, QFileDialog
 from .widgets import button, PageSlider, PageComboBox
 from .. import conversation_budget, storage_location, reading_preferences
 
@@ -90,6 +91,13 @@ class SettingsDialog(QDialog):
         row.addWidget(self.storage_details)
         row.addStretch()
         storage_actions.addLayout(row)
+        self.storage_card = QWidget()
+        self.storage_card.setObjectName('infoCard')
+        self.storage_card.setVisible(False)
+        self.storage_card_layout = QVBoxLayout(self.storage_card)
+        self.storage_card_layout.setContentsMargins(16, 14, 16, 14)
+        self.storage_card_layout.setSpacing(10)
+        storage_actions.addWidget(self.storage_card)
         sections.addWidget(storage_entry)
         context = QWidget()
         context.setObjectName('settingsContext')
@@ -121,9 +129,10 @@ class SettingsDialog(QDialog):
         actions.addStretch()
         policy.addRow(actions)
         sections.addWidget(context)
-        self.storage_dialog = QDialog(self)
-        self.storage_dialog.setWindowTitle('存储位置')
-        self.storage_dialog.resize(550, 390)
+        self.storage_dialog = QWidget()
+        self.storage_dialog.setObjectName('infoCard')
+        self.storage_dialog.setVisible(False)
+        storage_actions.addWidget(self.storage_dialog)
         storage = self.storage_dialog
         area = QVBoxLayout(storage)
         area.setContentsMargins(20, 22, 20, 20)
@@ -151,7 +160,7 @@ class SettingsDialog(QDialog):
         self.location_status = QLabel()
         self.location_status.setWordWrap(True)
         area.addWidget(self.location_status)
-        area.addWidget(button('返回设置', self.storage_dialog.accept), alignment=Qt.AlignmentFlag.AlignRight)
+        area.addWidget(button('收起', self.storage_dialog.hide), alignment=Qt.AlignmentFlag.AlignRight)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -185,7 +194,9 @@ class SettingsDialog(QDialog):
     def open_storage(self):
         self.show_storage()
         self.location_status.clear()
-        self.storage_dialog.exec()
+        self.storage_dialog.setVisible(not self.storage_dialog.isVisible())
+        if self.storage_dialog.isVisible():
+            QTimer.singleShot(0, lambda: self.scroll.ensureWidgetVisible(self.target))
 
     def save_model(self):
         try:
@@ -248,6 +259,10 @@ class SettingsDialog(QDialog):
             self.target.setText(directory)
 
     def show_storage_details(self):
+        if self.storage_card.isVisible():
+            self.storage_card.hide()
+            self.storage_details.setText('查看本地保存')
+            return
         self.storage_details.setEnabled(False)
         def loaded(info):
             from shiboken6 import isValid
@@ -256,20 +271,22 @@ class SettingsDialog(QDialog):
             self.storage_details.setEnabled(True)
             if not self.isVisible():
                 return
-            dialog = QDialog(self)
-            dialog.setWindowTitle('本地保存')
-            dialog.resize(550, 380)
-            layout = QVBoxLayout(dialog)
-            for value in ('文章、导图、草稿和问答保存在本机。', info['directory'], info['database']):
+            layout = self.storage_card_layout
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            layout.addWidget(section_heading('本地保存'))
+            for value in (info['directory'], info['database']):
                 text = QLabel(value)
                 text.setTextFormat(Qt.TextFormat.PlainText)
                 text.setWordWrap(True)
                 layout.addWidget(text)
             for row in info['items']:
                 layout.addWidget(QLabel(f"{row['label']}：{row['count']} 条，{row['bytes']/1024:.1f} KB 内容"))
-            layout.addStretch()
-            layout.addWidget(button('关闭', dialog.accept), alignment=Qt.AlignmentFlag.AlignRight)
-            dialog.exec()
+            self.storage_card.show()
+            self.storage_details.setText('收起保存信息')
+            QTimer.singleShot(0, lambda: self.scroll.ensureWidgetVisible(self.storage_card))
         def failed(_):
             from shiboken6 import isValid
             if isValid(self):

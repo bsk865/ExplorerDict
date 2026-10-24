@@ -31,19 +31,19 @@ class NativeStorageInfoTests(unittest.TestCase):
         self.service.close()
         self.temp.cleanup()
 
-    def test_storage_dialog_shows_actual_local_counts(self):
+    def test_storage_card_shows_actual_local_counts_without_new_window(self):
         self.host.tasks.submit.side_effect = lambda work, done, failed: done(work())
-        captured = []
-        def inspect():
-            dialog = QApplication.activeModalWidget()
-            if dialog:
-                captured.extend(label.text() for label in dialog.findChildren(QLabel))
-                dialog.accept()
-        QTimer.singleShot(0, inspect)
+        windows = set(QApplication.topLevelWidgets())
         self.dialog.show_storage_details()
+        captured = [label.text() for label in self.dialog.storage_card.findChildren(QLabel)]
         self.assertIn(str(self.service.store.directory.resolve()), captured)
         self.assertTrue(any('文章与正式导图：1 条' in text for text in captured))
         self.assertTrue(self.dialog.storage_details.isEnabled())
+        self.assertTrue(self.dialog.storage_card.isVisible())
+        self.assertIsNone(QApplication.activeModalWidget())
+        self.assertEqual(windows, set(QApplication.topLevelWidgets()))
+        self.dialog.show_storage_details()
+        self.assertFalse(self.dialog.storage_card.isVisible())
 
     def test_storage_error_and_late_result_do_not_open_modal(self):
         self.host.tasks.submit.side_effect = lambda work, done, failed: failed('private diagnostic')

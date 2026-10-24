@@ -1,8 +1,8 @@
 """Article notes with durable drafts and serialized background saves."""
 from uuid import uuid4
 from PySide6.QtCore import QObject, Signal, QTimer, Qt
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                              QPlainTextEdit, QToolButton, QScrollArea, QMessageBox)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QToolButton, QScrollArea)
+from .surfaces import QMessageBox
 from .widgets import button
 
 

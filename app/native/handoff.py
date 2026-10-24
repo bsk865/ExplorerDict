@@ -2,7 +2,8 @@
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QWidget, QStackedWidget, QScrollArea, QPlainTextEdit, QLabel, QFileDialog
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QStackedWidget, QScrollArea, QPlainTextEdit, QLabel)
+from .surfaces import QDialog, QFileDialog
 from .widgets import button
 
 

@@ -1,7 +1,8 @@
 """Native image inspection and normalized region selection."""
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPixmap, QPen, QColor, QBrush
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QGraphicsView, QGraphicsScene, QLabel, QStyle
+from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QGraphicsView, QGraphicsScene, QLabel, QStyle)
+from .surfaces import QDialog
 from .widgets import button
 
 
