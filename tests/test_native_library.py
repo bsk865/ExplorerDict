@@ -202,6 +202,28 @@ class NativeLibraryTests(unittest.TestCase):
         self.assertEqual('library:source:2:0', second.charFormat().anchorHref())
         self.assertFalse(document.find('[S9]').charFormat().isAnchor())
 
+    def test_markdown_lists_do_not_continue_into_controls_or_later_messages(self):
+        self.show()
+        self.host.library.session['messages'] = [
+            {'role':'assistant', 'content':'- 第一点 [S1]\n- 第二点',
+             'evidence':[{'citation':'S1','article_title':'依据'}]},
+            {'role':'user', 'content':'下一问'},
+            {'role':'assistant', 'content':'普通回答'},
+        ]
+        self.page.render()
+        self.page.message_action(QUrl('library:sources:0'))
+        block = self.page.transcript.document().begin()
+        points = []
+        while block.isValid():
+            text = block.text()
+            if text.startswith(('第一点', '第二点')):
+                self.assertIsNotNone(block.textList())
+                points.append(text)
+            else:
+                self.assertIsNone(block.textList(), text)
+            block = block.next()
+        self.assertEqual(2, len(points))
+
     def open_reference(self, hit):
         errors = []
         def locate():

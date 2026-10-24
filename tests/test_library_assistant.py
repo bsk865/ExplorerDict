@@ -197,6 +197,24 @@ class LibraryAssistantTests(unittest.TestCase):
         self.assertEqual(j['status'], 'cancelled')
         self.assertEqual(session(self.w, self.body)['session']['messages'], [])
 
+    def test_success_clears_only_the_submitted_draft(self):
+        key = self.body['session_key']
+        self.w.store.put('sessions', key, {'messages':[], 'draft':self.body['question']})
+        self.assertEqual('', self.run_chat()['result']['draft'])
+        saved = self.w.store.get('sessions', key)
+        saved['draft'] = self.body['question']
+        self.w.store.put('sessions', key, saved)
+        def next_draft(_):
+            latest = self.w.store.get('sessions', key)
+            latest['draft'] = '接下来想问的新问题'
+            self.w.store.put('sessions', key, latest)
+            return '阈值为83摄氏度。[S1]'
+        self.client.chat.side_effect = next_draft
+        result = self.run_chat()
+        self.assertEqual('done', result['status'])
+        self.assertEqual('接下来想问的新问题', result['result']['draft'])
+        self.assertEqual(4, len(result['result']['messages']))
+
     def test_deleting_article_removes_library_conversation(self):
         self.run_chat()
         self.w.store.delete_articles({self.a['id']})

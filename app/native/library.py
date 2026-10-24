@@ -1,7 +1,7 @@
 """Native library conversations using the existing retrieval and job pipeline."""
 from html import escape
 from PySide6.QtCore import QObject, Signal, QTimer, Qt, QRegularExpression
-from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QColor
+from PySide6.QtGui import QPixmap, QTextCursor, QTextDocument, QColor, QTextBlockFormat, QTextCharFormat
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QCheckBox, QTextBrowser, QScrollArea, QPlainTextEdit, QLabel, QDialogButtonBox, QMenu)
 from .surfaces import QDialog, QMessageBox
 from .widgets import button, heading, FlowLayout
@@ -451,7 +451,7 @@ class LibraryPage(QWidget):
         for index, message in enumerate(self.controller.session.get('messages', [])):
             assistant = message.get('role') == 'assistant'
             cursor.insertHtml('<p><b>' + ('小探' if assistant else '我') + '</b></p>')
-            cursor.insertBlock()
+            cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
             content_start = cursor.position()
             cursor.insertMarkdown(message.get('content', ''), QTextDocument.MarkdownFeature.MarkdownNoHTML)
             content_end = cursor.position()
@@ -473,11 +473,11 @@ class LibraryPage(QWidget):
                         colors = reading_preferences.colors(self.snapshot['preferences']['palette'], self.snapshot['preferences']['mode'])
                         fmt.setForeground(QColor(colors['accent-text']))
                         probe.setCharFormat(fmt)
-            cursor.insertBlock()
+            cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
             if evidence:
                 cursor.insertHtml(f'<p><a href="library:sources:{index}">参考来源 · {len(evidence)}' +
                                   (' · 收起' if index in self.expanded_sources else ' · 展开') + '</a></p>')
-                cursor.insertBlock()
+                cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
                 if index in self.expanded_sources:
                     for number, hit in enumerate(evidence):
                         label = escape(hit.get('article_title', '原文'))
@@ -486,11 +486,11 @@ class LibraryPage(QWidget):
                         elif hit.get('source') == 'capture_context':
                             label += ' · 划词片段'
                         cursor.insertHtml(f'<p><a href="library:source:{index}:{number}">{number+1}. {label}</a></p>')
-                        cursor.insertBlock()
+                        cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
             if assistant and evidence:
                 cursor.insertHtml(f'<p><a href="library:note:{index}">整理为笔记</a></p>')
-                cursor.insertBlock()
-            cursor.insertBlock()
+                cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
+            cursor.insertBlock(QTextBlockFormat(), QTextCharFormat())
 
     def message_action(self, url):
         parts = url.toString().split(':')

@@ -166,4 +166,6 @@ def answer(workspace, job, body):
         latest = workspace.store.get('sessions', key, saved)
         latest.update(article_ids=[a['id'] for a in articles], context_usage=usage)
         latest['messages'] += [{'role':'user','content':question}, {'role':'assistant','content':result,'evidence':cited,'model':model}]
+        if latest.get('draft', '').strip() == question:
+            latest['draft'] = ''
         job['result'] = conversation_budget.finish(workspace.store, key, latest, job)
