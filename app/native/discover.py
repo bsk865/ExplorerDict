@@ -4,12 +4,13 @@ from hashlib import sha256
 import re
 import time
 from PySide6.QtCore import QObject, Signal, Qt, QTimer, QUrl
-from PySide6.QtGui import QPixmap, QDesktopServices
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                               QScrollArea, QStackedWidget, QButtonGroup, QSizePolicy)
 from .widgets import button, heading, FlowLayout, PageComboBox
 from ..discovery import canonical, stamp, TOPICS, SOURCES
 from ..reading_preferences import colors
+from .external_links import open_source, copy_link
 
 
 def label(text, muted=False):
@@ -88,9 +89,11 @@ class DiscoveryController(QObject):
         self.work(lambda: self.service.add_link(url), '正在读取文章信息和来源封面…',
                   lambda item: '已收集「'+item['title']+'」，可在“收集”中查看')
 
-    def collect(self, item):
-        self.work(lambda: self.service.import_item(item['id']), '正在加入资料库…',
-                  lambda article: '已加入资料库。点击“打开资料”即可阅读和问答。')
+    def collect(self, item, mode='full'):
+        self.work(lambda: self.service.import_item(item['id'], mode=mode),
+                  '正在下载并提取全文…' if mode == 'full' else '正在保存摘要…',
+                  lambda article: '全文已加入资料库，可打开阅读和问答。' if article.get('source_status') != 'abstract'
+                  else '已单独保存摘要，未取得全文。')
 
     def flag(self, item, name, value):
         self.service.flag(item['id'], name, value)
@@ -274,17 +277,25 @@ class DiscoverPage(QWidget):
         if item.get('authors'):
             layout.addWidget(label(item['authors'], True))
         layout.addWidget(label(item.get('summary') or '来源未提供简介，请在原站阅读。'))
-        layout.addWidget(label('论文这里只展示来源摘要，加入资料库后仍标为摘要。' if item['kind']=='paper' else '读取全文需来源页面提供可访问的正文；受限页面请在原站阅读。', True))
+        layout.addWidget(label('这里预览来源摘要。加入资料库将下载论文全文并保留原始 PDF；摘要可单独保存。' if item['kind']=='paper' else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
         layout.addWidget(label(item['url'], True))
         actions = FlowLayout(spacing=8)
-        actions.addWidget(button('打开原站', lambda: QDesktopServices.openUrl(QUrl(item['url']))))
+        actions.addWidget(button('打开原站', lambda: open_source(self.host, item['url'])))
+        actions.addWidget(button('复制链接', lambda: copy_link(self.host, item['url'])))
+        actions.addWidget(button('翻译摘要' if item['kind'] == 'paper' else '翻译简介',
+                                 lambda: self.host.open_translation(item.get('summary', ''), item['title'])))
         article_id = item.get('article_id')
-        if article_id and self.host.service.store.get('articles', article_id):
+        article = self.host.service.store.get('articles', article_id) if article_id else None
+        if article:
             actions.addWidget(button('打开资料', lambda: self.host.open_article(article_id), primary=True))
-        else:
-            collect = button('加入资料库'+('（摘要）' if item['kind']=='paper' else ''), lambda: self.controller.collect(item), primary=True)
+        if not article or article.get('source_status') == 'abstract':
+            collect = button('获取全文并加入资料库', lambda: self.controller.collect(item), primary=True)
             collect.setEnabled(not self.controller.busy)
             actions.addWidget(collect)
+        if item['kind'] == 'paper' and not item.get('abstract_article_id') and not (article and article.get('source_status') == 'abstract'):
+            abstract = button('仅保存摘要', lambda: self.controller.collect(item, 'abstract'))
+            abstract.setEnabled(not self.controller.busy)
+            actions.addWidget(abstract)
         layout.addLayout(actions)
         layout.addStretch()
         scroll.setWidget(body)

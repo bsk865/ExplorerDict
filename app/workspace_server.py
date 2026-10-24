@@ -144,6 +144,9 @@ class Workspace:
                 'conversation_policy': conversation_budget.policy(self.store)}
 
     def start(self, kind, body, *, background=False):
+        if kind == 'translate':
+            from .translation import validate
+            validate(body)
         scope = kind + ':' + str(body.get('article_id', '')) + ':' + str(body.get('object_id', ''))
         map_key = None
         if kind == 'map':
@@ -192,7 +195,10 @@ class Workspace:
             client.cancel_event = job['cancel']
             client.background_request = lambda: bool(job.get('background'))
             client.on_context = lambda report: job.update(context=dict(report, model=client.model, signature=hashlib.sha256((client.base_url + client.model).encode()).hexdigest()))
-            if kind == 'detect':
+            if kind == 'translate':
+                from .translation import translate
+                translate(client, job, body)
+            elif kind == 'detect':
                 job['message'] = '正在使用无个人资料的测试图验证模型…'
                 im = Image.new('RGB', (240, 160), 'white'); d = ImageDraw.Draw(im)
                 # Random position/count is not disclosed in the prompt.

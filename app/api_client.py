@@ -1306,7 +1306,13 @@ class DeepSeekClient:
         }, self.reasoning_effort)
         if isinstance(getattr(self, 'chat_output_limit', None), int):
             payload['max_tokens'] = self.chat_output_limit
-        return parse_chat_reply(self._extract_content(self._post(payload)))
+        response = self._post(payload)
+        content = self._extract_content(response)
+        if getattr(self, 'require_complete_response', False):
+            reason = json.loads(response)['choices'][0].get('finish_reason')
+            if reason != 'stop':
+                raise ApiError('bad_response', '本段译文被接口截断或未正常结束，尚未作为完整译文保存。请缩短原文后重试。')
+        return parse_chat_reply(content)
 
     def ask(self, question: str, *, term: str, context: str = "", explanation: str = "",
             history=None, max_chars: int = 4000, temperature: float = 0.3) -> str:

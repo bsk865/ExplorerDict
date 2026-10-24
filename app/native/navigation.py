@@ -38,7 +38,7 @@ def icon(name, color):
 
 
 ROUTES = [('discover', '发现', 'search'), ('today', '今日', 'grid'), ('shelf', '主题资料库', 'archive'), ('plans', '计划', 'list'),
-          ('progress', '探索统计', 'map'), ('library', '资料库问答', 'search'),
+          ('progress', '探索统计', 'map'), ('library', '资料库问答', 'search'), ('translate', '翻译', 'repeat'),
           ('notes', '笔记管理', 'note'), ('content', '内容管理', 'settings')]
 
 

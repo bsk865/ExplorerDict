@@ -57,7 +57,7 @@ class DiscoveryTests(unittest.TestCase):
         rows = parse_feed(atom, dict(SOURCE, kind='paper'))
         self.native.store.put('settings', 'discovery-state', {'items':rows, 'updated':0})
         self.assertEqual([], self.native.store.summaries())
-        article = self.service.import_item(rows[0]['id'], lambda *_: self.fail('abstract import should not fetch'))
+        article = self.service.import_item(rows[0]['id'], lambda *_: self.fail('abstract import should not fetch'), mode='abstract')
         self.assertEqual('abstract', article['source_status'])
         self.assertIn('非全文', article['text'])
         self.assertEqual('预印本', rows[0]['publication'])

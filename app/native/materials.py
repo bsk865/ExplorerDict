@@ -2,11 +2,11 @@
 import base64
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QMenu, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QLabel)
 from .surfaces import QInputDialog, QFileDialog, QDialog
 from .dialogs import EditForm
 from .widgets import button
+from .external_links import open_source, copy_link
 
 
 def article_info(host, article, parent=None):
@@ -24,7 +24,21 @@ def article_info(host, article, parent=None):
     layout.addWidget(summary)
     url = QUrl(article.get('source_url', ''))
     if url.scheme() in ('http', 'https') and url.host():
-        layout.addWidget(button('在原网页阅读', lambda: QDesktopServices.openUrl(url)))
+        layout.addWidget(button('在原网页阅读', lambda: open_source(host, url.toString())))
+        layout.addWidget(button('复制原站链接', lambda: copy_link(host, url.toString())))
+    document = article.get('source_document', {})
+    if document.get('asset'):
+        def save_original():
+            import re
+            name = re.sub(r'[<>:"/\\|?*]', '_', article['title'][:60]).rstrip('. ') or '论文'
+            filename, _ = QFileDialog.getSaveFileName(dialog, '保存原始论文', name + '.pdf', 'PDF (*.pdf)')
+            if filename:
+                try:
+                    Path(filename).write_bytes(host.service.store.asset(document['asset'])[1])
+                    host.notice('原始论文已保存')
+                except (OSError, ValueError):
+                    host.notice('未能保存原始论文，请检查文件夹权限。')
+        layout.addWidget(button('保存原始 PDF', save_original))
     actions = QHBoxLayout()
     def run(action):
         dialog.accept()

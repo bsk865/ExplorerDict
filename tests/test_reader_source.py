@@ -38,8 +38,13 @@ class ReaderSourceTests(unittest.TestCase):
         self.assertLess(text.index('Beginning'), text.index('Ending'))
         self.assertNotIn('\\mathcal', text)
 
-    def test_failed_image_is_explicit_and_code_not_prose(self):
+    def test_failed_image_is_explicit_and_original_code_is_preserved(self):
         _, blocks, stats = readable_blocks('<article><h1>Title</h1><figure><img src="a.png"><figcaption>Chart</figcaption></figure><pre>secret source code</pre></article>', 'https://example.org', None)
         self.assertEqual(stats['missing_images'], 1)
         self.assertTrue(blocks[1]['image_missing'])
-        self.assertNotIn('secret source code', str(blocks))
+        self.assertIn('secret source code', blocks[2]['text'])
+        self.assertTrue(blocks[2]['source_code'])
+
+    def test_explicit_paywall_does_not_claim_fulltext(self):
+        with self.assertRaises(ValueError):
+            readable_blocks('<article><p>Opening paragraph.</p><div class="paywall">Subscribe</div></article>', 'https://example.org', None)

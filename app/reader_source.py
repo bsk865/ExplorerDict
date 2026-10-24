@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlsplit, urldefrag
 from urllib.request import Request, build_opener
 from bs4 import BeautifulSoup, Tag
 
-ALLOWED = set('p h1 h2 h3 h4 h5 h6 strong em b i u sub sup span br blockquote ul ol li table thead tbody tfoot tr th td caption math semantics mrow mi mo mn mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose mpadded mstyle mmultiscripts mprescripts none'.split())
+ALLOWED = set('p pre code h1 h2 h3 h4 h5 h6 strong em b i u sub sup span br blockquote ul ol li table thead tbody tfoot tr th td caption math semantics mrow mi mo mn mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose mpadded mstyle mmultiscripts mprescripts none'.split())
 MATH_ATTRS = set('display mathvariant stretchy fence separator accent accentunder columnalign rowalign columnspacing rowspacing colspan rowspan linethickness notation lspace rspace width height depth voffset scriptlevel'.split())
 DROP = 'script,style,iframe,object,embed,form,input,button,textarea,select,nav,header,footer,aside,annotation,annotation-xml,noscript,template,.ltx_tag_item'
 
@@ -31,6 +31,9 @@ def readable_blocks(html, url, store, load_image=None):
     article = (soup.select_one('#js_content') if wechat else None) or soup.find('article') or soup.find('main')
     if article is None:
         raise ValueError('这页没有明确的文章区域。请导入原文件，或继续在原网页阅读；不把局部抓取冒充全文。')
+    access = soup.find('meta', attrs={'itemprop':'isAccessibleForFree'})
+    if (access and str(access.get('content', '')).lower() == 'false') or article.select_one('.paywall, #paywall, [data-paywall]'):
+        raise ValueError('此页面存在订阅或登录限制，未能确认全文。请导入你已获取的原文件。')
     title = (soup.select_one('#activity-name') if wechat else None) or article.find('h1') or soup.find('title')
     title = title.get_text(' ',strip=True) if title else '网页文章'
     for node in list(article.select(DROP)):
@@ -68,8 +71,10 @@ def readable_blocks(html, url, store, load_image=None):
         if node.name in {'p','h1','h2','h3','h4','h5','h6','table','blockquote','li'}:
             emit(node);return
         if node.name in {'pre','code'}:
-            # Do not expose source-code blocks as reader prose.
-            blocks.append({'type':'text','text':'此处包含源代码，请在原网页查看。','source_code':True});return
+            blocks.append({'type':'text','text':node.get_text().strip('\n'), 'html':safe_markup(node),
+                           'source_code':True, 'source_anchor':node.get('id','')});return
+        if node.name == 'math':
+            emit(node);return
         for child in list(node.children):
             walk(child)
     walk(article)

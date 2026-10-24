@@ -326,15 +326,22 @@ class Discovery:
             self.store.put('settings', 'discovery-state', state)
         return len(files)
 
-    def import_item(self, key, loader=fetch):
+    def import_item(self, key, loader=fetch, *, mode='full'):
         item = next((row for row in self.state()['items'] if row['id'] == key), None)
         if not item:
             raise ValueError('该内容已不在发现列表中，请重新添加链接。')
-        if item['kind'] == 'paper':
+        if mode not in {'full', 'abstract'} or mode == 'abstract' and item['kind'] != 'paper':
+            raise ValueError('请选择全文导入，或为论文明确选择保存摘要。')
+        document = None
+        if item['kind'] == 'paper' and mode == 'abstract':
             if not item.get('summary'):
                 raise ValueError('来源没有提供摘要，请在原站下载论文后导入。')
             blocks = [{'type': 'text', 'text': ('论文摘要节选（非全文）' if item.get('summary_truncated') else '论文摘要（非全文）')+'\n'+item['summary']}]
             title, stats, status = item['title'], {}, 'abstract'
+        elif item['kind'] == 'paper':
+            from .paper_source import read_paper
+            title, blocks, stats, document = read_paper(item, self.store, loader)
+            status = 'readable'
         else:
             from .reader_source import readable_blocks
             raw, final, charset = loader(item['url'], 5_000_000)
@@ -342,6 +349,11 @@ class Discovery:
             status = 'readable'
         article = self.store.import_article(title, blocks, origin='web')
         article.update(source_url=item['url'], source_status=status, source_stats=stats)
+        if document:
+            article.update(source_document=document)
         self.store.update_article(article)
-        self.flag(key, 'article_id', article['id'])
+        self.flag(key, 'abstract_article_id' if status == 'abstract' else 'full_article_id', article['id'])
+        flags = self.store.get('settings', 'discovery-flags', {}).get(key, {})
+        full_id = flags.get('full_article_id')
+        self.flag(key, 'article_id', full_id if full_id and self.store.get('articles', full_id) else article['id'])
         return article

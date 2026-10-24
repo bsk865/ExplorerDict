@@ -5,7 +5,7 @@ from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextBlockFormat, QColor
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter, QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QTabBar, QScrollArea)
 from .surfaces import QDialog
 from ..reading_annotations import block_text
-from .widgets import button, heading
+from .widgets import button, heading, FlowLayout
 from .dialogs import EditForm
 from .chat import ChatPanel
 from .notes import NotesPanel
@@ -256,12 +256,12 @@ class ReaderPage(QWidget):
         self.resume_assistant = host.width() >= 1000
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        bar = QHBoxLayout()
+        bar = FlowLayout(spacing=8)
         bar.addWidget(button('我的文章', lambda: host.navigate('shelf')))
-        bar.addStretch()
         bar.addWidget(button('原文', lambda: self.text.setFocus()))
         bar.addWidget(button('导图', lambda: host.navigate('map', self.article['id'])))
         bar.addWidget(button('笔记', self.show_notes))
+        bar.addWidget(button('翻译', self.translate))
         self.assistant_toggle = button('问本文', self.toggle_assistant)
         bar.addWidget(self.assistant_toggle)
         material = button('文章操作')
@@ -606,6 +606,15 @@ class ReaderPage(QWidget):
         if obj:
             self.choose_object(obj)
             self.chat.open_image()
+
+    def translate(self):
+        selected = self.text.selected_segments()
+        text = '\n\n'.join(segment['quote'] for segment in selected) if selected else '\n\n'.join(
+            block['text'] for block in self.article['blocks'] if block['type'] == 'text' and block.get('text'))
+        if not text.strip():
+            self.host.notice('这份资料尚无可翻译的文本，请先补充正文。')
+            return
+        self.host.open_translation(text, self.article['title'] + (' · 选中内容' if selected else ''))
 
     def selection_changed(self):
         if hasattr(self, 'find_bar') and not self.find_bar.isHidden() and self.find_bar.query.hasFocus():

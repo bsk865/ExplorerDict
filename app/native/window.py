@@ -19,6 +19,7 @@ from .saved import SavedPage
 from .navigation import Sidebar
 from .topbar import TopBar
 from .discover import DiscoveryController, DiscoverPage
+from .translation import TranslationController, TranslationPage
 
 
 class TitleBar(QWidget):
@@ -29,7 +30,7 @@ class TitleBar(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 4, 0)
         row.addWidget(QLabel('探索词典'))
-        version = QLabel('发现版 · 2026.10.24')
+        version = QLabel('全文与翻译版 · 2026.10.24')
         version.setObjectName('muted')
         row.addWidget(version)
         row.addStretch()
@@ -63,6 +64,7 @@ class NativeWindow(QMainWindow):
         self.discovery = DiscoveryController(self)
         self.tasks = Tasks(self)
         self.tasks.error.connect(self.notice)
+        self.translation = TranslationController(self)
         self.library = LibraryController(self)
         self.article_chats = {}
         self.note_controllers = {}
@@ -238,6 +240,9 @@ class NativeWindow(QMainWindow):
             elif page == 'discover':
                 widget = DiscoverPage(self)
                 title = '发现'
+            elif page == 'translate':
+                widget = TranslationPage(self)
+                title = '翻译'
             elif page == 'library':
                 widget = LibraryPage(self, self.snapshot)
                 if restored and 'library' in restored:
@@ -376,6 +381,11 @@ class NativeWindow(QMainWindow):
         self.article_note = note_id
         self.navigate('reader', key, remember)
         self.tasks.submit(lambda: self.service.activity.record(key), lambda _: None)
+
+    def open_translation(self, text='', origin=''):
+        if text and not self.translation.prefill(text, origin):
+            return
+        self.navigate('translate')
 
     def resume_draft(self, record):
         if record['id'] == 'native-advisor-draft':
@@ -579,6 +589,7 @@ class NativeWindow(QMainWindow):
             if isinstance(page, ReaderPage):
                 page.save_view()
             self.closing = True
+            self.translation.shutdown()
             self.topbar.timer.stop()
             self.search_timer.stop()
             for controller in self.note_controllers.values():
