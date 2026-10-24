@@ -1,4 +1,5 @@
 import io
+import base64
 import re
 import tempfile
 import threading
@@ -198,6 +199,74 @@ class RetrievalTests(unittest.TestCase):
         self.assertEqual(len(answer['evidence']),1)
         self.assertIn('0.83',answer['evidence'][0]['quote'])
         self.assertIn('0.83',str(captured))
+
+    def test_image_descriptions_do_not_invalidate_source_or_expand_selected_region(self):
+        for region in (None, [.2, .1, .4, .5]):
+            with self.subTest(region=region):
+                workspace = Workspace(Path(self.temp.name))
+                workspace.map_preloader.close()
+                raw = io.BytesIO()
+                Image.new('RGB', (1000, 500), 'white').save(raw, 'PNG')
+                asset, _ = workspace.store.image(raw.getvalue())
+                article = workspace.store.import_article('图表', [{'type':'image', 'asset':asset, 'caption':'温度图', 'page':2}])
+                obj = workspace.store.object(article['id'], {'type':'region' if region else 'image', 'asset':asset,
+                                            'block':'b0', 'title':'温度', 'region':region})
+                workspace.store.put('settings', 'vision', {'status':'supported', 'signature':workspace.config()['signature']})
+                workspace.store.put('settings', 'context_limits', {workspace.config()['signature']:65536})
+                calls = []
+                class Client:
+                    model = 'test'
+                    def chat(self, messages):
+                        calls.append(messages)
+                        return '温度达到83摄氏度。[S1]' if '[S1]' in str(messages) else '图中温度为83摄氏度。'
+                workspace.client = Client
+                job = {'cancel':threading.Event()}
+                workspace.work(job, 'chat', {'article_id':article['id'], 'object_id':obj['id'], 'question':'图中温度是多少？'})
+                self.assertEqual('done', job['status'], job.get('message'))
+                answer = job['result']['messages'][-1]
+                self.assertEqual(asset, answer['evidence'][0]['asset'])
+                self.assertEqual(region, answer['evidence'][0].get('region'))
+                self.assertTrue(answer['evidence'][0]['image_sent'])
+                self.assertNotIn('visual_description', workspace.store.article(article['id'])['blocks'][0])
+                urls = [part['image_url']['url'] for message in calls[-1] if isinstance(message['content'], list)
+                        for part in message['content'] if part.get('type') == 'image_url']
+                self.assertEqual(1, len(urls))
+                with Image.open(io.BytesIO(base64.b64decode(urls[0].split(',', 1)[1]))) as sent:
+                    self.assertEqual((400,250) if region else (1000,500), sent.size)
+                if region:
+                    for messages in calls:
+                        for message in messages:
+                            for part in message['content'] if isinstance(message['content'], list) else []:
+                                if part.get('type') == 'image_url':
+                                    with Image.open(io.BytesIO(base64.b64decode(part['image_url']['url'].split(',', 1)[1]))) as sent:
+                                        self.assertEqual((400,250), sent.size)
+
+    def test_changes_during_image_indexing_still_reject_the_answer(self):
+        workspace = Workspace(Path(self.temp.name))
+        workspace.map_preloader.close()
+        raw = io.BytesIO()
+        Image.new('RGB', (100, 60), 'blue').save(raw, 'PNG')
+        asset, _ = workspace.store.image(raw.getvalue())
+        article = workspace.store.import_article('原图标题', [{'type':'image', 'asset':asset, 'caption':'蓝色图'}])
+        workspace.store.put('settings', 'vision', {'status':'supported', 'signature':workspace.config()['signature']})
+        workspace.store.put('settings', 'context_limits', {workspace.config()['signature']:65536})
+        calls = []
+        class Client:
+            model = 'test'
+            def chat(self, messages):
+                calls.append(messages)
+                if len(calls) == 1:
+                    changed = workspace.store.article(article['id'])
+                    changed['title'] = '更正后的标题'
+                    workspace.store.update_article(changed)
+                    return '蓝色矩形'
+                return '图中是蓝色矩形。[S1]'
+        workspace.client = Client
+        job = {'cancel':threading.Event()}
+        workspace.work(job, 'chat', {'article_id':article['id'], 'question':'图中有什么？'})
+        self.assertEqual('error', job['status'])
+        self.assertIn('资料在回答期间已变化', job['message'])
+        self.assertFalse(workspace.store.get('sessions', article['id']+':'+article['version']+':', {}).get('messages'))
 
     def test_unrepairable_reference_is_error_and_not_saved(self):
         article = self.article('文章','这是实际提供的原文。')

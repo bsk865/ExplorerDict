@@ -2,6 +2,8 @@
 import base64
 import copy
 import io
+import hashlib
+import json
 from PIL import Image
 
 
@@ -13,19 +15,27 @@ class VisualIndex:
 
     def enrich(self, articles, client, signature, cancel, progress, focus=None):
         articles = copy.deepcopy(articles)
+        region = focus.get('region') if focus else None
+        cache_signature = signature
+        if region:
+            cache_signature += ':region:' + hashlib.sha256(json.dumps(region, separators=(',', ':')).encode()).hexdigest()
         images = [(a,b) for a in articles for b in a['blocks'] if b['type']=='image'
                   and (not focus or (a['id']==focus['article_id'] and b['id']==focus['block']))]
         for i, (article, block) in enumerate(images):
             if cancel.is_set():
                 raise ValueError('已停止识别图片。')
             with self.store.connect() as db:
-                row = db.execute('SELECT description FROM visual_index WHERE asset=? AND signature=?',(block['asset'],signature)).fetchone()
+                row = db.execute('SELECT description FROM visual_index WHERE asset=? AND signature=?',(block['asset'],cache_signature)).fetchone()
             if row:
                 block['visual_description'] = row[0]
                 continue
             progress(f'正在识别图片 {i+1}/{len(images)} · {article["title"][:40]}')
             _, raw = self.store.asset(block['asset'])
             with Image.open(io.BytesIO(raw)) as image:
+                if region:
+                    x, y, w, h = region
+                    iw, ih = image.size
+                    image = image.crop((int(x*iw), int(y*ih), max(int((x+w)*iw), int(x*iw)+1), max(int((y+h)*ih), int(y*ih)+1)))
                 image.thumbnail((1800,1800))
                 out=io.BytesIO(); image.convert('RGB').save(out,'PNG')
             description = client.chat([
@@ -40,6 +50,6 @@ class VisualIndex:
             with self.store.lock, self.store.connect() as db:
                 if cancel.is_set():
                     raise ValueError('已停止识别图片。')
-                db.execute('INSERT OR REPLACE INTO visual_index VALUES(?,?,?)',(block['asset'],signature,description))
+                db.execute('INSERT OR REPLACE INTO visual_index VALUES(?,?,?)',(block['asset'],cache_signature,description))
             block['visual_description'] = description
         return articles

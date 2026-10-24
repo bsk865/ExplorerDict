@@ -111,13 +111,16 @@ class NativeRouteHistoryTests(unittest.TestCase):
                     self.app.processEvents()
                 self.assertEqual(0, chat.horizontalScrollBar().maximum())
                 self.assertLessEqual(chat.widget().width(), chat.viewport().width())
-                controls = [chat.explain, chat.saved, chat.understood, chat.note, chat.send,
+                self.assertTrue(chat.object_menu.menuAction().isVisible())
+                self.assertEqual(not job and not closed, chat.explain_action.isEnabled())
+                self.assertIn('会话笔记', [action.text() for action in chat.menu.actions()])
+                self.assertTrue(all(control.isHidden() for control in (chat.explain, chat.saved, chat.understood, chat.note)))
+                controls = [chat.send,
                             chat.stop if job else chat.restart if closed else chat.send]
                 for control in controls:
                     self.assertTrue(control.isVisible())
                     self.assertGreaterEqual(control.geometry().left(), 0)
                     self.assertLess(control.geometry().right(), chat.widget().width())
-                self.assertFalse(chat.understood.geometry().intersects(chat.explain.geometry()))
                 chat.ensureWidgetVisible(chat.send)
                 self.app.processEvents()
                 self.assertTrue(chat.viewport().rect().contains(chat.send.mapTo(chat.viewport(), chat.send.rect().center())))

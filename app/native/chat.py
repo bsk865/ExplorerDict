@@ -149,6 +149,11 @@ class ChatPanel(QScrollArea):
         self.focus_locate.hide()
         layout.addWidget(self.focus_locate)
         self.focus_evidence_toggle.toggled.connect(self.toggle_focus_evidence)
+        self.object_menu = self.menu.addMenu('当前对象')
+        self.explain_action = self.object_menu.addAction('解释', self.explain_focus)
+        self.saved_action = self.object_menu.addAction('收藏', self.save_object)
+        self.understood_action = self.object_menu.addAction('标记理解', self.mark_understood)
+        self.object_menu.addAction('原文依据', lambda: self.focus_evidence_toggle.setChecked(not self.focus_evidence_toggle.isChecked()))
         self.welcome = QScrollArea()
         self.welcome.setWidgetResizable(True)
         self.welcome.setFrameShape(QScrollArea.Shape.NoFrame)
@@ -210,6 +215,7 @@ class ChatPanel(QScrollArea):
         layout.addWidget(self.status)
         actions = FlowLayout(spacing=6)
         self.note = button('会话笔记', self.edit_note)
+        self.menu.addAction('会话笔记', self.edit_note)
         self.restart = button('接续', lambda: self.controller.restart())
         self.stop = button('停止', lambda: self.controller.stop())
         self.send = button('发送', lambda: self.controller.send(self.input.toPlainText(), self.scope.currentData()), primary=True)
@@ -268,6 +274,14 @@ class ChatPanel(QScrollArea):
         if hasattr(self, 'input'):
             self.input.setPlaceholderText('针对原文继续提问…' if self.scope.currentData() == 'article' else '结合资料书架提问…')
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = event.size().height() < 420
+        if compact != getattr(self, 'compact', False):
+            self.compact = compact
+            if self.controller:
+                self.render()
+
     def toggle_evidence(self, expanded):
         self.evidence.setVisible(expanded and self.evidence.count() > 0)
         self.evidence_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
@@ -289,19 +303,24 @@ class ChatPanel(QScrollArea):
         self.evidence_toggle.setText(f'参考来源 · {self.evidence.count()}')
         self.toggle_evidence(self.evidence_toggle.isChecked())
         obj = self.current_object()
+        compact = getattr(self, 'compact', False)
         welcome = not obj and not c.session.get('messages') and not c.job
         self.welcome.setVisible(welcome)
         self.messages.setVisible(not welcome)
-        self.explain.setVisible(bool(obj))
-        self.focus_evidence_toggle.setVisible(bool(obj))
+        self.explain.setVisible(bool(obj) and not compact)
+        self.focus_evidence_toggle.setVisible(bool(obj) and not compact)
         self.toggle_focus_evidence(bool(obj) and self.focus_evidence_toggle.isChecked())
         if obj:
             block = next((b for b in self.article['blocks'] if b['id'] == obj['block']), {})
             self.focus_evidence.setPlainText(obj.get('capture_context') or block.get('text') or block.get('caption', ''))
-        self.saved.setVisible(bool(obj))
-        self.understood.setVisible(bool(obj))
+        self.saved.setVisible(bool(obj) and not compact)
+        self.understood.setVisible(bool(obj) and not compact)
         self.saved.setText('已收藏' if obj and obj['saved'] else '收藏')
         self.understood.setText('已理解' if obj and obj['understood'] else '标记理解')
+        self.object_menu.menuAction().setVisible(bool(obj) and compact)
+        self.saved_action.setText(self.saved.text())
+        self.understood_action.setText(self.understood.text())
+        self.note.setVisible(not compact)
         self.scope_menu.menuAction().setVisible(not obj)
         self.image_button.setVisible(bool(obj and obj['type'] != 'term'))
         self.restart.setVisible(bool(c.session.get('closed')))
@@ -312,6 +331,7 @@ class ChatPanel(QScrollArea):
             control.setEnabled(not c.job)
         self.send.setEnabled(not c.job and not c.session.get('closed'))
         self.explain.setEnabled(not c.job and not c.session.get('closed'))
+        self.explain_action.setEnabled(self.explain.isEnabled())
         self.stop.setEnabled(bool(c.job))
         self.stop.setVisible(bool(c.job))
         self.status.setText(c.message)

@@ -1,4 +1,5 @@
 import io
+import base64
 import tempfile
 import threading
 import unittest
@@ -48,6 +49,24 @@ class VisualIndexTests(unittest.TestCase):
         self.assertEqual(len(self.calls),1)
         self.index.enrich([a],self.client,'model-b',self.cancel,lambda _:None)
         self.assertEqual(len(self.calls),2)
+
+    def test_region_index_uses_only_selected_pixels_and_its_own_cache(self):
+        a = self.article()
+        image = a['objects'][0]
+        self.index.enrich([a], self.client, 'model-a', self.cancel, lambda _:None)
+        first = dict(image, type='region', region=[.1, .2, .3, .4])
+        self.index.enrich([a], self.client, 'model-a', self.cancel, lambda _:None, focus=first)
+        self.index.enrich([a], self.client, 'model-a', self.cancel, lambda _:None, focus=first)
+        second = dict(image, type='region', region=[.5, .5, .2, .2])
+        self.index.enrich([a], self.client, 'model-a', self.cancel, lambda _:None, focus=second)
+        self.index.enrich([a], self.client, 'model-a', self.cancel, lambda _:None)
+        self.assertEqual(3, len(self.calls))
+        sizes = []
+        for messages in self.calls:
+            url = messages[1]['content'][1]['image_url']['url']
+            with Image.open(io.BytesIO(base64.b64decode(url.split(',', 1)[1]))) as sent:
+                sizes.append(sent.size)
+        self.assertEqual([(100,100), (30,40), (20,20)], sizes)
 
     def test_cancelled_response_is_not_saved(self):
         a=self.article()

@@ -300,14 +300,15 @@ class Workspace:
                     conversation_budget.guard(self.store, key, question, minimum,
                                               job['conversation_policy'], job['cancel'])
                 articles = [a] if scope == 'article' or obj else [self.store.article(row['id']) for row in self.store.summaries()]
+                from .retrieval import source_revision
+                # Compare the stored source, before adding generated image search descriptions.
+                revision = source_revision(articles, focus=obj)
                 articles = self.prepare_images(articles,client,job,
                     focus=obj if obj and obj['type']!='term' else None,required=bool(obj and obj['type']!='term'))
-                from .retrieval import source_revision
                 a = next(article for article in articles if article['id'] == a['id'])
                 obj = next((o for o in a['objects'] if o['id'] == oid), None)
                 if (oid and not obj) or key != a['id'] + ':' + a['version'] + ':' + oid:
                     raise ValueError('资料在回答期间已变化，请重新提问。')
-                revision = source_revision(articles, focus=obj)
                 job['message'] = '正在查找相关原文与图表…'
                 query = question + (' ' + obj['title'] if obj else '')
                 if conversation_budget.is_followup(question):

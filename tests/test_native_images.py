@@ -1,8 +1,9 @@
 import io
 import unittest
 import tempfile
+import time
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from PIL import Image
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtTest import QTest
@@ -131,6 +132,50 @@ class NativeImageSelectionTests(unittest.TestCase):
             reopened.close()
             host.close()
             service.close()
+
+    def test_narrow_image_chat_keeps_send_visible_and_object_actions_available(self):
+        from app.native.window import NativeWindow
+        with tempfile.TemporaryDirectory() as directory:
+            service = NativeService(Path(directory))
+            service.workspace.map_preloader.close()
+            service.workspace.rag.request = Mock()
+            asset, _ = service.store.image(self.raw)
+            article = service.store.import_article('图片阅读', [{'type':'image', 'asset':asset, 'caption':'图表'}])
+            obj = service.store.object(article['id'], dict(type='region', title='图表局部', block='b0', asset=asset, region=[.2,.1,.4,.5]))
+            with patch('app.native.topbar.TopBar.check_capture', lambda self:None):
+                window = NativeWindow(service, discovery_updates=False)
+                window.resize(900, 620)
+                window.show()
+                def settle():
+                    deadline = time.monotonic()+5
+                    while window.navigation_busy or window.tasks.pending:
+                        self.app.processEvents()
+                        self.assertLess(time.monotonic(), deadline)
+                        time.sleep(.01)
+                    for _ in range(10): self.app.processEvents()
+                settle()
+                window.open_article(article['id'], object_id=obj['id'])
+                settle()
+                panel = window.stack.currentWidget().chat
+                panel.controller.session['messages'] = [
+                    {'role':'user', 'content':'图片里的实验结果是什么？'},
+                    {'role':'assistant', 'content':'图片中的实验结果。[S1]', 'evidence':[
+                        {'citation':'S1', 'article_title':'图片阅读', 'quote':'图表'}]}]
+                panel.render()
+                settle()
+                self.assertTrue(panel.object_menu.menuAction().isVisible())
+                self.assertTrue(panel.saved.isHidden())
+                self.assertEqual(0, panel.verticalScrollBar().maximum())
+                self.assertTrue(panel.viewport().rect().contains(panel.send.mapTo(panel.viewport(), panel.send.rect().bottomRight())))
+                panel.saved_action.trigger()
+                self.assertTrue(panel.current_object()['saved'])
+                self.assertEqual('已收藏', panel.saved_action.text())
+                window.resize(1440, 900)
+                settle()
+                self.assertTrue(panel.saved.isVisible())
+                self.assertFalse(panel.object_menu.menuAction().isVisible())
+                window.close()
+                settle()
 
 
 if __name__ == '__main__':
