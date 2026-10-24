@@ -2,9 +2,10 @@ import hashlib
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from app.workspace_store import WorkspaceStore
-from app.long_article_map import run,segments
+from app.long_article_map import run,segments,task_timeout,SEGMENT_CHARS
 
 
 class LongMapTests(unittest.TestCase):
@@ -33,8 +34,13 @@ class LongMapTests(unittest.TestCase):
         parts=list(segments(self.text))
         self.assertEqual(parts[0][0],0);self.assertEqual(parts[-1][1],len(self.text))
         for i,(start,end,text) in enumerate(parts):
-            self.assertEqual(text,self.text[start:end]);self.assertLessEqual(len(text),24000)
+            self.assertEqual(text,self.text[start:end]);self.assertLessEqual(len(text),SEGMENT_CHARS)
             if i:self.assertLess(start,parts[i-1][1])
+
+    def test_task_budget_covers_more_segments_but_stays_bounded(self):
+        self.assertEqual(task_timeout('短文'), 600)
+        self.assertGreater(task_timeout(self.text), task_timeout('短文'))
+        self.assertEqual(task_timeout('长文。' * 100_000), 1800)
 
     def test_merged_tree_preserves_every_word_and_exact_quotes(self):
         graph,quality=self.generate()
@@ -67,8 +73,81 @@ class LongMapTests(unittest.TestCase):
         graph,_=self.generate()
         self.assertEqual(len(self.calls),graph['segments'])
 
+    def test_failed_forced_rebuild_clears_all_old_parts_and_resumes_new_progress(self):
+        self.generate()
+        count=len(self.calls)
+        self.generate(signature='other-model')
+        with self.store.connect() as db:
+            keys=db.execute('SELECT id,version FROM map_parts').fetchall()
+            db.executemany('INSERT INTO map_stages VALUES(?,?,?)',
+                           [(row[0],row[1],'{}') for row in keys])
+        original=self.runner
+        attempts=0
+        def rebuild(client,**kwargs):
+            nonlocal attempts
+            attempts+=1
+            if attempts==2:raise ValueError('模拟重建中断')
+            graph,quality=original(client,**kwargs)
+            graph['nodes'][0]['label']='重新研读'
+            return graph,quality
+        with self.assertRaisesRegex(ValueError,'模拟重建中断'):
+            self.generate(force=True,runner=rebuild)
+        with self.store.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM map_parts').fetchone()[0],count+1)
+            self.assertEqual(db.execute('SELECT count(*) FROM map_stages').fetchone()[0],count)
+        calls=len(self.calls)
+        graph,_=self.generate()
+        self.assertEqual(len(self.calls)-calls,count-1)
+        self.assertEqual(graph['nodes'][1]['label'],'重新研读')
+        calls=len(self.calls)
+        self.generate(signature='other-model')
+        self.assertEqual(len(self.calls),calls)
+
+    def test_each_model_stage_reports_the_current_document_segment(self):
+        messages = []
+        def model_run(client, *, progress, cancel, **kwargs):
+            progress('独立阅读全文')
+            kwargs.pop('resume', None)
+            kwargs.pop('checkpoint', None)
+            return self.runner(client, **kwargs)
+        with patch('app.long_article_map.article_map.run', side_effect=model_run):
+            graph, _ = self.generate(runner=None, progress=messages.append)
+        for segment in range(1, graph['segments']+1):
+            self.assertIn(f'第 {segment}/{graph["segments"]} 段 · 独立阅读全文', messages)
+
     def test_cancelled_segment_does_not_enter_cache(self):
         def stopped(client,**kwargs):
             result=self.runner(client,**kwargs);self.cancel.set();return result
         with self.assertRaises(ValueError):self.generate(runner=stopped)
         with self.store.connect() as db:self.assertEqual(db.execute('SELECT count(*) FROM map_parts').fetchone()[0],0)
+
+    def test_medium_article_is_fully_segmented_and_review_stage_resumes_after_reopen(self):
+        from tests.test_full_article_map import FixtureClient, FIXTURES
+        from app.api_client import ApiError
+        from app import article_map
+        f=FIXTURES[0]
+        class Interrupted(FixtureClient):
+            interrupted=False
+            def full_article_map(self, **kwargs):
+                if kwargs['stage']=='review' and not self.interrupted:
+                    self.interrupted=True
+                    raise ApiError('network','模拟连接中断')
+                return super().full_article_map(**kwargs)
+        client=Interrupted(f)
+        args=dict(text=f['text'],title='测试原文',version='stage-version',signature='test-model',
+                  selected_words=f['selected_words'],cancel=self.cancel,progress=lambda _:None,on_attempt=lambda *args:None)
+        with self.assertRaises(ApiError):run(self.store,client,**args)
+        self.assertEqual([c['stage'] for c in client.calls],['read','generate'])
+        reopened=WorkspaceStore(Path(self.temp.name))
+        graph,quality=run(reopened,client,**args)
+        self.assertTrue(quality['approved'])
+        self.assertEqual([c['stage'] for c in client.calls],['read','generate','review'])
+        self.assertEqual(graph['root'],f['draft']['root'])
+        with reopened.connect() as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM map_stages').fetchone()[0],0)
+        medium='一段完整的阅读材料。\n\n'*1000
+        with patch('app.long_article_map.article_map.run', side_effect=lambda client,**kw:self.runner(
+                client,text=kw['text'],selected_words=kw['selected_words'],on_attempt=kw['on_attempt'])):
+            graph,_=self.generate(text=medium,selected_words=[],runner=None)
+        self.assertLess(len(medium),article_map.MAX_TEXT_CHARS)
+        self.assertGreater(graph['segments'],1)

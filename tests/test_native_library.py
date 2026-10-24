@@ -123,7 +123,7 @@ class NativeLibraryTests(unittest.TestCase):
         self.assertEqual('question', self.host.library.body['mode'])
         self.page.input.clear()
         self.page.compare_action.trigger()
-        self.assertIn('研究对象', self.host.library.request.call_args.args[0])
+        self.assertEqual('这些文章有哪些共同点和差异？', self.host.library.request.call_args.args[0])
 
     def test_old_scope_response_cannot_replace_new_selection(self):
         controller = self.host.library

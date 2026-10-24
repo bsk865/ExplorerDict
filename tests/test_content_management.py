@@ -69,6 +69,19 @@ class ContentManagementTests(unittest.TestCase):
             remove(self.store,'articles',self.article['id'])
         self.assertIsNotNone(self.store.article(self.article['id']))
 
+    def test_removing_map_clears_resumable_stages_and_preserves_other_articles(self):
+        other=self.store.import_article('Other',[{'type':'text','text':'Unrelated material.'}])
+        with self.store.connect() as db:
+            for table in ('map_parts','map_stages'):
+                db.execute(f'CREATE TABLE {table}(id TEXT PRIMARY KEY,version TEXT,payload TEXT)')
+                db.executemany(f'INSERT INTO {table} VALUES(?,?,?)',
+                               [('removed',self.article['version'],'{}'),('kept',other['version'],'{}')])
+        remove(self.store,'maps',self.article['id'])
+        with self.store.connect() as db:
+            for table in ('map_parts','map_stages'):
+                self.assertEqual([r[0] for r in db.execute(f'SELECT id FROM {table}')],['kept'])
+        self.assertEqual(self.store.article(self.article['id'])['text'],'Material for notes and exploration.')
+
     def test_synced_object_does_not_return_after_deletion(self):
         from contextlib import closing
         from app.db import Database

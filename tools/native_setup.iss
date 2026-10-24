@@ -45,6 +45,7 @@ Name: "{app}\data"; Flags: uninsneveruninstall
 [Files]
 Source: "{#PackageDir}\探索词典-原生版.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PackageDir}\探索词典.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PackageDir}\companion-source.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PackageDir}\_native_runtime\*"; DestDir: "{app}\_native_runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#PackageDir}\_runtime\*"; DestDir: "{app}\_runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
 

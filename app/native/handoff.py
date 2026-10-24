@@ -16,12 +16,12 @@ class HandoffDialog(QDialog):
         super().__init__(parent)
         self.host = host
         self.records = records(session)
-        self.setWindowTitle('会话交接记录')
+        self.setWindowTitle('对话回顾')
         self.resize(640, 520)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
-        note = QLabel('原对话与交接记录保存在本机，可随时导出。')
+        note = QLabel('原对话与对话回顾保存在本机，可随时导出。')
         note.setWordWrap(True)
         note.setObjectName('muted')
         layout.addWidget(note)
@@ -47,7 +47,7 @@ class HandoffDialog(QDialog):
             rows_layout.addWidget(entry)
             self.entries.append(entry)
         if not self.records:
-            rows_layout.addWidget(QLabel('当前会话尚未生成交接记录。'))
+            rows_layout.addWidget(QLabel('当前会话尚未生成对话回顾。'))
         rows_layout.addStretch()
         listing.setWidget(rows)
         rows.setAutoFillBackground(False)
@@ -55,7 +55,7 @@ class HandoffDialog(QDialog):
         self.pages.addWidget(listing)
         self.document = QPlainTextEdit()
         self.document.setReadOnly(True)
-        self.document.setAccessibleName('交接记录正文')
+        self.document.setAccessibleName('对话回顾正文')
         self.pages.addWidget(self.document)
         layout.addWidget(self.pages, 1)
         self.status = QLabel()
@@ -74,7 +74,7 @@ class HandoffDialog(QDialog):
 
     def select(self, index):
         text = self.records[index].get('handoff', '') if 0 <= index < len(self.records) else ''
-        self.document.setPlainText(text or '当前会话尚未生成交接记录。')
+        self.document.setPlainText(text or '当前会话尚未生成对话回顾。')
         self.pages.setCurrentIndex(1)
         self.back.show()
         self.export.show()
@@ -92,7 +92,7 @@ class HandoffDialog(QDialog):
     def save(self):
         if not self.export.isEnabled():
             return
-        filename, _ = QFileDialog.getSaveFileName(self, '导出会话交接记录', '小探-会话交接记录.md', 'Markdown (*.md)')
+        filename, _ = QFileDialog.getSaveFileName(self, '导出对话回顾', '小探-对话回顾.md', 'Markdown (*.md)')
         if not filename:
             return
         try:
@@ -100,4 +100,4 @@ class HandoffDialog(QDialog):
         except OSError:
             self.status.setText('未能保存，请选择其他位置后重试。')
             return
-        self.status.setText('交接记录已导出。')
+        self.status.setText('对话回顾已导出。')

@@ -123,7 +123,8 @@ class ConversationBudgetTests(unittest.TestCase):
     def test_handoff_keeps_exact_evidence(self):
         s={'messages':[{'role':'assistant','content':'回答[S1]','evidence':[{'article_title':'来源','article_id':'a','version':'v','block':'b1','quote':'原文证据'}]}]}
         text=cb.handoff(s,'待解决的问题','到达预算')
-        self.assertIn('原文证据',text);self.assertIn('版本 v',text);self.assertIn('待解决的问题',text)
+        self.assertIn('原文证据',text);self.assertIn('来源：来源',text);self.assertIn('待解决的问题',text)
+        self.assertNotIn('版本 v',text)
 
 
 if __name__=='__main__':unittest.main()

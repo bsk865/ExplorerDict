@@ -2198,7 +2198,7 @@ class TestDetailExplainActions(unittest.TestCase):
                 probe.retry_explain_result = False
                 self.assertFalse(probe.panel._on_retry_explain())
                 hint = str(probe.panel.hint_label.cget("text"))
-                self.assertIn("主界面配置 API", hint)
+                self.assertIn("设置中添加模型密钥", hint)
                 self.assertLessEqual(len(hint), 30, f"失败提示必须短：{hint}")
                 self.assertEqual(probe.panel._hint_action, "main",
                                  "失败提示本身可点 → 直接打开主界面")

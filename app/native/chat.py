@@ -28,13 +28,13 @@ class ArticleConversation(QObject):
     def draft(self, value):
         self.session = self.host.service.store.update_session(self.key, {'draft': value})
 
-    def send(self, question, scope='article'):
+    def send(self, question, scope='article', *, intent=''):
         if self.job or self.session.get('closed') or not question.strip():
             return
         self.draft(question)
         try:
             result = self.host.service.workspace.start('chat', {'article_id': self.article_id,
-                'object_id': self.object_id, 'question': question, 'scope': scope})
+                'object_id': self.object_id, 'question': question, 'scope': scope, 'intent': intent})
         except ValueError as exc:
             self.message = str(exc)
         else:
@@ -54,7 +54,7 @@ class ArticleConversation(QObject):
         if job.get('status') == 'done':
             if not self.session.get('closed'):
                 self.draft('')
-            self.message = '本段对话已结束，交接记录已保存' if self.session.get('closed') else '回答已保存'
+            self.message = '本段对话已结束，对话回顾已保存' if self.session.get('closed') else '回答已保存'
         else:
             self.message = '已停止，问题已保留' if job.get('status') == 'cancelled' else job.get('message') or '暂时未能完成，请重试。'
         self.changed.emit()
@@ -170,7 +170,7 @@ class ChatPanel(QScrollArea):
         self.evidence.setMaximumHeight(100)
         self.evidence.itemDoubleClicked.connect(self.locate)
         layout.addWidget(self.evidence)
-        self.handoff = button('交接记录', lambda: HandoffDialog(self.host, self.controller.session, self).exec())
+        self.handoff = button('对话回顾', lambda: HandoffDialog(self.host, self.controller.session, self).exec())
         layout.addWidget(self.handoff, 0, Qt.AlignmentFlag.AlignLeft)
         self.input = QuestionInput()
         self.input.setMaximumHeight(100)
@@ -264,7 +264,7 @@ class ChatPanel(QScrollArea):
         self.image_button.setVisible(bool(obj and obj['type'] != 'term'))
         self.restart.setVisible(bool(c.session.get('closed')))
         count = len(handoff_records(c.session))
-        self.handoff.setText(f'交接记录 · {count}')
+        self.handoff.setText(f'对话回顾 · {count}')
         self.handoff.setVisible(bool(count))
         for control in (self.input, self.send, self.explain, self.restart):
             control.setEnabled(not c.job)
@@ -289,7 +289,7 @@ class ChatPanel(QScrollArea):
     def explain_focus(self):
         obj = self.current_object()
         subject = ('关键词“' + obj['title'] + '”') if obj and obj['type'] == 'term' else '当前图片选区' if obj and obj['type'] == 'region' else '当前图片' if obj else '这篇文章'
-        self.controller.send('请结合本文解释' + subject + '。先说明核心含义，再解释它在本文中的作用、相关概念与容易混淆的地方；引用原文依据，区分原文与补充理解。不需要造句。用清晰的小标题和简短段落组织，避免重复。', 'article')
+        self.controller.send('请解释' + subject + '。', 'article', intent='explain')
 
     def save_object(self):
         obj = self.current_object()

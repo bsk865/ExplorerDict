@@ -52,6 +52,8 @@ class FixtureClient:
             if self.rounds<=self.fail_rounds:
                 r=data["relations"][0];r["src"],r["dst"]=r["dst"],r["src"]
             return data
+        if stage=="repair-quotes":
+            return {'quotes': [], 'selections': []}
         result=supported_review(kwargs["draft"],kwargs["reading"])
         if self.rounds<=self.fail_rounds or self.fail_always:
             result["relation_verdicts"][0].update(verdict="contradicted",note="把水温条件与香气结果的方向讲反了")
@@ -64,18 +66,188 @@ def saved_nodes(fixture):
 
 
 class TestArticleMapContract(unittest.TestCase):
+    def test_generation_gets_complete_validated_outline_and_reader_never_sees_draft(self):
+        f=FIXTURES[0];client=FixtureClient(f)
+        am.run(client,text=f['text'],selected_words=f['selected_words'])
+        self.assertNotIn('draft',client.calls[0])
+        self.assertNotIn('reading',client.calls[0])
+        outline=client.calls[1]['reading']
+        self.assertEqual(reading_for(f),outline)
+        request=am.payload('test',stage='generate',text=f['text'],reading=outline)
+        material=json.loads(request['messages'][1]['content'])
+        self.assertEqual(outline,material['coverage_outline'])
+        self.assertEqual(f['text'],''.join(line['text'] for line in material['source_lines']))
+
+    def test_interrupted_generation_reuses_independent_reading(self):
+        f=FIXTURES[0]
+        saved=[]
+        class Interrupted(FixtureClient):
+            def full_article_map(self, **kwargs):
+                if kwargs['stage']=='generate':
+                    raise ApiError('network','模拟网络中断')
+                return super().full_article_map(**kwargs)
+        first=Interrupted(f)
+        with self.assertRaises(ApiError):
+            am.run(first,text=f['text'],selected_words=f['selected_words'],checkpoint=saved.append)
+        resumed=FixtureClient(f)
+        graph,quality=am.run(resumed,text=f['text'],selected_words=f['selected_words'],resume=saved[-1])
+        self.assertEqual([call['stage'] for call in resumed.calls],['generate','review'])
+        self.assertTrue(quality['approved'])
+        self.assertEqual(graph['root'],f['draft']['root'])
+        for invalid in (dict(saved[-1], source_sha256='another article'),
+                        dict(saved[-1], selected_words=[]),
+                        dict(saved[-1], reading={'claims':[],'selections':[]})):
+            fresh=FixtureClient(f)
+            am.run(fresh,text=f['text'],selected_words=f['selected_words'],resume=invalid)
+            self.assertEqual('read',fresh.calls[0]['stage'])
+
+    def test_pending_draft_still_requires_semantic_review_and_valid_source(self):
+        f=FIXTURES[0]
+        saved=[]
+        class Interrupted(FixtureClient):
+            def full_article_map(self, **kwargs):
+                if kwargs['stage']=='review':
+                    raise ApiError('network','模拟核对中断')
+                return super().full_article_map(**kwargs)
+        with self.assertRaises(ApiError):
+            am.run(Interrupted(f),text=f['text'],selected_words=f['selected_words'],checkpoint=saved.append)
+        resumed=FixtureClient(f,fail_always=True)
+        with self.assertRaises(ApiError):
+            am.run(resumed,text=f['text'],selected_words=f['selected_words'],resume=saved[-1])
+        self.assertEqual('review',resumed.calls[0]['stage'])
+        self.assertEqual(3,len([call for call in resumed.calls if call['stage']=='review']))
+        bad=copy.deepcopy(saved[-1]);bad['pending_draft']['nodes'][0]['quote']='原文未出现的引用'
+        regenerated=FixtureClient(f)
+        am.run(regenerated,text=f['text'],selected_words=f['selected_words'],resume=bad)
+        self.assertEqual('read',regenerated.calls[0]['stage'])
+
+    def test_model_line_citations_become_original_text_before_review_and_storage(self):
+        fixture = FIXTURES[0]
+        class LinesClient(FixtureClient):
+            def full_article_map(self, **kwargs):
+                result = super().full_article_map(**kwargs)
+                if kwargs['stage'] == 'read':
+                    for item in result['claims'] + result['selections']:
+                        item['quote'] = {'line_start': 1, 'line_end': len(fixture['text'].splitlines())}
+                if kwargs['stage'] == 'generate':
+                    for item in result['nodes'] + result['relations']:
+                        item['quote'] = {'line_start': 1, 'line_end': len(fixture['text'].splitlines())}
+                return result
+        client = LinesClient(fixture)
+        graph, quality = am.run(client, text=fixture['text'], selected_words=fixture['selected_words'])
+        self.assertTrue(quality['approved'])
+        for item in graph['nodes'] + graph['relations']:
+            self.assertIsInstance(item['quote'], str)
+            self.assertIn(item['quote'], fixture['text'])
+        for value in ({'line_start': 0, 'line_end': 1}, {'line_start': 1, 'line_end': 1000},
+                      {'line_start': True, 'line_end': 1}, {'line_start': 2, 'line_end': 1}):
+            with self.subTest(value=value), self.assertRaises(am.ArticleMapError):
+                am._quote({'quote': value}, fixture['text'])
+
+    def test_quote_repair_keeps_independent_claims_and_receives_no_map_draft(self):
+        fixture = FIXTURES[0]
+        class QuoteClient(FixtureClient):
+            def full_article_map(self, **kwargs):
+                if kwargs['stage'] == 'repair-quotes':
+                    self.calls.append(copy.deepcopy(kwargs))
+                    self.assert_independent(kwargs)
+                    return {'quotes': [{'claim_index': 0, 'quote': fixture['draft']['relations'][0]['quote'],
+                                        'subject': '不能把这个字段写入清单'}], 'selections': []}
+                result = super().full_article_map(**kwargs)
+                if kwargs['stage'] == 'read':
+                    result['claims'][0]['quote'] = '模型错误地合并了跨页句子'
+                return result
+
+            def assert_independent(self, kwargs):
+                if 'draft' in kwargs:
+                    raise AssertionError('引用定位不得接收导图草稿')
+        client = QuoteClient(fixture)
+        _, quality = am.run(client, text=fixture['text'], selected_words=fixture['selected_words'])
+        self.assertEqual([c['stage'] for c in client.calls], ['read', 'repair-quotes', 'generate', 'review'])
+        self.assertEqual(quality['independent_reading']['claims'][0], reading_for(fixture)['claims'][0])
+        request = am.payload('test', stage='repair-quotes', text=fixture['text'],
+                             reading=client.calls[1]['reading'], draft={'secret_draft': 'excluded'})
+        self.assertNotIn('secret_draft', json.dumps(request))
+
+    def test_quote_repair_preserves_intervening_page_material_and_rejects_fabrication(self):
+        source = 'Read on.\n\n2\n\nContinue carefully.'
+        reading = {'claims': [{'subject': 'Continue carefully', 'predicate': '记录信息', 'object': '',
+                              'relation_required': False, 'quote': 'Read on. Continue carefully.'}], 'selections': []}
+        client = mock.Mock()
+        client.full_article_map.return_value = {'quotes': [{'claim_index': 0, 'quote': source}], 'selections': []}
+        corrected = am.repair_reading_quotes(client, reading, source)
+        self.assertEqual(corrected['claims'][0]['quote'], source)
+        self.assertEqual(reading['claims'][0]['quote'], 'Read on. Continue carefully.')
+        for edits in ([{'claim_index': 0, 'quote': 'Read on. Continue carelessly.'}],
+                      [], [{'claim_index': 0, 'quote': source}, {'claim_index': 0, 'quote': source}]):
+            client.full_article_map.return_value = {'quotes': edits, 'selections': []}
+            with self.subTest(edits=edits), self.assertRaises(am.ArticleMapError):
+                am.repair_reading_quotes(client, reading, source)
+
+    def test_quote_line_ranges_restore_exact_unicode_and_can_compact_only_invalid_fields(self):
+        source = 'Relation labels:\nΩt = holding/touching, on/supporting, inside, attached_to.\n2\nEnd.'
+        reading = {'claims': [{'subject': '关系范围', 'predicate': '仅评估' + 'holding/touching, on/supporting, inside, attached_to',
+                              'object': '统一关系范围', 'relation_required': True, 'quote': 'Relation labels:'}], 'selections': []}
+        client = mock.Mock()
+        client.full_article_map.return_value = {'quotes': [{'claim_index': 0, 'line_start': 2, 'line_end': 3,
+            'subject': '关系范围', 'predicate': '仅评估', 'object': 'holding/touching, on/supporting, inside, attached_to',
+            'relation_required': False}], 'selections': []}
+        corrected = am.repair_reading_quotes(client, reading, source)
+        self.assertEqual(corrected['claims'][0]['quote'], source.split('\n', 1)[1].rsplit('\n', 1)[0])
+        self.assertTrue(corrected['claims'][0]['relation_required'])
+        self.assertEqual(corrected['claims'][0]['predicate'], '仅评估')
+        payload = am.payload('test', stage='repair-quotes', text=source, reading={})
+        material = json.loads(payload['messages'][1]['content'])
+        self.assertEqual(''.join(line['text'] for line in material['source_lines']), source)
+        for start, end in ((0, 2), (2, 100), (3, 2), (True, 2)):
+            client.full_article_map.return_value['quotes'][0].update(line_start=start, line_end=end)
+            with self.subTest(start=start, end=end), self.assertRaises(am.ArticleMapError):
+                am.repair_reading_quotes(client, reading, source)
+
+    def test_pdf_quote_whitespace_restores_exact_source_span(self):
+        source = ('A foundation-model\n    pipeline identifies manipulation roles, '
+                  'grounds persistent object masks, infers\nrelationships.')
+        quoted = ('A foundation-model pipeline identifies manipulation roles, '
+                  'grounds persistent object masks, infers')
+        restored = am._quote({'quote': quoted}, source)
+        self.assertEqual(restored, source[:source.index('\nrelationships.')])
+        self.assertIn(restored, source)
+        self.assertEqual(am._quote({'quote': 'visual\n and temporal quality'},
+                                   'visual and temporal quality'), 'visual and temporal quality')
+        self.assertEqual(am._quote({'quote': 'manipulated-object motion'},
+                                   'manipulated-\nobject motion'), 'manipulated-\nobject motion')
+
+    def test_pdf_quote_cannot_change_words_punctuation_numbers_or_join_excerpts(self):
+        source = 'Benchmarks assess\nvisual quality, but do not prove safety. Score: 41.'
+        for quote in ('Benchmarks assess quality', 'visual quality but do not prove safety',
+                      'visual quality, and do not prove safety', 'Score: 42.',
+                      'Benchmarks assess…Score: 41.', 'benchmarks assess', 'visualquality'):
+            with self.subTest(quote=quote), self.assertRaises(am.ArticleMapError):
+                am._quote({'quote': quote}, source)
+        for quote in ('manipulated object', 'manipulatedobject'):
+            with self.subTest(quote=quote), self.assertRaises(am.ArticleMapError):
+                am._quote({'quote': quote}, 'manipulated-\nobject')
+
+    def test_reader_selection_keeps_original_pdf_whitespace(self):
+        source = 'Inspect\n  visual quality before release.'
+        reading = {'claims': [{'subject': 'Inspect visual quality', 'predicate': '记录信息',
+                              'object': '', 'quote': 'Inspect visual quality', 'relation_required': False}],
+                   'selections': [{'selection_index': 0, 'quote': 'Inspect visual quality', 'note': ''}]}
+        result = am.validate_reading(reading, source, ['visual'])
+        self.assertEqual(result['claims'][0]['quote'], 'Inspect\n  visual quality')
+        self.assertEqual(result['selections'][0]['quote'], 'Inspect\n  visual quality')
+
     def test_progress_reports_each_request_and_repair_round(self):
         fixture = FIXTURES[0]
         messages = []
         am.run(FixtureClient(fixture, fail_rounds=1), text=fixture['text'],
                selected_words=fixture['selected_words'], progress=messages.append)
         self.assertEqual(len(messages), 5)
-        self.assertIn('独立阅读全文', messages[0])
-        self.assertIn('生成导图草稿', messages[1])
-        self.assertIn('复核', messages[2])
-        self.assertIn('第 2/3 轮', messages[3])
-        self.assertIn('修正', messages[3])
-        self.assertIn('复核', messages[4])
+        self.assertIn('阅读文章', messages[0])
+        self.assertIn('整理导图', messages[1])
+        self.assertIn('核对原文', messages[2])
+        self.assertIn('完善导图', messages[3])
+        self.assertIn('核对原文', messages[4])
 
 
     def test_three_approved_previews_preserve_full_structure_and_all_relations(self):
@@ -98,8 +270,9 @@ class TestArticleMapContract(unittest.TestCase):
         f=FIXTURES[0]
         p=am.payload("configured",stage="read",text=f["text"],selected_words=f["selected_words"],draft={"secret_draft":"do not read"})
         material=json.loads(p["messages"][1]["content"])
-        self.assertEqual(set(material),{"text","selected_words"})
-        self.assertEqual(material["text"],f["text"])
+        self.assertEqual(set(material),{"source_lines","selected_words"})
+        self.assertEqual(''.join(line['text'] for line in material['source_lines']),f['text'])
+        self.assertEqual([line['line'] for line in material['source_lines']], list(range(1, len(material['source_lines'])+1)))
         self.assertNotIn("secret_draft",json.dumps(p))
 
     def test_no_silent_full_article_truncation(self):

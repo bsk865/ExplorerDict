@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import struct
-import subprocess
+import hashlib
 import sys
 from pathlib import Path
 
@@ -54,10 +54,15 @@ EXCLUDES = [
 #: 托盘图标 ``assets/app.ico`` 在下面图标步骤之后再补进 DATAS（首次构建时它
 #: 才由本脚本生成）。
 DATAS = [(str(UIA_HELPER), "scripts")]
-subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-File", str(PROJECT_ROOT / "tools" / "build_uia_native.ps1")], check=True,
-               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-DATAS.append((str(PROJECT_ROOT / "scripts" / "ExplorerDict.Native.dll"), "scripts"))
+# The selection window reads the same palette tokens as the main reader.
+DATAS += [(str(PROJECT_ROOT / 'web' / 'index.html'), 'web')]
+DATAS += [(str(path), 'web') for path in (PROJECT_ROOT / 'web').glob('*.css')]
+helper = PROJECT_ROOT / 'artifacts/uia-native-build/ExplorerDict.Native.dll'
+helper_source = PROJECT_ROOT / 'scripts/UiaNative.cs'
+helper_stamp = helper.parent / 'source.sha256'
+if not helper.is_file() or not helper_stamp.is_file() or helper_stamp.read_text().strip() != hashlib.sha256(helper_source.read_bytes()).hexdigest():
+    raise SystemExit('Build the UIA helper first with tools/build_app.ps1, or tools/build_uia_native.ps1 -OutputDirectory artifacts/uia-native-build.')
+DATAS.append((str(helper), 'scripts'))
 
 
 # --------------------------------------------------------------------- 图标

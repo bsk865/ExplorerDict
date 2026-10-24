@@ -112,6 +112,41 @@ class NativeDiscoveryTests(unittest.TestCase):
         finally:
             release.set()
 
+    def test_website_subscription_can_finish_after_navigation_without_popup(self):
+        entered,release=threading.Event(),threading.Event()
+        candidate=dict(SOURCE,id='new-feed',name='Publisher news',url='https://example.org/new-feed')
+        def probe(_):
+            entered.set();release.wait(3)
+            return [candidate]
+        try:
+            page=self.window.stack.currentWidget()
+            page.show_preferences()
+            page.subscription.url.setText('https://example.org')
+            before=len(self.service.discovery.preferences()['sources'])
+            with patch('app.native.discover.find_feeds',side_effect=probe):
+                page.subscription.find.click()
+                self.wait(entered.is_set)
+                self.window.navigate('shelf')
+                self.wait(lambda:not self.window.navigation_busy)
+                release.set()
+                self.wait(lambda:not self.window.discovery.busy)
+            self.assertEqual('shelf',self.window.current_page)
+            self.assertEqual(before,len(self.service.discovery.preferences()['sources']))
+            self.window.navigate('discover')
+            self.wait(lambda:not self.window.navigation_busy)
+            page=self.window.stack.currentWidget()
+            page.show_preferences()
+            self.assertEqual(1,page.subscription.choices.count())
+            self.window.resize(900,620)
+            for _ in range(5):self.app.processEvents()
+            self.assertEqual(0,page.stack.currentWidget().horizontalScrollBar().maximum())
+            page.subscription.subscribe.click()
+            self.assertEqual(before+1,len(self.service.discovery.preferences()['sources']))
+            self.assertEqual('https://example.org/new-feed',self.service.discovery.preferences()['sources'][-1]['url'])
+            self.assertEqual([],self.watch.shown)
+            self.assertIsNone(self.app.activeModalWidget())
+        finally:release.set()
+
 
 if __name__ == '__main__':
     unittest.main()

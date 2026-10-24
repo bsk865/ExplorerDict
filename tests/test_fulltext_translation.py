@@ -9,6 +9,8 @@ from app.native.service import NativeService
 from app.discovery import entry
 from app.translation import chunks, validate, translate
 from app.api_client import DeepSeekClient, ApiError
+from app.workspace_server import parse_file
+from app.article_map import _quote
 
 
 class FullPaperTests(unittest.TestCase):
@@ -50,6 +52,20 @@ class FullPaperTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.native.discovery.import_item(self.item['id'], lambda *args:(b'<main>Abstract only</main>', self.item['url'], 'utf-8'))
         self.assertEqual([], self.native.store.summaries())
+
+    def test_pdf_margin_stamp_does_not_split_body_sentence(self):
+        with pymupdf.open() as document:
+            page = document.new_page(width=600, height=800)
+            page.insert_text((100, 150), 'Benchmarks assess visual and temporal quality,', fontsize=12)
+            page.insert_text((100, 165), 'but do not establish task correctness.', fontsize=12)
+            page.insert_text((60, 230), 'arXiv [cs.RO] 2026', fontsize=12, rotate=90)
+            pdf = document.tobytes()
+        blocks = parse_file(self.native.store, 'paper.pdf', pdf)
+        text = '\n\n'.join(b['text'] for b in blocks if b['type'] == 'text')
+        quote = 'Benchmarks assess visual and temporal quality, but do not establish task correctness.'
+        self.assertIn(_quote({'quote': quote}, text), text)
+        self.assertIn('arXiv [cs.RO] 2026', text)
+        self.assertEqual(1, len([b for b in blocks if b['type'] == 'image']))
 
 
 class TranslationTests(unittest.TestCase):

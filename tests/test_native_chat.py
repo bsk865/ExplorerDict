@@ -60,6 +60,25 @@ class NativeArticleChatTests(unittest.TestCase):
         self.assertFalse(self.controller.session.get('messages'))
         self.assertEqual('网络暂不可用', self.controller.message)
 
+    def test_explanation_instructions_stay_out_of_draft_and_history(self):
+        self.client.chat.return_value = '太阳能电池将光能转换为电能。[S1]'
+        question = '请解释太阳能电池。'
+        job = {'cancel': threading.Event()}
+        self.service.workspace.work(job, 'chat', {
+            'article_id': self.article['id'], 'question': question, 'intent': 'explain'})
+        self.assertEqual('done', job['status'])
+        saved = self.service.store.get('sessions', self.controller.key)
+        self.assertEqual(question, saved['messages'][0]['content'])
+        self.assertIn('容易混淆', self.client.chat.call_args.args[0][0]['content'])
+
+    def test_model_validation_instructions_are_not_shown_as_error(self):
+        from app.api_client import ApiError
+        self.client.chat.side_effect = ApiError('schema', '缺少字段。请只输出 JSON，不要改写引用。')
+        self.send('')
+        self.assertNotIn('JSON', self.controller.message)
+        self.assertNotIn('字段', self.controller.message)
+        self.assertIn('重试', self.controller.message)
+
     def test_http_retry_exhaustion_then_recovery_keeps_one_answer(self):
         from app.api_client import DeepSeekClient, RetryPolicy
         from app.request_supervisor import RequestSupervisor

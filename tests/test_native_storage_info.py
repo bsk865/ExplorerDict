@@ -37,7 +37,7 @@ class NativeStorageInfoTests(unittest.TestCase):
         self.dialog.show_storage_details()
         captured = [label.text() for label in self.dialog.storage_card.findChildren(QLabel)]
         self.assertIn(str(self.service.store.directory.resolve()), captured)
-        self.assertTrue(any('文章与正式导图：1 条' in text for text in captured))
+        self.assertTrue(any('文章与导图：1 条' in text for text in captured))
         self.assertTrue(self.dialog.storage_details.isEnabled())
         self.assertTrue(self.dialog.storage_card.isVisible())
         self.assertIsNone(QApplication.activeModalWidget())

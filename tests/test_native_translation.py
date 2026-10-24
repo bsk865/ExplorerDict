@@ -49,7 +49,7 @@ class TranslationUI(unittest.TestCase):
     def test_language_controls_result_persistence_and_narrow_page(self):
         self.window.open_translation('Hello world.', '演示原文')
         self.wait(lambda: not self.window.navigation_busy)
-        page = self.window.stack.currentWidget()
+        page = self.window.translation_tool
         self.assertIsInstance(page, TranslationPage)
         self.window.resize(900, 620)
         page.source.setCurrentIndex(page.source.findData('en'))
@@ -65,9 +65,8 @@ class TranslationUI(unittest.TestCase):
         self.assertTrue(self.window.translation.state['complete'])
         self.window.navigate('shelf')
         self.wait(lambda: not self.window.navigation_busy)
-        self.window.navigate('translate')
-        self.wait(lambda: not self.window.navigation_busy)
-        page = self.window.stack.currentWidget()
+        self.window.open_translation(origin='演示原文')
+        page = self.window.translation_tool
         self.assertEqual('ja', page.target.currentData())
         self.assertEqual('こんにちは、世界。', page.result.toPlainText())
         self.assertIsNone(QApplication.activeModalWidget())
@@ -76,7 +75,7 @@ class TranslationUI(unittest.TestCase):
         self.assertEqual('', page.result.toPlainText())
         self.assertNotIn('翻译完成', page.status.text())
         self.window.translation.flush()
-        self.assertEqual('New input', self.service.store.get('settings', 'native-translation')['text'])
+        self.assertEqual('New input', self.service.store.get('settings', page.controller.storage_key)['text'])
 
     def test_running_translation_survives_navigation_without_new_page_or_popup(self):
         entered, released = threading.Event(), threading.Event()
@@ -114,6 +113,140 @@ class TranslationUI(unittest.TestCase):
             self.assertFalse(open_source(self.window, 'https://arxiv.org/abs/2610.12345'))
         browser.assert_not_called()
         self.assertIn('权限不同', self.window.status.text())
+        self.assertIsNone(QApplication.activeModalWidget())
+
+    def test_float_handoff_keeps_current_draft_and_language_choices_without_api_call(self):
+        from app.workspace_bridge import send_translation
+        self.window.open_translation('Existing draft', '悬浮选区')
+        self.wait(lambda: not self.window.navigation_busy)
+        page = self.window.translation_tool
+        page.source.setCurrentIndex(page.source.findData('en'))
+        page.target.setCurrentIndex(page.target.findData('ja'))
+        self.window.navigate('shelf')
+        self.wait(lambda: not self.window.navigation_busy)
+        with patch.object(self.service.workspace, 'start') as start:
+            send_translation(self.service.store.directory, 'New selected text', '悬浮选区')
+            self.window.receive_handoff()
+            self.wait(lambda: not self.window.navigation_busy)
+            page = self.window.translation_tool
+            self.assertIsInstance(page, TranslationPage)
+            self.assertEqual('Existing draft', page.original.toPlainText())
+            self.assertFalse(page.incoming.isHidden())
+            page.load_incoming.click()
+            self.assertEqual('New selected text', page.original.toPlainText())
+            self.assertEqual('en', page.source.currentData())
+            self.assertEqual('ja', page.target.currentData())
+            self.assertNotIn('incoming', self.window.translation.state)
+            start.assert_not_called()
+        self.assertIsNone(QApplication.activeModalWidget())
+
+    def test_articles_keep_translations_languages_and_background_jobs_separate(self):
+        first = self.service.import_text('Article A', 'First original.')
+        second = self.service.import_text('Article B', 'Second original.')
+        self.assertNotIn('translate', self.window.nav)
+        entered, released = threading.Event(), threading.Event()
+        client = Mock(model='test-model')
+        def reply(*args, **kwargs):
+            entered.set()
+            released.wait(3)
+            return '第一篇译文'
+        client.chat.side_effect = reply
+        self.window.open_article(first['id'])
+        self.wait(lambda: not self.window.navigation_busy)
+        reader = self.window.stack.currentWidget()
+        reader.translate()
+        page = reader.translation_page
+        page.target.setCurrentIndex(page.target.findData('ja'))
+        a = page.controller
+        self.assertEqual('reader', self.window.current_page)
+        self.assertIs(reader.reading_tools.currentWidget(), page)
+        try:
+            with patch.object(self.service.workspace, 'client', return_value=client):
+                a.start()
+                self.wait(entered.is_set)
+                self.window.open_article(second['id'])
+                self.wait(lambda: not self.window.navigation_busy)
+                other = self.window.stack.currentWidget()
+                self.assertIsNone(other.translation_page)
+                other.translate()
+                b = other.translation_page.controller
+                self.assertEqual('Second original.', b.state['text'])
+                self.assertEqual('', b.state['result'])
+                self.assertEqual('zh', b.state['target'])
+                self.assertIsNone(b.job)
+                released.set()
+                self.wait(lambda: a.job is None)
+                self.assertEqual('', other.translation_page.result.toPlainText())
+                self.assertEqual(second['id'], self.window.article_id)
+                b.draft(target='en')
+                b.flush()
+        finally:
+            released.set()
+        self.window.open_article(first['id'])
+        self.wait(lambda: not self.window.navigation_busy)
+        reader = self.window.stack.currentWidget()
+        reader.translate()
+        self.assertEqual('第一篇译文', reader.translation_page.result.toPlainText())
+        self.assertEqual('ja', reader.translation_page.target.currentData())
+        reader.show_original()
+        self.assertIs(reader.reading_tools.currentWidget(), reader.paper)
+        from app.native.translation import TranslationController
+        restored_a = TranslationController(self.window, 'article:' + first['id'])
+        restored_b = TranslationController(self.window, 'article:' + second['id'])
+        self.assertEqual('第一篇译文', restored_a.state['result'])
+        self.assertEqual('ja', restored_a.state['target'])
+        self.assertEqual('', restored_b.state['result'])
+        self.assertEqual('en', restored_b.state['target'])
+
+    def test_deleted_article_translation_cannot_return_on_delayed_save_or_restart(self):
+        first = self.service.import_text('待删除的文章', 'Text to remove.')
+        second = self.service.import_text('保留的文章', 'Text to keep.')
+        a = self.window.translation_for('article:' + first['id'])
+        b = self.window.translation_for('article:' + second['id'])
+        a.prefill('Text to remove.', first['title'])
+        a.state.update(result='待删除译文', complete=True)
+        a.flush()
+        b.prefill('Text to keep.', second['title'])
+        b.state.update(result='保留译文', complete=True)
+        b.flush()
+        a.draft(text='尚未保存的修改')
+        self.service.remove('articles', first['id'])
+        self.assertIsNone(self.service.store.get('settings', a.storage_key))
+        self.assertFalse(a.flush())
+        with patch.object(self.service.workspace, 'start') as start:
+            a.start()
+            start.assert_not_called()
+        a.shutdown()
+        self.assertIsNone(self.service.store.get('settings', a.storage_key))
+        self.assertEqual('保留译文', self.service.store.get('settings', b.storage_key)['result'])
+        self.assertEqual('保留译文', b.state['result'])
+
+    def test_discovery_and_floating_text_cannot_replace_article_translation(self):
+        article = self.service.import_text('Bound article', 'Article text.')
+        self.window.open_article(article['id'])
+        self.wait(lambda: not self.window.navigation_busy)
+        reader = self.window.stack.currentWidget()
+        reader.translate()
+        controller = reader.translation_page.controller
+        controller.state.update(result='文章译文', complete=True)
+        controller.flush()
+        controller.changed.emit()
+        from app.workspace_bridge import send_translation
+        send_translation(self.service.store.directory, 'Floating text', '悬浮选区')
+        self.window.receive_handoff()
+        self.assertEqual('Floating text', self.window.translation_tool.original.toPlainText())
+        self.assertEqual('文章译文', controller.state['result'])
+        self.assertEqual('reader', self.window.current_page)
+        self.window.close_translation()
+        self.assertIs(self.window.content_area.currentWidget(), self.window.stack)
+        self.assertEqual('文章译文', reader.translation_page.result.toPlainText())
+        self.window.open_translation('Preview A', 'Title A', 'discovery:a')
+        self.window.translation.state.update(result='摘要译文 A', complete=True)
+        self.window.translation.flush()
+        self.window.open_translation('Preview B', 'Title B', 'discovery:b')
+        self.assertEqual('', self.window.translation_tool.result.toPlainText())
+        self.window.open_translation('Preview A', 'Title A', 'discovery:a')
+        self.assertEqual('摘要译文 A', self.window.translation_tool.result.toPlainText())
         self.assertIsNone(QApplication.activeModalWidget())
 
 

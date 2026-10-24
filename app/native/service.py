@@ -123,8 +123,7 @@ class NativeService:
         rows = []
         with self.store.connect() as db:
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            for table, title in [('attempts', '导图草稿与复核记录'), ('map_parts', '长文分段导图缓存'),
-                                 ('articles', '文章与正式导图'), ('sessions', '问答与笔记')]:
+            for table, title in [('articles', '文章与导图'), ('sessions', '问答与笔记')]:
                 if table in tables:
                     count, size = db.execute('SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(payload AS BLOB))),0) FROM ' + table).fetchone()
                     rows.append({'label':title, 'count':count, 'bytes':size})

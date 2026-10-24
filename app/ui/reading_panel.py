@@ -144,7 +144,7 @@ BACK_TEXT = "← 返回词表"
 RETRY_TEXT = "重试"
 EXPLAIN_TEXT = "解释"
 #: 没有 API Key 时的提示：点这一句 = 打开主界面（提示本身可点，绝不无反馈）
-NO_KEY_HINT = "请在主界面配置 API"
+NO_KEY_HINT = "请在设置中添加模型密钥"
 #: 主界面入口不可用时的兜底提示（仍然给用户一句可执行的话，短）
 NO_MAIN_HINT = "暂时打不开主界面，可再点一次"
 
@@ -271,8 +271,9 @@ class ScrollArea:
     代码（``canvas.yview`` / ``Text.yview``）一行都不用改。
     """
 
-    def __init__(self, parent, *, bg: str = theme.PANEL, height: int | None = None,
+    def __init__(self, parent, *, bg: str | None = None, height: int | None = None,
                  fill_both: bool = False):
+        bg = bg or theme.PANEL
         self.frame = tk.Frame(parent, bg=bg)
         self.fill_both = bool(fill_both)
         self.canvas = tk.Canvas(self.frame, bg=bg, highlightthickness=0, bd=0,
@@ -617,6 +618,8 @@ class ReadingPanel(FloatingWindow):
                                            padx=8, pady=2)
         self.btn_main.pack(side="left", padx=(theme.px(geo.CONTENT_PAD), theme.px(4)),
                            pady=(theme.px(6), theme.px(4)))
+        self.btn_translate = widgets.FlatButton(top, '翻译', self._on_translate, font_size=8, padx=8, pady=2)
+        self.btn_translate.pack(side='left', padx=(0, theme.px(4)), pady=(theme.px(6), theme.px(4)))
         self.title_label = tk.Label(top, text="探索词典", bg=theme.PANEL, fg=theme.TEXT,
                                     font=theme.font(11), anchor="w", cursor="hand2")
         self.title_label.pack(side="left", padx=(theme.px(2), theme.px(4)),
@@ -1833,7 +1836,7 @@ class ReadingPanel(FloatingWindow):
             log.exception("重新解释失败 #%s", self.entry_id)
             started = False
         if not started:
-            self._set_hint("未能发起解释：可先在主界面配置 API", action="main", guard=True)
+            self._set_hint("请先在设置中添加模型密钥", action="main", guard=True)
             self._render_detail()
             return False
         self.result = None
@@ -3264,6 +3267,31 @@ class ReadingPanel(FloatingWindow):
         if self._hint_action != "main":
             return False
         return self._on_open_main()
+
+    def _on_translate(self) -> bool:
+        """Carry the current selection to the shared translator without an API call."""
+        text = ''
+        origin = '悬浮取词'
+        selection = getattr(self, 'selection', None)
+        if selection is not None:
+            text = getattr(selection, 'term', '')
+            origin = getattr(getattr(selection, 'source', None), 'title', '') or origin
+        if not text and self.entry_id:
+            row = self.app.db.get_entry(int(self.entry_id))
+            if row is not None:
+                text = row['term'] or ''
+                origin = row['source_title'] or origin
+        if not text:
+            self._set_hint('请先选中文字或打开一个词条，再点击翻译。', guard=True)
+            return False
+        try:
+            self.app.open_translation(text, origin)
+        except Exception:
+            log.exception('无法打开翻译工作区')
+            self._set_hint('暂时无法带入翻译，请在主界面重试。', action='main', guard=True)
+            return False
+        self._set_hint('已带入主界面翻译，可选择源语言和目标语言。', guard=True)
+        return True
 
     def _on_open_main(self) -> bool:
         """顶栏「主界面」/ 可点提示行：**直接**打开阅读工作区。

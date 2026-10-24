@@ -1,4 +1,4 @@
-"""Run a real model request through the native RAG controller with synthetic data."""
+"""Run a real all-library request after adding a second synthetic document."""
 import argparse
 import base64
 from contextlib import closing
@@ -27,6 +27,7 @@ def read_config(source):
         settings = dict(db.execute('SELECT k,v FROM settings'))
         row = db.execute("SELECT blob FROM secrets WHERE name='api_key'").fetchone()
     return {'base_url': settings.get('api.base_url', ''), 'model': settings.get('api.model', ''),
+            'reasoning_effort': settings.get('api.reasoning_effort', ''),
             'key': unprotect(row[0]) if row else ''}
 
 
@@ -50,6 +51,7 @@ def main():
     directory = Path(tempfile.mkdtemp(prefix='live-rag-', dir=parent))
     app = QApplication([])
     service = NativeService(directory)
+    service.workspace.map_preloader.close()
     # Credentials stay in memory; all articles, sessions and requests use the isolated store.
     service.store.model_config = lambda: dict(config)
     article = service.import_text('合成阅读安排', '青禾阅读小组每次阅读25分钟，然后休息5分钟。每次阅读后回到原文核对笔记。')
@@ -65,6 +67,7 @@ def main():
     started = time.monotonic()
     submitted = False
     finished = False
+    second = None
 
     def finish(error=None):
         nonlocal finished
@@ -84,14 +87,17 @@ def main():
         app.quit()
 
     def tick():
-        nonlocal submitted
+        nonlocal submitted, second
         if time.monotonic()-started > 180:
             controller.stop()
             finish('request_deadline_exceeded')
             return
         if not submitted and controller.key:
             submitted = True
-            controller.request('阅读小组每次阅读和休息各几分钟？个人复习心得建议写下几个待核对的问题？请区分原文与个人心得，并引用来源。')
+            original_key = controller.key
+            second = service.import_text('蓝桥阅读安排', '蓝桥阅读小组每次阅读40分钟，然后休息10分钟，结束后整理2条摘录。')
+            report['new_article_in_existing_session'] = controller.key == original_key
+            controller.request('青禾与蓝桥两个阅读小组每次阅读和休息各几分钟？我的个人复习心得建议写下几个待核对的问题？请区分两份原文与个人心得，并分别引用来源。')
         elif submitted and not controller.busy:
             messages = controller.session.get('messages', [])
             if not messages or messages[-1].get('role') != 'assistant':
@@ -104,10 +110,11 @@ def main():
             report['cited_sources'] = [{'article_id': e.get('article_id'), 'note_id': e.get('note_id'),
                                         'source': e.get('source'), 'citation': e.get('citation')} for e in evidence]
             report['article_and_note_cited'] = (any(e.get('note_id') == note['id'] for e in evidence)
-                and any(e.get('article_id') == article['id'] and e.get('source') != 'personal_note' for e in evidence))
+                and all(any(e.get('article_id') == item['id'] and e.get('source') != 'personal_note' for e in evidence)
+                        for item in (article, second)))
             if answer.get('model') == '本地检索':
                 finish('model_was_not_called')
-            elif not all(value in answer['content'] for value in ('25', '5', '3')):
+            elif not all(value in answer['content'] for value in ('25', '5', '40', '10', '3')):
                 finish('expected_facts_missing')
             else:
                 finish()
@@ -116,7 +123,7 @@ def main():
     timer.timeout.connect(tick)
     timer.start(100)
     host.tasks.error.connect(lambda _: finish('background_task_failed'))
-    controller.select([article['id']], True, 'question')
+    controller.select([], True, 'question', scope='all')
     app.exec()
     print(json.dumps({k: report[k] for k in ('directory', 'model', 'passed', 'elapsed_seconds', 'errors')}, ensure_ascii=False))
     return 0 if report['passed'] else 1

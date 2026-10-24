@@ -14,8 +14,16 @@ def audit(directory):
         '_native_runtime/PySide6/plugins/platforms/qwindows.dll',
         '_native_runtime/web/assets/native-icons.json',
         '_native_runtime/web/assets/brand-mark.svg',
+        '_runtime/web/index.html',
     ]
     errors = ['missing: ' + name for name in required if not (directory / name).is_file()]
+    for runtime in ('_runtime', '_native_runtime'):
+        index = directory/runtime/'web/index.html'
+        if index.is_file():
+            import re
+            for filename in re.findall(r'href="([^"/]+\.css)"', index.read_text(encoding='utf-8')):
+                if not (index.parent/filename).is_file():
+                    errors.append('missing: '+runtime+'/web/'+filename)
     files = sorted(p for p in directory.rglob('*') if p.is_file())
     names = [p.relative_to(directory).as_posix() for p in files]
     for name in names:

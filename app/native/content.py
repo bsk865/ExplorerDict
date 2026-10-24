@@ -10,21 +10,21 @@ from .dialogs import EditForm
 from ..reading_preferences import colors
 
 KINDS = [('阅读笔记', 'notes'), ('计划', 'tasks'), ('文章资料', 'articles'), ('主题分类', 'themes'),
-         ('词语与图片探索', 'objects'), ('旧笔记', 'legacy_notes'), ('问答与交接', 'conversations'),
-         ('规划记录', 'batches'), ('导图与草稿', 'maps'), ('阅读记录', 'reading'),
+         ('词语与图片探索', 'objects'), ('旧笔记', 'legacy_notes'), ('问答记录', 'conversations'),
+         ('规划记录', 'batches'), ('思维导图', 'maps'), ('阅读记录', 'reading'),
          ('天气城市', 'weather'), ('未提交草稿', 'native_drafts'), ('阅读标注', 'annotations')]
 
 DELETE_SCOPES = {
     'notes': '只删除这篇笔记，文章原文保留。历史回答中的引用不变。',
     'tasks': '只删除这项计划，文章和笔记保留。',
-    'articles': '删除文章及其历史版本、探索记录、笔记、导图和问答。相关计划保留，并移除文章关联。',
+    'articles': '删除文章及其历史版本、译文、探索记录、笔记、导图和问答。相关计划保留，并移除文章关联。',
     'themes': '只删除主题分类，其中的文章和笔记保留。',
     'objects': '删除此探索对象及其笔记与问答；关联的悬浮取词词条也会删除。文章原文和原图保留。',
     'object_note': '只清除笔记正文，原文、探索对象和问答保留。',
     'session_note': '只清除笔记正文，原文、探索对象和问答保留。',
-    'conversations': '清空这组问答、输入草稿及交接记录。独立保存的笔记保留。',
+    'conversations': '清空这组问答、输入草稿及对话回顾。独立保存的笔记保留。',
     'batches': '只删除这条规划记录，已生成的计划保留。',
-    'maps': '删除该版本的导图与生成草稿，文章原文保留。',
+    'maps': '删除该版本的导图及生成记录，文章原文保留。',
     'reading': '清除阅读记录和读完标记，文章保留。',
     'weather': '移除天气城市，以后可以重新选择。',
     'native_drafts': '丢弃这份未提交草稿，已保存的内容保留。',
@@ -204,7 +204,7 @@ class ContentPage(QWidget):
         elif self.kind == 'tasks':
             detail = f"{record.get('date') or '日期待定'} {record.get('time') or ''} · {'已完成' if record['status'] == 'done' else '待完成'}"
         elif self.kind == 'conversations':
-            detail = f"{record.get('count', 0)} 条消息 · {record.get('archives', 0)} 段交接"
+            detail = f"{record.get('count', 0)} 条消息 · {record.get('archives', 0)} 段回顾"
         elif self.kind == 'batches':
             detail = f"{len(record.get('tasks', []))} 项安排 · {'已撤销' if record.get('undone') else '已创建'}"
         if detail:

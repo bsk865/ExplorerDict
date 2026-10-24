@@ -42,7 +42,7 @@ class NativeServiceTests(unittest.TestCase):
         info = self.service.storage_info()
         self.assertEqual(str(self.service.store.directory.resolve()), info['directory'])
         rows = {r['label']:r for r in info['items']}
-        self.assertEqual(1, rows['文章与正式导图']['count'])
+        self.assertEqual(1, rows['文章与导图']['count'])
         self.assertEqual(1, rows['问答与笔记']['count'])
         self.assertGreater(rows['问答与笔记']['bytes'], 0)
         self.assertEqual(session, self.service.store.get('sessions', key))

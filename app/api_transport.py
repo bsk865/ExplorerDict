@@ -48,6 +48,8 @@ class ApiError(RuntimeError):
         return KIND_LABELS.get(self.kind, KIND_LABELS["unknown"])
 
     def display(self) -> str:
+        if self.kind in {'schema', 'parse', 'json', 'bad_response'}:
+            return '这次内容未能完整生成，请重试。'
         extra = f" (HTTP {self.status})" if self.status else ""
         note = f"；{self.retry_note}" if self.retry_note else ""
         return f"{self.label}{extra}：{self}{note}"

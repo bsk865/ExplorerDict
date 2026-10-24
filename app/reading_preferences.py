@@ -38,12 +38,13 @@ def save(directory,value):
 
 @lru_cache(maxsize=12)
 def colors(palette,mode):
-    root=resource_root()/'web'
-    if not (root/'index.html').is_file():root=project_root()/'web'
+    roots=(resource_root()/'web', project_root()/'_native_runtime'/'web', project_root()/'web')
+    root=next((candidate for candidate in roots if (candidate/'index.html').is_file()),roots[0])
     if not (root/'index.html').is_file():return {}
     html=(root/'index.html').read_text(encoding='utf-8')
     values={};specificity={}
     for file in re.findall(r'href="([^"/]+\.css)"',html):
+        if not (root/file).is_file():continue
         css=re.sub(r'/\*.*?\*/','',(root/file).read_text(encoding='utf-8'),flags=re.S)
         for match in re.finditer(r'([^{}]+)\{([^{}]+)\}',css):
             selector=match[1].strip()

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from PIL import Image
-from app.discovery import Discovery, parse_feed, metadata, canonical, public_url, stamp
+from app.discovery import Discovery, parse_feed, metadata, canonical, public_url, stamp, find_feeds
 from app.native.service import NativeService
 
 FEED = b'''<rss xmlns:media="http://search.yahoo.com/mrss/"><channel><item><title>Robotics research</title>
@@ -61,6 +61,44 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual('abstract', article['source_status'])
         self.assertIn('非全文', article['text'])
         self.assertEqual('预印本', rows[0]['publication'])
+
+    def test_valid_empty_issue_is_a_success_and_keeps_previous_articles(self):
+        previous=self.service.refresh(self.loader)
+        empty=b'<rss><channel><title>No scheduled issue today</title></channel></rss>'
+        current=self.service.refresh(lambda url,*args:(empty,url,'utf-8'))
+        self.assertEqual(previous['items'],current['items'])
+        self.assertEqual([],current['errors'])
+        health=current['source_health']['test']
+        self.assertEqual('',health['error'])
+        self.assertEqual(0,health['count'])
+        self.assertGreater(health['updated'],0)
+        self.assertIn('暂无新文章',health['message'])
+        broken=self.service.refresh(lambda url,*args:(b'<html>not a feed</html>',url,'utf-8'))
+        self.assertTrue(broken['errors'])
+        self.assertEqual(health['updated'],broken['source_health']['test']['updated'])
+
+    def test_website_subscription_uses_published_links_and_validates_each_feed(self):
+        html=b'''<html><head><base href="https://example.org/public/">
+        <link rel="alternate" type="application/rss+xml" href="../feed" title="News">
+        <link rel="alternate" type="application/atom+xml" href="/invalid">
+        <link rel="alternate" type="application/rss+xml" href="javascript:ignored">
+        <link rel="alternate" type="application/rss+xml" href="../feed"></head></html>'''
+        calls=[]
+        def loader(url,*args):
+            calls.append(url)
+            return (FEED if url.endswith('/feed') else html),url,'utf-8'
+        feeds=find_feeds('https://example.org',loader)
+        self.assertEqual(1,len(feeds))
+        self.assertEqual('https://example.org/feed',feeds[0]['url'])
+        self.assertEqual('News',feeds[0]['name'])
+        self.assertEqual(1,calls.count('https://example.org/feed'))
+        direct=find_feeds('https://example.org/feed',loader)
+        self.assertEqual('https://example.org/feed',direct[0]['url'])
+        with self.assertRaisesRegex(ValueError,'没有可用的公开订阅入口'):
+            find_feeds('https://example.org/page',lambda url,*args:(b'<html><p>Article</p></html>',url,'utf-8'))
+        known=find_feeds('https://sspai.com',lambda url,*args:(FEED if url.endswith('/feed')
+                        else b'<html><title>Website</title></html>',url,'utf-8'))
+        self.assertEqual('https://sspai.com/feed',known[0]['url'])
 
     def test_lazy_cover_and_removed_source_preserve_bookmarks(self):
         rows = parse_feed(FEED, SOURCE)

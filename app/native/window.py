@@ -19,7 +19,7 @@ from .saved import SavedPage
 from .navigation import Sidebar
 from .topbar import TopBar
 from .discover import DiscoveryController, DiscoverPage
-from .translation import TranslationController, TranslationPage
+from .translation import TranslationController, TranslationPage, source_scope
 
 
 class TitleBar(QWidget):
@@ -30,9 +30,6 @@ class TitleBar(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 4, 0)
         row.addWidget(QLabel('探索词典'))
-        version = QLabel('全文与翻译版 · 2026.10.24')
-        version.setObjectName('muted')
-        row.addWidget(version)
         row.addStretch()
         for icon, title, action in [(QStyle.StandardPixmap.SP_TitleBarMinButton, '最小化', window.showMinimized),
                                      (QStyle.StandardPixmap.SP_TitleBarMaxButton, '最大化 / 还原', self.maximize),
@@ -64,7 +61,8 @@ class NativeWindow(QMainWindow):
         self.discovery = DiscoveryController(self)
         self.tasks = Tasks(self)
         self.tasks.error.connect(self.notice)
-        self.translation = TranslationController(self)
+        self.translation_controllers = {}
+        self.translation = self.translation_for('scratch')
         self.library = LibraryController(self)
         self.article_chats = {}
         self.note_controllers = {}
@@ -120,7 +118,10 @@ class NativeWindow(QMainWindow):
         right.addWidget(self.topbar)
         self.stack = QStackedWidget()
         self.stack.setContentsMargins(28, 0, 28, 20)
-        right.addWidget(self.stack, 1)
+        self.content_area = QStackedWidget()
+        self.content_area.addWidget(self.stack)
+        self.translation_tool = None
+        right.addWidget(self.content_area, 1)
         self.status = QLabel('保存在本机')
         self.status.setObjectName('muted')
         footer = QHBoxLayout()
@@ -140,6 +141,10 @@ class NativeWindow(QMainWindow):
         self.sync_timer.setInterval(4000)
         self.sync_timer.timeout.connect(self.synchronize)
         self.sync_timer.start()
+        self.handoff_timer = QTimer(self)
+        self.handoff_timer.setInterval(250)
+        self.handoff_timer.timeout.connect(self.receive_handoff)
+        self.handoff_timer.start()
         QTimer.singleShot(0, lambda: self.run(self.service.workspace.rag.request, lambda _: None))
         self.refresh()
 
@@ -193,6 +198,7 @@ class NativeWindow(QMainWindow):
             self.tasks.submit(action, done or (lambda _: self.refresh()))
 
     def refresh(self):
+        self.close_translation()
         self.navigation_busy = True
         self.back.setEnabled(False)
         previous = self.stack.currentWidget()
@@ -240,9 +246,6 @@ class NativeWindow(QMainWindow):
             elif page == 'discover':
                 widget = DiscoverPage(self)
                 title = '发现'
-            elif page == 'translate':
-                widget = TranslationPage(self)
-                title = '翻译'
             elif page == 'library':
                 widget = LibraryPage(self, self.snapshot)
                 if restored and 'library' in restored:
@@ -369,6 +372,7 @@ class NativeWindow(QMainWindow):
                 'tab': widget.tabs.currentIndex(),
                 'scroll': widget.text.verticalScrollBar().value(),
                 'split': widget.splitter.sizes(),
+                'translation': widget.translation_page is not None and widget.reading_tools.currentWidget() is widget.translation_page,
             }
         bar = self.page_scroll(widget)
         route['scroll'] = bar.value() if bar is not None else 0
@@ -382,10 +386,46 @@ class NativeWindow(QMainWindow):
         self.navigate('reader', key, remember)
         self.tasks.submit(lambda: self.service.activity.record(key), lambda _: None)
 
-    def open_translation(self, text='', origin=''):
-        if text and not self.translation.prefill(text, origin):
+    def translation_for(self, scope):
+        if scope not in self.translation_controllers:
+            self.translation_controllers[scope] = TranslationController(self, scope)
+        return self.translation_controllers[scope]
+
+    def close_translation(self):
+        self.content_area.setCurrentWidget(self.stack)
+        if self.translation_tool is not None:
+            self.content_area.removeWidget(self.translation_tool)
+            self.translation_tool.deleteLater()
+            self.translation_tool = None
+
+    def show_translation(self, controller):
+        self.close_translation()
+        self.translation = controller
+        self.translation_tool = TranslationPage(self, controller, self.close_translation)
+        self.content_area.addWidget(self.translation_tool)
+        self.content_area.setCurrentWidget(self.translation_tool)
+
+    def open_translation(self, text='', origin='', scope=None):
+        controller = self.translation_for(scope or source_scope(text, origin))
+        if text and text != controller.state['text'] and not controller.prefill(text, origin):
             return
-        self.navigate('translate')
+        self.show_translation(controller)
+
+    def receive_handoff(self):
+        if self.closing or self.navigation_busy:
+            return
+        from PySide6.QtWidgets import QApplication
+        if QApplication.activeModalWidget() is not None:
+            return
+        from ..workspace_bridge import take_translation
+        value = take_translation(self.service.store.directory)
+        if value:
+            controller = self.translation_for(source_scope(value['text'], value.get('origin', '')))
+            controller.receive(value)
+            self.show_translation(controller)
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
 
     def resume_draft(self, record):
         if record['id'] == 'native-advisor-draft':
@@ -589,13 +629,15 @@ class NativeWindow(QMainWindow):
             if isinstance(page, ReaderPage):
                 page.save_view()
             self.closing = True
-            self.translation.shutdown()
+            for controller in self.translation_controllers.values():
+                controller.shutdown()
             self.topbar.timer.stop()
             self.search_timer.stop()
             for controller in self.note_controllers.values():
                 controller.flush()
             self.index_timer.stop()
             self.sync_timer.stop()
+            self.handoff_timer.stop()
             self.index_controller.timer.stop()
             self.advisor.timer.stop()
             self.library.timer.stop()

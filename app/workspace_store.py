@@ -233,6 +233,7 @@ class WorkspaceStore:
                         if table in tables:
                             db.execute(f'DELETE FROM {table} WHERE article_id=?',(aid,))
                     db.execute('DELETE FROM sessions WHERE id LIKE ?', (aid+':%',))
+                    db.execute('DELETE FROM settings WHERE id=?', ('native-translation:article:'+aid,))
                     db.execute('DELETE FROM articles WHERE id=?',(aid,))
                 if 'study_tasks' in tables:
                     for row in db.execute('SELECT id,payload FROM study_tasks').fetchall():
@@ -241,8 +242,9 @@ class WorkspaceStore:
                         db.execute('UPDATE study_tasks SET payload=? WHERE id=?', (json.dumps(task, ensure_ascii=False), row['id']))
                 if 'capture_links' in tables:
                     db.executemany('DELETE FROM capture_links WHERE object_id=?',[(oid,) for oid in objects])
-                if 'map_parts' in tables:
-                    db.executemany('DELETE FROM map_parts WHERE version=?',[(version,) for version in versions])
+                for table in ('map_parts', 'map_stages'):
+                    if table in tables:
+                        db.executemany(f'DELETE FROM {table} WHERE version=?',[(version,) for version in versions])
                 for row in list(db.execute("SELECT id,payload FROM sessions WHERE id LIKE 'library:%'")):
                     if set(json.loads(row['payload']).get('article_ids', [])) & set(ids):
                         db.execute('DELETE FROM sessions WHERE id=?', (row['id'],))

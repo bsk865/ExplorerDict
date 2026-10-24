@@ -12,6 +12,8 @@ from .content import ContentPage
 from .maps import MapPage, MapView, MapScene
 from .index import IndexPage
 from .saved import SavedPage
+from .discover import DiscoverPage
+from .translation import TranslationPage
 
 
 def attach_verification(window, directory):
@@ -188,7 +190,7 @@ def attach_verification(window, directory):
                 assert not any(d['id'] == 'note-draft:native-verification-draft' for d in window.service.inventory()['native_drafts'])
                 report['draft_management_restore_delete'] = True
             assert window.current_page == routes[index]
-            assert isinstance(page, (ReaderPage, ShelfPage, StudyPage, LibraryPage, ContentPage, MapPage, IndexPage, SavedPage))
+            assert isinstance(page, (DiscoverPage, TranslationPage, ReaderPage, ShelfPage, StudyPage, LibraryPage, ContentPage, MapPage, IndexPage, SavedPage))
             assert window.width() >= 900 and window.height() >= 620
             if routes[index] == 'notes':
                 assert isinstance(page, ContentPage) and page.kind == 'notes'
@@ -345,7 +347,7 @@ def attach_verification(window, directory):
                 def inspect_handoff():
                     dialog = QApplication.activeModalWidget()
                     try:
-                        assert dialog and dialog.windowTitle() == '会话交接记录', 'handoff dialog missing'
+                        assert dialog and dialog.windowTitle() == '对话回顾', 'handoff dialog missing'
                         assert len(dialog.entries) == 2, 'archive count differs'
                         assert dialog.pages.currentIndex() == 0, 'history must open as list'
                         assert dialog.document.isReadOnly(), 'handoff should be read-only'
@@ -665,6 +667,7 @@ def attach_verification(window, directory):
                     window.navigate(routes[index])
         except Exception as exc:
             report['errors'].append(repr(exc))
+            (directory / 'page-error.log').write_text(traceback.format_exc(), encoding='utf-8')
             finish()
 
     def ready():

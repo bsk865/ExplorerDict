@@ -1,13 +1,15 @@
 """Native, source-linked article maps and full-scene exports."""
 import json
+import time
 from pathlib import Path
 from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRectF, QSize
 from PySide6.QtGui import QColor, QPen, QBrush, QPainterPath, QPainter, QImage, QTextDocument, QPixmap
 from PySide6.QtSvg import QSvgGenerator
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel, QTextBrowser, QStyle, QTabWidget)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsRectItem, QComboBox, QListWidget, QListWidgetItem, QLabel, QTextBrowser, QStyle, QTabWidget, QProgressBar)
 from .surfaces import QFileDialog, QDialog
 from .widgets import PageComboBox as QComboBox
-from .widgets import button, heading
+from .widgets import button, heading, FlowLayout
+from ..map_input import resolve_mode, markdown
 from ..reading_preferences import colors
 
 
@@ -18,9 +20,19 @@ class MapView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.auto_fit = True
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setToolTip('拖动画布查看，Ctrl + 滚轮缩放；自适应可显示完整导图')
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.auto_fit and self.scene() and self.scene().items():
+            self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def zoom(self, factor):
         if .02 <= self.transform().m11()*factor <= 8:
+            self.auto_fit = False
             self.scale(factor, factor)
 
     def focusInEvent(self, event):
@@ -202,6 +214,9 @@ class MapController(QObject):
         self.host, self.article = host, article
         self.job = None
         self.message = ''
+        self.started = None
+        self.elapsed = 0
+        self.mode = (article.get('quality') or {}).get('input_mode') or resolve_mode(article)
         self.timer = QTimer(self)
         self.timer.setInterval(300)
         self.timer.timeout.connect(self.poll)
@@ -210,7 +225,7 @@ class MapController(QObject):
         if self.job:
             return
         try:
-            result = self.host.service.workspace.start('map', {'article_id': self.article['id'], 'force': force})
+            result = self.host.service.workspace.start('map', {'article_id': self.article['id'], 'force': force, 'mode': self.mode})
         except ValueError as exc:
             self.message = str(exc)
         else:
@@ -219,6 +234,8 @@ class MapController(QObject):
                 self.message = '导图已就绪'
             else:
                 self.job = result.get('job')
+                self.started = time.monotonic()
+                self.elapsed = 0
                 self.message = '小探正在整理导图…'
                 self.timer.start()
         self.changed.emit()
@@ -227,6 +244,11 @@ class MapController(QObject):
         with self.host.service.workspace.lock:
             job = dict(self.host.service.workspace.jobs.get(self.job, {}))
         if job.get('status') == 'running':
+            elapsed = int(time.monotonic() - self.started) if self.started is not None else 0
+            message = '正在停止…' if job.get('cancel') and job['cancel'].is_set() else job.get('message') or self.message
+            if message != self.message or elapsed != self.elapsed:
+                self.message, self.elapsed = message, elapsed
+                self.changed.emit()
             return
         self.timer.stop()
         self.job = None
@@ -266,7 +288,14 @@ class MapPage(QWidget):
         self.summary = QLabel()
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
-        tools = QHBoxLayout()
+        tools = FlowLayout(spacing=8)
+        self.mode = QComboBox()
+        self.mode.setAccessibleName('导图生成依据')
+        self.mode.addItem('正文导图', 'text')
+        self.mode.addItem('图文导图', 'multimodal')
+        self.mode.setCurrentIndex(max(0, self.mode.findData(self.controller.mode)))
+        self.mode.currentIndexChanged.connect(lambda _: setattr(self.controller, 'mode', self.mode.currentData()))
+        tools.addWidget(self.mode)
         self.generate = button('生成导图', self.controller.generate, primary=True)
         self.rebuild = button('重新整理', lambda: self.controller.generate(True))
         self.stop = button('停止', self.controller.stop)
@@ -278,13 +307,15 @@ class MapPage(QWidget):
             self.depth.addItem(label, depth)
         self.depth.setCurrentIndex(3)
         tools.addWidget(self.depth)
-        tools.addStretch()
         tools.addWidget(button('−', lambda: self.view.zoom(.8), tip='缩小'))
         tools.addWidget(button('+', lambda: self.view.zoom(1.25), tip='放大'))
         tools.addWidget(button('', self.fit, icon=self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton), tip='适应窗口'))
         tools.addWidget(button('导出', self.export))
-        tools.addWidget(button('草稿记录', self.export_drafts))
         layout.addLayout(tools)
+        scope = QLabel('正文导图只研读正文；图文导图同时识别并核对图片，需要模型支持图片。扫描页需使用图文导图。')
+        scope.setWordWrap(True)
+        scope.setObjectName('muted')
+        layout.addWidget(scope)
         split = QSplitter()
         self.view = MapView()
         split.addWidget(self.view)
@@ -295,6 +326,9 @@ class MapPage(QWidget):
         aside.addWidget(self.quote, 1)
         self.relations = QListWidget()
         self.relations.setWordWrap(True)
+        self.relations.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.relations.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.relations.setTextElideMode(Qt.TextElideMode.ElideNone)
         self.relations.itemClicked.connect(self.show_relation)
         aside.addWidget(self.relations, 1)
         self.locate = button('查看原文依据', self.open_source)
@@ -308,6 +342,11 @@ class MapPage(QWidget):
         layout.addWidget(split, 1)
         self.status = QLabel()
         self.status.setWordWrap(True)
+        self.busy = QProgressBar()
+        self.busy.setRange(0, 0)
+        self.busy.setTextVisible(False)
+        self.busy.setFixedHeight(4)
+        layout.addWidget(self.busy)
         layout.addWidget(self.status)
         self.depth.currentIndexChanged.connect(self.draw)
         self.controller.changed.connect(self.render)
@@ -318,8 +357,11 @@ class MapPage(QWidget):
         self.generate.setEnabled(not self.controller.job)
         self.rebuild.setEnabled(not self.controller.job)
         self.stop.setEnabled(bool(self.controller.job))
+        self.mode.setEnabled(not self.controller.job)
         graph = self.controller.article.get('map')
         details = []
+        if graph:
+            details.append('正文导图 · 未分析图片' if (self.controller.article.get('quality') or {}).get('input_mode') == 'text' else '图文导图' if graph.get('visual_sources') else '正文导图')
         if (self.controller.article.get('quality') or {}).get('demo'):
             details.append('示例导图')
         if graph and graph.get('segments'):
@@ -328,7 +370,12 @@ class MapPage(QWidget):
             details.append('含原图依据')
         self.summary.setText(' · '.join(details))
         self.summary.setVisible(bool(details))
-        self.status.setText(self.controller.message or ('' if graph else '尚未生成导图'))
+        status = self.controller.message or ('' if graph else '尚未生成导图')
+        if self.controller.job:
+            minutes, seconds = divmod(self.controller.elapsed, 60)
+            status += f' · 已用 {minutes} 分 {seconds:02d} 秒'
+        self.status.setText(status)
+        self.busy.setVisible(bool(self.controller.job))
         key = json.dumps(graph, ensure_ascii=False)
         if key != self.graph_key:
             self.graph_key = key
@@ -352,6 +399,7 @@ class MapPage(QWidget):
 
     def fit(self):
         if self.view.scene() and self.view.scene().items():
+            self.view.auto_fit = True
             self.view.fitInView(self.view.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def select_node(self):
@@ -448,10 +496,17 @@ class MapPage(QWidget):
         if not graph:
             self.host.notice('请先生成导图')
             return
-        filename, selected = QFileDialog.getSaveFileName(self, '导出完整导图', '完整导图.png', 'PNG 图片 (*.png);;SVG 矢量图 (*.svg)')
+        filename, selected = QFileDialog.getSaveFileName(self, '导出完整导图', '完整导图.png', 'PNG 图片 (*.png);;SVG 矢量图 (*.svg);;Markdown (*.md)')
         if filename:
             if not Path(filename).suffix:
-                filename += '.svg' if selected.startswith('SVG') else '.png'
+                filename += '.svg' if selected.startswith('SVG') else '.md' if selected.startswith('Markdown') else '.png'
+            if Path(filename).suffix.lower() == '.md':
+                try:
+                    Path(filename).write_text(markdown(self.controller.article), encoding='utf-8')
+                    self.host.notice('导图结构与原文关系已导出')
+                except OSError:
+                    self.host.notice('无法保存，请选择其他位置。')
+                return
             scene = MapScene(graph, self.palette, include_relations=True,
                              objects=self.controller.article.get('objects', []))
             try:
@@ -459,14 +514,3 @@ class MapPage(QWidget):
                 self.host.notice('完整导图已导出')
             except ValueError as exc:
                 self.host.notice(str(exc))
-
-    def export_drafts(self):
-        filename, _ = QFileDialog.getSaveFileName(self, '导出草稿与复核记录', '导图草稿.json', 'JSON (*.json)')
-        if filename:
-            with self.host.service.store.connect() as db:
-                rows = [json.loads(row[0]) for row in db.execute('SELECT payload FROM attempts WHERE article_id=?', (self.controller.article['id'],))]
-            try:
-                Path(filename).write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding='utf-8')
-                self.host.notice('草稿记录已导出')
-            except OSError:
-                self.host.notice('无法保存，请选择其他位置。')

@@ -15,14 +15,8 @@ import socket
 import time
 from bs4 import BeautifulSoup
 from PIL import Image, ImageOps
+from .discovery_sources import SOURCES, CATALOG, CATALOG_VERSION, MAX_SOURCES, platform_key, diversify
 
-SOURCES = [
-    {'id': 'ithome', 'name': 'IT之家', 'url': 'https://www.ithome.com/rss/', 'kind': 'news', 'enabled': True},
-    {'id': 'bbc-tech', 'name': 'BBC 科技', 'url': 'https://feeds.bbci.co.uk/news/technology/rss.xml', 'kind': 'news', 'enabled': True},
-    {'id': 'science', 'name': 'ScienceDaily 科学', 'url': 'https://www.sciencedaily.com/rss/top/science.xml', 'kind': 'news', 'enabled': True},
-    {'id': 'arxiv-ai', 'name': 'arXiv · 人工智能', 'url': 'https://rss.arxiv.org/rss/cs.AI', 'kind': 'paper', 'enabled': True},
-    {'id': 'arxiv-robot', 'name': 'arXiv · 机器人', 'url': 'https://rss.arxiv.org/rss/cs.RO', 'kind': 'paper', 'enabled': True},
-]
 TOPICS = {
     '人工智能': ['人工智能', '机器学习', '大语言模型', '深度学习', 'artificial intelligence', 'machine learning', 'deep learning', 'llm', 'language model'],
     '机器人': ['机器人', '自动驾驶', '运动控制', 'robot', 'robotics', 'autonomous driving', 'mpc', 'model predictive control'],
@@ -157,11 +151,60 @@ def parse_feed(raw, source):
         authors = value('creator', 'author')
         item.update(summary=summary, cover_url=cover, published=value('pubDate', 'published', 'date', 'updated'),
                     authors=clean(authors, 250), source_id=source['id'],
+                    platform=source.get('platform') or platform_key(source['url']),
                     description_type=('来源摘要节选' if truncated else '来源摘要') if source['kind'] == 'paper' else '来源简介',
                     summary_truncated=truncated,
                     publication='预印本' if urlsplit(item['url']).hostname in {'arxiv.org', 'www.arxiv.org', 'export.arxiv.org'} else '', imported_at=time.time())
         results.append(item)
     return results
+
+
+def find_feeds(url, loader=fetch):
+    """Find and validate publisher-provided feeds from a feed or website URL."""
+    raw, final, charset = loader(canonical(url))
+    def candidate(body, address, title=''):
+        address=canonical(address)
+        source=dict(id=sha256(address.encode()).hexdigest()[:16],url=address,name=title or urlsplit(address).hostname,
+                    kind='news',enabled=True)
+        parse_feed(body,source)
+        root=ET.fromstring(body)
+        channel=next((node for node in root if node.tag.rsplit('}',1)[-1]=='channel'),root)
+        feed_title=next((''.join(node.itertext()) for node in channel if node.tag.rsplit('}',1)[-1]=='title'),'')
+        return dict(source,name=clean(feed_title or title or source['name'],80))
+    try:
+        return [candidate(raw,final)]
+    except (ValueError,ET.ParseError):
+        pass
+    soup=BeautifulSoup(raw.decode(charset,errors='replace'),'html.parser')
+    base=soup.find('base',href=True)
+    base_url=urljoin(final,base['href']) if base else final
+    addresses={}
+    for link in soup.find_all('link',href=True):
+        if ('alternate' in link.get('rel',[]) and link.get('type','').split(';')[0].strip().lower()
+                in {'application/rss+xml','application/atom+xml','application/rdf+xml'}):
+            try:
+                address=canonical(urljoin(base_url,link['href']))
+            except ValueError:
+                continue
+            addresses.setdefault(address,clean(link.get('title',''),80))
+            if len(addresses)==8:break
+    if not addresses:
+        for source in CATALOG:
+            if source['platform']==platform_key(final):
+                addresses.setdefault(source['url'],source['name'])
+    def read(item):
+        try:
+            address,title=item
+            body,resolved,_=loader(address)
+            return candidate(body,resolved,title)
+        except Exception:
+            return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        found=[row for row in pool.map(read,addresses.items()) if row]
+    unique={row['url']:row for row in found}
+    if not unique:
+        raise ValueError('这个网页没有可用的公开订阅入口。文章链接仍可在发现页收集。')
+    return list(unique.values())
 
 
 class Discovery:
@@ -171,17 +214,42 @@ class Discovery:
 
     def preferences(self):
         saved = self.store.get('settings', 'discovery-preferences', {})
-        return dict(topics=[], blocked=[], personal=True, automatic=True, sources=[dict(s) for s in SOURCES]) | saved
+        value = dict(topics=[], blocked=[], personal=True, automatic=True, sources=[dict(s) for s in SOURCES]) | saved
+        value['sources'] = [dict(s) for s in value['sources']]
+        if saved and saved.get('catalog_version', 1) < CATALOG_VERSION:
+            # Add only newly introduced defaults once; retain old removals/toggles.
+            enabled = any(s.get('enabled') for s in value['sources'])
+            known = {s['id'] for s in value['sources']}
+            addresses = {s['url'] for s in value['sources']}
+            for row in SOURCES:
+                if row['introduced'] > saved.get('catalog_version', 1) and row['id'] not in known and row['url'] not in addresses:
+                    value['sources'].append(dict(row, enabled=enabled))
+        catalog = {s['id']: s for s in CATALOG}
+        for row in value['sources']:
+            original = catalog.get(row['id'], {})
+            row.setdefault('platform', original.get('platform') or platform_key(row['url']))
+            row.setdefault('category', original.get('category', '自定义来源'))
+        value['catalog_version'] = CATALOG_VERSION
+        return value
 
     def save_preferences(self, value):
         value = dict(value)
         value['topics'] = list(dict.fromkeys(t.strip()[:60] for t in value.get('topics', []) if t.strip()))[:20]
         value['blocked'] = list(dict.fromkeys(t.strip()[:60] for t in value.get('blocked', []) if t.strip()))[:20]
         sources = value.get('sources', [])
-        if len(sources) > 10:
-            raise ValueError('最多添加10个订阅源。')
+        if len(sources) > MAX_SOURCES:
+            raise ValueError(f'最多添加{MAX_SOURCES}个订阅源。')
+        ids, urls = set(), set()
         for source in sources:
             source['url'] = canonical(source['url'])
+            if not source.get('id') or not str(source.get('name', '')).strip() or source.get('kind') not in {'news', 'paper'}:
+                raise ValueError('订阅源需要名称、有效标识及内容类型。')
+            if source['id'] in ids or source['url'] in urls:
+                raise ValueError('订阅源重复，请保留一个地址。')
+            ids.add(source['id'])
+            urls.add(source['url'])
+            source['platform'] = platform_key(source['url']) if not any(c['id'] == source['id'] and c['url'] == source['url'] for c in CATALOG) else next(c['platform'] for c in CATALOG if c['id'] == source['id'])
+        value['catalog_version'] = CATALOG_VERSION
         self.store.put('settings', 'discovery-preferences', value)
 
     def state(self):
@@ -208,16 +276,26 @@ class Discovery:
                         scores[topic] = scores.get(topic, 0) + 1 / (1 + index / 30)
         return sorted(((k, v) for k, v in scores.items() if k not in prefs['blocked']), key=lambda x: -x[1])[:10]
 
-    def ranked(self, kind='all', query=''):
+    def ranked(self, kind='all', query='', source_id=''):
         prefs = self.preferences()
         interests = self.interests()
         flags = self.store.get('settings', 'discovery-flags', {})
         enabled = {s['id'] for s in prefs['sources'] if s.get('enabled')}
+        sources = {s['id']: s for s in prefs['sources']}
         rows = []
         for item in self.state()['items']:
+            item = dict(item)
+            origins = item.get('origins') or [dict(source_id=item.get('source_id'), source=item['source'], platform=item.get('platform'))]
+            active = [o for o in origins if o.get('source_id') in enabled | {'links'}]
+            if source_id:
+                active = [o for o in origins if o.get('source_id') == source_id and (source_id in enabled | {'links'} or kind == 'saved')]
+                if not active:
+                    continue
+            if active:
+                item.update(active[0])
             flag = flags.get(item['id'], {})
             text = (item['title'] + ' ' + item.get('summary', '')).casefold()
-            if item.get('source_id') not in enabled | {'links'} and not (kind == 'saved' and flag.get('saved')):
+            if not active and not (kind == 'saved' and flag.get('saved')):
                 continue
             if flag.get('hidden') or any(alias.casefold() in text for t in prefs['blocked'] for alias in TOPICS.get(t, [t])):
                 continue
@@ -228,8 +306,10 @@ class Discovery:
             matched = [(topic, weight) for topic, weight in interests if any(alias.casefold() in text for alias in TOPICS.get(topic, [topic]))]
             age = max(0, time.time() - stamp(item.get('published', ''))) / 86400
             score = sum(weight for _, weight in matched) + 2 / (1 + age / 7)
-            rows.append(dict(item, **flag, reason=('与你关注的“'+matched[0][0]+'”相关') if matched else '来自你的订阅与收集', score=score))
-        return sorted(rows, key=lambda row: (row['score'], stamp(row.get('published', '')), row.get('imported_at', 0)), reverse=True)
+            item['platform'] = item.get('platform') or sources.get(item.get('source_id'), {}).get('platform') or platform_key(item['url'])
+            rows.append(dict(item, **flag, matched_topics=[topic for topic, _ in matched], reason=('与你关注的“'+matched[0][0]+'”相关') if matched else '来自你的订阅与收集', score=score))
+        ordered = sorted(rows, key=lambda row: (row['score'], stamp(row.get('published', '')), row.get('imported_at', 0)), reverse=True)
+        return diversify(ordered) if kind not in {'saved', 'article'} and not source_id else ordered
 
     def flag(self, key, name, value):
         with self.store.lock:
@@ -265,7 +345,8 @@ class Discovery:
         sources = [s for s in self.preferences()['sources'] if s.get('enabled')]
         def read(source):
             try:
-                return parse_feed(loader(source['url'])[0], source), None
+                rows = parse_feed(loader(source['url'])[0], source)
+                return rows, None
             except Exception:
                 return [], source['name'] + '：更新失败，保留上次内容'
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -275,7 +356,8 @@ class Discovery:
         with self.store.lock:
             existing = {item['id']: item for item in self.state()['items']}
         candidates = []
-        for item in [row for rows, _ in batches for row in rows[:3]][:12]:
+        cover_pool = [dict(row, score=stamp(row.get('published', ''))) for rows, _ in batches for row in rows[:3]]
+        for item in diversify(sorted(cover_pool, key=lambda row: row['score'], reverse=True))[:12]:
             candidates.append(dict(item, cover_file=existing.get(item['id'], {}).get('cover_file', '')))
         with ThreadPoolExecutor(max_workers=4) as pool:
             covered = list(pool.map(lambda row: self.cover(row, loader, True), candidates))
@@ -284,13 +366,26 @@ class Discovery:
             state = self.state()
             merged = {item['id']: item for item in state['items']}
             for item in fresh:
-                merged[item['id']] = dict(merged.get(item['id'], {}), **covers.get(item['id'], item))
+                old = merged.get(item['id'], {})
+                origins = {o['source_id']: o for o in old.get('origins', [])}
+                if old.get('source_id'):
+                    origins[old['source_id']] = {k: old.get(k) for k in ('source_id', 'source', 'platform')}
+                origins[item['source_id']] = {k: item.get(k) for k in ('source_id', 'source', 'platform')}
+                merged[item['id']] = dict(old, **covers.get(item['id'], item), origins=list(origins.values()))
             flags = self.store.get('settings', 'discovery-flags', {})
             ordered = sorted(merged.values(), key=lambda row: row.get('imported_at', 0), reverse=True)
             protected = [row for row in ordered if flags.get(row['id'], {}).get('saved') or row.get('source_id') == 'links']
             kept_ids = {row['id'] for row in protected}
-            kept = protected + [row for row in ordered if row['id'] not in kept_ids][:400]
+            pool = [dict(row, platform=row.get('platform') or platform_key(row['url']), score=stamp(row.get('published', ''))) for row in ordered if row['id'] not in kept_ids]
+            kept = protected + diversify(pool)[:400]
             state.update(items=kept, attempted=time.time(), errors=[e for _, e in batches if e])
+            health = dict(state.get('source_health', {}))
+            for source, (items, error) in zip(sources, batches):
+                old = health.get(source['id'], {})
+                health[source['id']] = dict(attempted=time.time(), count=len(items), error=error or '',
+                                             updated=old.get('updated', 0) if error else time.time(),
+                                             message='本期暂无新文章，已保留上次内容' if not error and not items else '')
+            state['source_health'] = health
             if any(not error for _, error in batches):
                 state['updated'] = time.time()
             self.store.put('settings', 'discovery-state', state)

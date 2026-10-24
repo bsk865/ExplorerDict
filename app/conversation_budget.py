@@ -64,16 +64,15 @@ def retrieval_budget(store, session, question):
 
 
 def handoff(session, question, reason):
-    lines = ['# 小探会话交接记录', '', '本机根据已保存的对话整理，未额外调用模型。模型回答不是已核实事实，请通过引用重新核对。',
-             '', '## 结束原因', reason, '', '## 待继续的问题', question or '未记录新的待答问题。', '', '## 对话与已有产物']
+    lines = ['# 对话回顾', '', '保留本段问答与参考来源，方便继续阅读。',
+             '', '## 结束原因', reason, '', '## 待继续的问题', question or '暂无待继续的问题。', '', '## 问答记录']
     for m in session.get('messages', []):
-        lines += ['', '### '+('用户问题' if m['role']=='user' else '小探回答（需核对）'), m['content']]
+        lines += ['', '### '+('我的问题' if m['role']=='user' else '小探回答'), m['content']]
         for e in m.get('evidence', []):
-            lines += ['', f"来源：{e.get('article_title','')} · 文章 {e.get('article_id','')} · 版本 {e.get('version','')} · 段落 {e.get('block','')}",
+            lines += ['', f"来源：{e.get('article_title','')}",
                       '> '+e.get('quote','').replace('\n','\n> ')]
     if session.get('carryover'):
-        lines += ['', '## 上段交接摘录', session['carryover']]
-    lines += ['', '## 接续建议', '重新检索相关原文，核对已有回答，再处理待继续的问题。不要把旧回答或交接摘录当作原文证据。']
+        lines += ['', '## 上段回顾', session['carryover']]
     return '\n'.join(lines)
 
 
@@ -111,7 +110,7 @@ def guard(store, key, question, messages, p, cancel=None):
                 needed = ((input_bound(messages) + p['output_reserve'] + 1023)//1024)*1024
                 suggestion = f'请将问答预算提高到至少 {needed:,} tokens，或减少图片。' if p.get('capacity') and needed <= p['capacity'] else '请减少图片，或确认模型容量后提高问答预算。'
                 raise ValueError('图片预留超过本段预算，对话已保留且未发送请求。'+suggestion)
-        reason = '本次请求的保守输入估算加回答预留已达到问答预算。未发送超预算请求。'
+        reason = '本段对话已达到设置的长度上限，可以接续新对话。'
         raise ConversationEnded(close(store, key, question, reason))
 
 

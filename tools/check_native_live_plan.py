@@ -1,4 +1,4 @@
-"""Verify real-model planning and undo through the native controller."""
+"""Verify follow-up planning around an existing task and undo via the controller."""
 import argparse
 from datetime import date, timedelta
 import json
@@ -29,20 +29,21 @@ def main():
     directory = Path(tempfile.mkdtemp(prefix='live-plan-', dir=parent))
     app = QApplication([])
     service = NativeService(directory)
+    service.workspace.map_preloader.close()
     service.store.model_config = lambda: dict(config)
     article = service.import_text('合成阅读任务', '读完后整理一个观点，并回到原文核对。')
     host = QWidget()
     host.service = service
     controller = AdvisorController(host)
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
-    controller.value = {'request': f'请在{tomorrow}上午09:00安排一项25分钟的阅读任务，阅读所选资料。只要这一项，直接添加计划。',
-                        'article_ids': [article['id']], 'history': [],
-                        'availability': {'start_date': tomorrow, 'end_date': tomorrow,
-                                         'start_time': '09:00', 'end_time': '10:00', 'daily_minutes': 30}}
+    existing = service.hub.save('tasks', {'title': '已有复习', 'date': tomorrow, 'time': '09:00', 'minutes': 30})
+    controller.value = {'request': '请安排两次阅读任务，每次25分钟。我还没确定阅读日期和可用时段，请先问我再安排。',
+                        'article_ids': [article['id']], 'history': []}
     report = {'directory': str(directory), 'model': config['model'], 'passed': False,
               'synthetic_content_only': True, 'controller': 'AdvisorController', 'errors': []}
     started = time.monotonic()
     finished = False
+    phase = 0
 
     def finish(error=None):
         nonlocal finished
@@ -61,22 +62,34 @@ def main():
         app.quit()
 
     def tick():
+        nonlocal phase
         if time.monotonic()-started > 180:
             controller.stop()
             finish('request_deadline_exceeded')
         elif controller.job is None:
             try:
+                if phase == 0:
+                    assert controller.result is None and len(controller.value.get('history', [])) == 2, 'followup_missing'
+                    assert service.hub.snapshot()['tasks'] == [existing], 'question_saved_tasks'
+                    report['asked_before_scheduling'] = True
+                    controller.value['availability'] = {'start_date': tomorrow, 'end_date': tomorrow,
+                        'start_time': '09:00', 'end_time': '11:00', 'daily_minutes': 50}
+                    controller.draft(f'日期是{tomorrow}，可以用09:00到11:00，一共安排50分钟。两次各25分钟，阅读所选资料，避开已有安排，直接保存。')
+                    phase = 1
+                    controller.submit()
+                    return
                 assert controller.result, 'no_saved_plan'
-                tasks = service.hub.snapshot()['tasks']
-                assert len(tasks) == 1, 'unexpected_task_count'
-                task = tasks[0]
-                assert task['date'] == tomorrow and task['time'] == '09:00' and task['minutes'] == 25, 'schedule_mismatch'
-                assert task['article_ids'] == [article['id']], 'article_link_missing'
-                report['saved_task'] = task
+                tasks = [t for t in service.hub.snapshot()['tasks'] if t['id'] != existing['id']]
+                assert len(tasks) == 2, 'unexpected_task_count'
+                for task in tasks:
+                    assert task['date'] == tomorrow and '09:30' <= task['time'] <= '10:35' and task['minutes'] == 25, 'schedule_mismatch'
+                    assert task['article_ids'] == [article['id']], 'article_link_missing'
+                report['saved_tasks'] = tasks
+                report['existing_conflict_avoided'] = True
                 assert not controller.value.get('request') and not controller.value.get('history'), 'submitted_draft_not_cleared'
                 report['draft_cleared'] = True
                 controller.undo()
-                assert not service.hub.snapshot()['tasks'] and controller.result is None, 'undo_failed'
+                assert service.hub.snapshot()['tasks'] == [existing] and controller.result is None, 'undo_failed'
                 assert service.store.article(article['id']), 'undo_removed_article'
                 report['undo_removed_batch_tasks'] = True
                 finish()

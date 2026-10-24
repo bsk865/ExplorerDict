@@ -95,8 +95,9 @@ def remove(store, kind, key):
                 article['quality']=None
                 db.execute('UPDATE articles SET payload=? WHERE id=?',(json.dumps(article,ensure_ascii=False),key))
                 db.execute('DELETE FROM attempts WHERE article_id=?',(key,))
-                if 'map_parts' in tables:
-                    db.execute('DELETE FROM map_parts WHERE version=?',(article['version'],))
+                for table in ('map_parts', 'map_stages'):
+                    if table in tables:
+                        db.execute(f'DELETE FROM {table} WHERE version=?',(article['version'],))
             elif kind=='reading':
                 for table in ('study_reading','study_visits'):
                     if table in tables:

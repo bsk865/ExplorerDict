@@ -2,7 +2,7 @@
 from bs4 import BeautifulSoup
 from PySide6.QtCore import Qt, QUrl, Signal, QTimer, QMimeData, QEvent, QSize
 from PySide6.QtGui import QTextCursor, QTextCharFormat, QTextBlockFormat, QColor, QImage, QTextImageFormat, QPixmap, QIcon
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter, QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QTabBar, QScrollArea)
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QSplitter, QListWidget, QListWidgetItem, QLabel, QTabWidget, QMenu, QApplication, QGridLayout, QTabBar, QScrollArea, QStackedWidget)
 from .surfaces import QDialog
 from ..reading_annotations import block_text
 from .widgets import button, heading, FlowLayout
@@ -258,7 +258,7 @@ class ReaderPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         bar = FlowLayout(spacing=8)
         bar.addWidget(button('我的文章', lambda: host.navigate('shelf')))
-        bar.addWidget(button('原文', lambda: self.text.setFocus()))
+        bar.addWidget(button('原文', self.show_original))
         bar.addWidget(button('导图', lambda: host.navigate('map', self.article['id'])))
         bar.addWidget(button('笔记', self.show_notes))
         bar.addWidget(button('翻译', self.translate))
@@ -343,7 +343,10 @@ class ReaderPage(QWidget):
         self.paper.setObjectName('readingPaper')
         self.paper.setStyleSheet(f"QWidget#readingPaper {{background:{palette.get('soft', palette['bg'])}; border-radius:8px;}}")
         self.text.setStyleSheet(f"QTextEdit {{font-size:14px; padding:24px; border:1px solid {palette['line']}; border-radius:4px; background:{palette['bg']};}}")
-        self.splitter.addWidget(self.paper)
+        self.reading_tools = QStackedWidget()
+        self.reading_tools.addWidget(self.paper)
+        self.translation_page = None
+        self.splitter.addWidget(self.reading_tools)
         self.tabs = QTabWidget()
         self.chat = ChatPanel(self)
         self.text.imageClicked.connect(self.open_image)
@@ -401,7 +404,8 @@ class ReaderPage(QWidget):
         self.notes.controller.flush()
         self.host.service.store.put('settings', 'native-reading:' + self.article['id'],
                                     {'scroll': self.text.verticalScrollBar().value(),
-                                     'split': self.splitter.sizes(), 'tab': self.tabs.currentIndex()})
+                                     'split': self.splitter.sizes(), 'tab': self.tabs.currentIndex(),
+                                     'translation': self.translation_page is not None and self.reading_tools.currentWidget() is self.translation_page})
 
     def restore_view(self):
         value = self.host.service.store.get('settings', 'native-reading:' + self.article['id'], {})
@@ -415,6 +419,8 @@ class ReaderPage(QWidget):
         self.tabs.setCurrentIndex(value.get('tab', 0))
         self.text.verticalScrollBar().setValue(value.get('scroll', 0))
         self.set_assistant_visible(self.resume_assistant)
+        if value.get('translation'):
+            self.translate()
         if self.focus_block:
             self.text.locate(self.focus_block)
         if self.focus_object:
@@ -614,7 +620,22 @@ class ReaderPage(QWidget):
         if not text.strip():
             self.host.notice('这份资料尚无可翻译的文本，请先补充正文。')
             return
-        self.host.open_translation(text, self.article['title'] + (' · 选中内容' if selected else ''))
+        controller = self.host.translation_for('article:' + self.article['id'])
+        if not controller.state['text']:
+            controller.prefill(text, self.article['title'] + (' · 选中内容' if selected else ''))
+        elif selected and text != controller.state['text']:
+            controller.receive(dict(text=text, origin=self.article['title'] + ' · 选中内容'))
+        self.host.translation = controller
+        if self.translation_page is None:
+            from .translation import TranslationPage
+            self.translation_page = TranslationPage(self.host, controller, self.show_original)
+            self.reading_tools.addWidget(self.translation_page)
+        self.reading_tools.setCurrentWidget(self.translation_page)
+        self.selection_bar.hide()
+
+    def show_original(self):
+        self.reading_tools.setCurrentWidget(self.paper)
+        self.text.setFocus()
 
     def selection_changed(self):
         if hasattr(self, 'find_bar') and not self.find_bar.isHidden() and self.find_bar.query.hasFocus():

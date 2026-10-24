@@ -135,6 +135,13 @@ def poll(app):
     ready=bool(app._uia_started and app.uia.pid() and hook and enabled and not blocked)
     label='划选后自动弹出' if ready else '取词已暂停' if not enabled else decision.label if blocked else '回到原文中划选' if app._uia_started and app.uia.pid() else '取词组件正在准备'
     record={'updated':now,'pid':os.getpid(),'ready':ready,'enabled':enabled,'hook':hook,'label':label}
+    record['appearance'] = getattr(app, '_reading_appearance', None)
+    panel = getattr(app, 'reading_panel', None)
+    if panel is not None:
+        try:
+            record['panel_background'] = str(panel.win.cget('background')).lower()
+        except Exception:
+            pass
     target=data_dir()/'capture-status.json'
     temporary=target.with_suffix('.tmp')
     temporary.write_text(json.dumps(record,ensure_ascii=False),encoding='utf-8')

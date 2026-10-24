@@ -928,6 +928,12 @@ class CaptureService:
         这个函数里**任何**异常都不许冒出来：它跑在独立线程，异常会把
         「线程里未捕获」的噪音打进日志，而用户什么都没做错。
         """
+        try:
+            max_chars = self.config.article_max_chars
+        except Exception:
+            with self._lock:
+                self._article_pending.discard(doc_key)
+            return
         article = None
         try:
             if office_article is not None:
@@ -948,15 +954,16 @@ class CaptureService:
         # 如实写明省掉了多少字 —— 留档被截过是事实，不能让以后读的人以为那就是全文。
         # 这里只截**留档**；真正发给模型的是 `app/api_client.py` 的 3 万字上限。
         try:
-            if article_source.clip_article(article, self.config.article_max_chars):
+            if article_source.clip_article(article, max_chars):
                 log.info("原文超长已截断 #%s：留档 %d 字（上限 %d）",
-                         doc_key, article.chars, self.config.article_max_chars)
+                         doc_key, article.chars, max_chars)
         except Exception:  # pragma: no cover - 截断不该挡住留档
             log.exception("原文留档截断失败（%s）", doc_key)
         try:
             self.db.put_article(doc_key, article)
         except Exception as exc:  # pragma: no cover - 库刚被关掉时可能发生
             log.debug("原文留档写入失败（%s）：%s", doc_key, exc)
+            return
         finally:
             with self._lock:
                 self._article_pending.discard(doc_key)

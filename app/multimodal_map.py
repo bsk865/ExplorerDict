@@ -41,7 +41,7 @@ def review_images(store,client,article,graph,cancel,progress):
     reports=[]
     for i,block in enumerate(images):
         if cancel.is_set():raise ValueError('已停止核对图片。')
-        progress(f'正在对照原图复核 {i+1}/{len(images)}…')
+        progress(f'正在核对图片 {i+1}/{len(images)}…')
         nodes=[n for n in graph['nodes'] if any(e['block']==block['id'] and e['kind']=='image' for e in n.get('evidence',[]))]
         relations=[r for r in graph['relations'] if any(e['block']==block['id'] and e['kind']=='image' for e in r.get('evidence',[]))]
         if not nodes:raise ValueError('导图遗漏了一张图片的内容，请重试。')

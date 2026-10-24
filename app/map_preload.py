@@ -8,10 +8,11 @@ from collections import OrderedDict
 from . import article_map
 
 
-def fingerprint(article, signature):
+def fingerprint(article, signature, mode='auto'):
+    from .map_input import resolve_mode
     words = list(dict.fromkeys(o['title'] for o in article.get('objects', []) if o['type'] == 'term'))
     data = [article['version'], article['title'], article['blocks'], words,
-            signature, article_map.POLICY_VERSION, 'prepared-map-v1']
+            signature, article_map.POLICY_VERSION, 'prepared-map-v2', resolve_mode(article, mode)]
     return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
@@ -37,9 +38,12 @@ class MapPreloader:
         config = self.workspace.config()
         if not config['has_key']:
             return
-        key = fingerprint(article, config['signature'])
+        signature = config.get('map_signature', config['signature'])
+        key = fingerprint(article, signature)
         # Preserve existing maps made before background preparation was introduced.
         if cached(article, key) or (article.get('map') and not article.get('map_input')):
+            return
+        if article.get('map') and cached(article, fingerprint(article, signature, (article.get('quality') or {}).get('input_mode', 'auto'))):
             return
         now = time.monotonic()
         with self.lock:
@@ -74,7 +78,7 @@ class MapPreloader:
             try:
                 article = self.workspace.store.article(aid)
                 if (article.get('superseded_by') or article.get('source_status') == 'pending_source'
-                        or key != fingerprint(article, self.workspace.config()['signature'])
+                        or key != fingerprint(article, self.workspace.config().get('map_signature', self.workspace.config()['signature']))
                         or cached(article, key)):
                     continue
                 self.workspace.start('map', {'article_id': aid}, background=True)

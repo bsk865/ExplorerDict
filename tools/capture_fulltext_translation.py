@@ -23,7 +23,7 @@ def main():
     family = QFontDatabase.applicationFontFamilies(font)[0]
     QFont.insertSubstitution('Microsoft YaHei UI', family)
     app.setFont(QFont(family, 10))
-    output = ROOT / 'docs/screenshots/fulltext-translation-20261024'
+    output = ROOT / 'docs/screenshots/reading-tools-20261024'
     output.mkdir(parents=True, exist_ok=True)
     local = ROOT / 'artifacts/fulltext-translation-20261024'
     local.mkdir(parents=True, exist_ok=True)
@@ -57,6 +57,20 @@ def main():
                     time.sleep(.01)
                 raise RuntimeError('Tasks did not settle')
             settle()
+            discover=window.stack.currentWidget()
+            discover.show_preferences()
+            settle()
+            scroll=discover.stack.currentWidget()
+            scroll.ensureWidgetVisible(discover.subscription)
+            settle()
+            window.grab().save(str(output / 'subscription.png'))
+            window.resize(900,620)
+            settle()
+            scroll.ensureWidgetVisible(discover.subscription)
+            settle()
+            window.grab().save(str(output / 'subscription-narrow.png'))
+            window.resize(1380,880)
+            settle()
             window.stack.currentWidget().show_detail(item['id'])
             settle()
             window.grab().save(str(output / 'fulltext-detail.png'))
@@ -66,10 +80,18 @@ def main():
             recorded = local / 'live-translation.json'
             if recorded.is_file():
                 live = json.loads(recorded.read_text(encoding='utf-8'))
-                window.translation.state.update(live['input'], result=live['result']['text'], complete=live['result']['complete'], origin='公开短句翻译')
-                window.translation.flush()
-            window.navigate('translate')
-            settle()
+                example=service.import_text('从演示中学习',live['input']['text'])
+                window.open_article(example['id'])
+                settle()
+                reader=window.stack.currentWidget()
+                reader.translate()
+                controller=reader.translation_page.controller
+                controller.state.update(live['input'],result=live['result']['text'],complete=live['result']['complete'])
+                controller.flush()
+                controller.changed.emit()
+            else:
+                window.stack.currentWidget().translate()
+            for _ in range(8):app.processEvents()
             window.grab().save(str(output / 'translation.png'))
             window.resize(900, 620)
             settle()

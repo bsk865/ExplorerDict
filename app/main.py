@@ -1449,6 +1449,16 @@ class App:
         from .reading_launcher import open_workspace
         open_workspace()
 
+    def open_translation(self, text, origin='悬浮取词'):
+        from .workspace_bridge import send_translation
+        from .paths import data_dir
+        pending = send_translation(data_dir(), text, origin)
+        try:
+            self.open_reading_workspace()
+        except Exception:
+            pending.unlink(missing_ok=True)
+            raise
+
     def capture_enabled(self) -> bool:
         return self.config.capture_enabled
 
@@ -2127,7 +2137,6 @@ class App:
                 if panel is not None:
                     version = self.db.query_one('PRAGMA data_version')[0]
                     if version != getattr(self, '_reading_data_version', None):
-                        self._reading_data_version = version
                         from . import reading_preferences
                         appearance=reading_preferences.from_database(self.db)
                         if appearance != getattr(self,'_reading_appearance',None):
@@ -2138,6 +2147,7 @@ class App:
                         if panel.entry_id and not panel._chat_busy:
                             panel._reload_chat()
                             panel._render_detail()
+                        self._reading_data_version = version
         except Exception:  # pragma: no cover - 轮询绝不允许打断主循环
             log.exception("处理呼出请求失败")
         finally:
@@ -2524,7 +2534,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--window-title", default="", help="覆盖主窗口标题（截图/自动化用）")
     parser.add_argument("--open-main", action="store_true",
                         help="启动后打开词典主界面（双击 exe / 重复启动呼出用）")
+    parser.add_argument('--check-appearance', type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if args.check_appearance:
+        from .appearance_check import run
+        return run(args.check_appearance)
 
     setup_logging(console=args.console_log or args.selftest)
     log.info("=== 探索词典启动 (pid=%s) ===", os.getpid())

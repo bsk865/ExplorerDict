@@ -1,5 +1,6 @@
-"""Persistent translation workspace; changing pages never resends a request."""
+"""Translation tools with independent drafts and jobs for each reading source."""
 from pathlib import Path
+from hashlib import sha256
 from PySide6.QtCore import QObject, QTimer, Signal, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QLabel, QSplitter, QApplication
 from .widgets import button, heading, PageComboBox, FlowLayout
@@ -7,14 +8,25 @@ from .surfaces import QFileDialog
 from ..translation import LANGUAGES
 
 
+def source_scope(text, origin):
+    identity = origin.strip()
+    if not identity:
+        return 'scratch'
+    if identity == '悬浮取词':
+        identity += '\n' + text
+    return 'source:' + sha256(identity.encode('utf-8')).hexdigest()
+
+
 class TranslationController(QObject):
     changed = Signal()
 
-    def __init__(self, host):
+    def __init__(self, host, scope='scratch'):
         super().__init__(host)
         self.host = host
+        self.scope = scope
+        self.storage_key = 'native-translation:' + scope
         self.state = dict(source='auto', target='zh', text='', result='', origin='', complete=False)
-        self.state.update(host.service.store.get('settings', 'native-translation', {}))
+        self.state.update(host.service.store.get('settings', self.storage_key, {}))
         self.job = None
         self.message = ''
         self.timer = QTimer(self)
@@ -27,7 +39,12 @@ class TranslationController(QObject):
 
     def flush(self):
         self.save_timer.stop()
-        self.host.service.store.put('settings', 'native-translation', self.state)
+        store = self.host.service.store
+        with store.lock:
+            if self.scope.startswith('article:') and not store.get('articles', self.scope.removeprefix('article:')):
+                return False
+            store.put('settings', self.storage_key, self.state)
+        return True
 
     def draft(self, **values):
         if self.job:
@@ -47,10 +64,35 @@ class TranslationController(QObject):
         self.flush()
         return True
 
+    def receive(self, value):
+        if self.job or self.state.get('text', '').strip() and self.state['text'] != value['text']:
+            self.state['incoming'] = value
+            self.flush()
+            self.changed.emit()
+        else:
+            self.prefill(**value)
+            self.changed.emit()
+
+    def load_incoming(self):
+        if self.job:
+            return
+        value = self.state.pop('incoming', None)
+        if value:
+            self.prefill(**value)
+            self.changed.emit()
+
+    def dismiss_incoming(self):
+        self.state.pop('incoming', None)
+        self.flush()
+        self.changed.emit()
+
     def start(self):
         if self.job:
             return
-        self.flush()
+        if not self.flush():
+            self.message = '原文章已删除，无法继续翻译。'
+            self.changed.emit()
+            return
         try:
             result = self.host.service.workspace.start('translate', {key:self.state[key] for key in ('source', 'target', 'text')})
         except ValueError as exc:
@@ -105,13 +147,18 @@ class TranslationController(QObject):
 
 
 class TranslationPage(QWidget):
-    def __init__(self, host):
+    def __init__(self, host, controller=None, close=None):
         super().__init__(host)
-        self.host, self.controller = host, host.translation
+        self.host, self.controller = host, controller or host.translation
         self.rendering = False
+        self.article_bound = self.controller.scope.startswith('article:')
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 20, 24, 16)
-        outer.addWidget(heading('翻译', '保留原文，对照理解不同语言的内容'))
+        outer.setContentsMargins(*( (12, 4, 12, 8) if self.article_bound else (24, 20, 24, 16) ))
+        header = QHBoxLayout()
+        header.addWidget(QLabel('原文与译文') if self.article_bound else heading('翻译', '保留原文，对照理解不同语言的内容'), 1)
+        if close:
+            header.addWidget(button('返回原文' if self.controller.scope.startswith('article:') else '收起翻译', close))
+        outer.addLayout(header)
         languages = QHBoxLayout()
         languages.addWidget(QLabel('从'))
         self.source, self.target = PageComboBox(), PageComboBox()
@@ -135,6 +182,17 @@ class TranslationPage(QWidget):
         self.origin.setObjectName('muted')
         self.origin.setTextFormat(Qt.TextFormat.PlainText)
         outer.addWidget(self.origin)
+        self.incoming = QWidget()
+        incoming_row = QHBoxLayout(self.incoming)
+        incoming_row.setContentsMargins(0, 0, 0, 0)
+        self.incoming_label = QLabel('')
+        self.incoming_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.incoming_label.setWordWrap(True)
+        incoming_row.addWidget(self.incoming_label, 1)
+        self.load_incoming = button('载入新内容', self.controller.load_incoming)
+        incoming_row.addWidget(self.load_incoming)
+        incoming_row.addWidget(button('忽略', self.controller.dismiss_incoming))
+        outer.addWidget(self.incoming)
         split = QSplitter(Qt.Orientation.Horizontal)
         self.original, self.result = QPlainTextEdit(), QPlainTextEdit()
         self.original.setPlaceholderText('输入或粘贴原文，也可以从发现页或阅读页带入内容。')
@@ -165,7 +223,7 @@ class TranslationPage(QWidget):
         for control in (self.start, self.stop, self.copy, self.export):
             actions.addWidget(control)
         outer.addLayout(actions)
-        note = QLabel('点击翻译后，原文会发送至设置中的模型，并产生用量。长文分段处理；译文单独保存，不替换原文。')
+        note = QLabel('译文自动保存在本文中，不替换原文。' if self.article_bound else '译文自动保存在本机，不替换原文。')
         note.setObjectName('muted')
         note.setWordWrap(True)
         outer.addWidget(note)
@@ -195,6 +253,8 @@ class TranslationPage(QWidget):
     def render(self):
         self.rendering = True
         state, busy = self.controller.state, bool(self.controller.job)
+        for combo, language in ((self.source, state['source']), (self.target, state['target'])):
+            combo.setCurrentIndex(max(0, combo.findData(language)))
         for editor, text in ((self.original, state['text']), (self.result, state['result'])):
             if editor.toPlainText() != text:
                 position = editor.verticalScrollBar().value()
@@ -209,6 +269,11 @@ class TranslationPage(QWidget):
         self.copy.setEnabled(bool(state['result']))
         self.export.setEnabled(bool(state['result']))
         self.origin.setText('来源：' + state['origin'] if state.get('origin') else '')
+        self.origin.setVisible(bool(state.get('origin')) and (not self.article_bound or ' · 选中内容' in state['origin']))
+        incoming = state.get('incoming')
+        self.incoming.setVisible(bool(incoming))
+        self.load_incoming.setEnabled(not busy)
+        self.incoming_label.setText('新内容：'+incoming['text'][:100]+'。当前内容已保留，载入后替换。' if incoming else '')
         self.status.setText(self.controller.message or ('已恢复上次译文' if state['result'] and state.get('complete') else '已恢复原文与部分译文，译文尚不完整' if state['result'] else '选择语言后开始翻译'))
         self.rendering = False
 

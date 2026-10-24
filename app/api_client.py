@@ -1471,7 +1471,9 @@ class DeepSeekClient:
         from dataclasses import replace
         from .request_supervisor import supervisor
         kind = getattr(self, 'request_kind', 'model')
-        ceiling = {'map-read': 30, 'map-generate': 45, 'map-review': 45}.get(kind, 60)
+        # Long-paper reasoning must not be cancelled at the old 30-second limit.
+        # The workspace still bounds the complete map and cancellation stays live.
+        ceiling = 120 if kind in {'map-read', 'map-repair-quotes', 'map-generate', 'map-review'} else 60
         retries = min(2, self.retry_policy.max_retries)
         attempt_timeout = min(self.timeout, ceiling)
         budget = min(attempt_timeout * (retries + 1) + self.retry_policy.max_delay * retries,
@@ -1497,7 +1499,8 @@ class DeepSeekClient:
                     cancel_event=cancel, on_retry=self.on_retry))
         except ApiError as exc:
             if exc.kind in {'timeout', 'network', 'server', 'rate_limit', 'busy'}:
-                message = '暂时未能连接，请检查网络或服务设置，稍后再试。'
+                message = ('模型处理超时，请稍后重试；已有内容与已完成的导图分段会保留。' if exc.kind == 'timeout'
+                           else '暂时未能连接，请检查网络或服务设置，稍后再试。')
                 error = ApiError(exc.kind, message, status=exc.status)
                 error.attempts = exc.attempts
                 raise error from None

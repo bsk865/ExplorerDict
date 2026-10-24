@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+import shutil
+from unittest.mock import patch
 from pathlib import Path
 from app import reading_preferences as prefs
 
@@ -26,3 +28,18 @@ class ReadingPreferencesTests(unittest.TestCase):
                     self.assertRegex(colors[key],r'^#[0-9a-fA-F]{6}$')
                 self.assertNotEqual(colors['bg'],colors['ink'])
             self.assertNotEqual(prefs.colors(palette,'light')['bg'],prefs.colors(palette,'dark')['bg'])
+
+    def test_packaged_companion_uses_bundled_palettes_without_source_tree(self):
+        source = Path(__file__).resolve().parents[1]/'web'
+        expected = dict(prefs.colors('ocean', 'dark'))
+        for runtime in ('_runtime', '_native_runtime'):
+            with self.subTest(runtime=runtime):
+                target = self.root/runtime/'web'
+                target.mkdir(parents=True)
+                for file in [source/'index.html', *source.glob('*.css')]:
+                    shutil.copy2(file, target/file.name)
+                prefs.colors.cache_clear()
+                with patch.object(prefs, 'resource_root', return_value=self.root/'_runtime'), patch.object(prefs, 'project_root', return_value=self.root):
+                    self.assertEqual(expected, prefs.colors('ocean', 'dark'))
+                shutil.rmtree(target)
+        prefs.colors.cache_clear()

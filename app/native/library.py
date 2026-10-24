@@ -177,7 +177,7 @@ class LibraryPage(QWidget):
         self.menu.addSeparator()
         self.menu.addAction('知识索引', lambda: host.navigate('index'))
         self.menu.addAction('对话用量', lambda: QMessageBox.information(self, '对话用量', self.context.text()))
-        self.menu.addAction('查看交接记录', self.show_handoff)
+        self.menu.addAction('查看对话回顾', self.show_handoff)
         self.more.setMenu(self.menu)
         title.addWidget(self.more)
         layout.addLayout(title)
@@ -220,7 +220,7 @@ class LibraryPage(QWidget):
         self.context.hide()
         self.restart = button('接续对话', self.controller.restart)
         tools.addStretch()
-        self.handoff = button('交接记录', self.show_handoff)
+        self.handoff = button('对话回顾', self.show_handoff)
         tools.addWidget(self.handoff)
         tools.addWidget(self.restart)
         conversation.addLayout(tools)
@@ -288,7 +288,7 @@ class LibraryPage(QWidget):
         if not 2 <= len(self.controller.body['article_ids']) <= 12:
             self.host.notice('比较阅读请选择2至12篇文章。')
             return
-        question = self.input.toPlainText().strip() or '请比较所选文章的研究对象、方法、主要结论与局限，并提出需要进一步核对的问题。'
+        question = self.input.toPlainText().strip() or '这些文章有哪些共同点和差异？'
         self.controller.request(question, mode='compare')
 
     def show_scope(self):
@@ -398,7 +398,7 @@ class LibraryPage(QWidget):
         self.context.setText(f"对话预算 {policy['budget']:,}" + (f" · 已用 {used:,}" if isinstance(used, int) else ''))
         self.restart.setVisible(bool(c.session.get('closed')))
         count = len(handoff_records(c.session))
-        self.handoff.setText(f'交接记录 · {count}')
+        self.handoff.setText(f'对话回顾 · {count}')
         self.handoff.setVisible(bool(count))
         self.restart.setEnabled(not c.busy)
         self.save_note.setEnabled(not c.busy and any(m.get('role') == 'assistant' for m in c.session.get('messages', [])))

@@ -107,7 +107,7 @@ class SettingsDialog(QDialog):
         policy.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         policy.setVerticalSpacing(16)
         policy.addRow(section_heading('问答上下文预算'))
-        note = QLabel('用于文章问答和资料库问答。达到预算后保存交接记录，可接续新对话。')
+        note = QLabel('用于文章问答和资料库问答。达到预算后保存对话回顾，可接续新对话。')
         note.setWordWrap(True)
         policy.addRow(note)
         self.budget = PageSlider(Qt.Orientation.Horizontal)
