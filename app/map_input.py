@@ -20,7 +20,7 @@ def resolve_mode(article, mode='auto'):
 
 
 def markdown(article):
-    from .map_customization import display_graph
+    from .map_customization import display_graph, customization
     graph = display_graph(article)
     nodes = {n['id']: n for n in graph.get('nodes', [])}
     children = {}
@@ -36,13 +36,27 @@ def markdown(article):
         lines.append('  '*level+'- '+node['label'].replace('\n', ' '))
         if node.get('manual_label'):
             lines.append('  '*(level+1)+'手动修改；原标签：'+node['original_label'].replace('\n', ' '))
+        if node.get('manual_node'):
+            lines.append('  '*(level+1)+'我的补充'+('：'+node['note'].replace('\n', ' ') if node.get('note') else ''))
+        if node.get('manual_parent'):
+            lines.append('  '*(level+1)+'已手动调整层级')
         if node.get('quote'):
             lines.append('  '*(level+1)+'依据：'+node['quote'].replace('\n', ' '))
         for child in children.get(key, []):
             visit(child['id'], level+1)
     visit(graph.get('root'))
-    lines += ['', '## 原文关系', '']
+    lines += ['', '## 节点关系', '']
     for relation in graph.get('relations', []):
-        lines += ['- '+nodes[relation['src']]['label']+' → '+relation['label']+' → '+nodes[relation['dst']]['label'],
-                  '  依据：'+relation.get('quote', '').replace('\n', ' ')]
+        lines.append('- '+nodes[relation['src']]['label']+' → '+relation['label']+' → '+nodes[relation['dst']]['label'])
+        if relation.get('manual_relation'):
+            lines.append('  '+('手动修改' if relation.get('original_relation') else '我的补充'))
+        if relation.get('note'):
+            lines.append('  我的说明：'+relation['note'].replace('\n', ' '))
+        original = relation.get('original_relation')
+        if original:
+            # The original endpoints may have been hidden after editing this edge.
+            original_nodes = {n['id']: n['label'] for n in (article.get('map') or {}).get('nodes', [])+customization(article).get('added_nodes', [])}
+            lines.append('  原关系：'+original_nodes.get(original['src'], '已移除节点')+' → '+original['label']+' → '+original_nodes.get(original['dst'], '已移除节点'))
+        if relation.get('quote'):
+            lines.append('  '+('原关系依据：' if original else '依据：')+relation['quote'].replace('\n', ' '))
     return '\n'.join(lines)+'\n'

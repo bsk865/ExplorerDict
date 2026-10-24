@@ -12,6 +12,18 @@ from .widgets import button, heading, FlowLayout
 from ..map_input import resolve_mode, markdown
 from ..reading_preferences import colors
 from .. import map_customization
+from .map_editor import MapStructureEditor
+
+
+def node_caption(node):
+    marker = '我的补充' if node.get('manual_node') else '手动修改' if node.get('manual_label') or node.get('manual_parent') else ''
+    return node['label'] + ('\n〔'+marker+'〕' if marker else '')
+
+
+def relation_caption(relation, labels):
+    marker = ('手动修改' if relation.get('original_relation') else '我的补充') if relation.get('manual_relation') else ''
+    return (labels.get(relation['src'], '')+' → '+relation['label']+' → '+labels.get(relation['dst'], '')
+            + (' 〔'+marker+'〕' if marker else ''))
 
 
 class MapView(QGraphicsView):
@@ -150,7 +162,7 @@ class MapScene(QGraphicsScene):
             visited.add(key)
             levels[key] = level
             doc = QTextDocument()
-            doc.setPlainText(rows[key]['label']+('\n〔手动修改〕' if rows[key].get('manual_label') else ''))
+            doc.setPlainText(node_caption(rows[key]))
             doc.setTextWidth(184)
             height = max(54, doc.size().height()+20)
             sizes[key] = height
@@ -177,7 +189,7 @@ class MapScene(QGraphicsScene):
             rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
             rect.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, movable)
             rect.setData(0, rows[key])
-            text = self.addText(rows[key]['label']+('\n〔手动修改〕' if rows[key].get('manual_label') else ''))
+            text = self.addText(node_caption(rows[key]))
             text.setTextWidth(184)
             text.setDefaultTextColor(ink)
             text.setParentItem(rect)
@@ -216,12 +228,12 @@ class MapScene(QGraphicsScene):
         self.refresh_edges()
         if include_relations and graph.get('relations'):
             top = self.itemsBoundingRect().bottom()+50
-            title = self.addText('原文关系')
+            title = self.addText('节点关系')
             title.setDefaultTextColor(ink)
             title.setPos(0, top)
             top += 40
             for relation in graph['relations']:
-                label = rows.get(relation['src'], {}).get('label', '') + ' → ' + relation['label'] + ' → ' + rows.get(relation['dst'], {}).get('label', '')
+                label = relation_caption(relation, {key: row['label'] for key, row in rows.items()})
                 text = self.addText(label)
                 text.setDefaultTextColor(ink)
                 text.setTextWidth(max(640, self.itemsBoundingRect().width()))
@@ -431,9 +443,11 @@ class MapPage(QWidget):
         self.arrange.setToolTip('开启后可拖动节点；方向键微调，Shift + 方向键加快移动')
         self.reset_layout = button('恢复布局', lambda: self.controller.customize(reset_layout=True))
         self.undo = button('撤销', self.controller.undo)
+        self.restore_graph = button('恢复原图', lambda: self.structure.open('reset'))
         arrange.addWidget(self.arrange)
         arrange.addWidget(self.reset_layout)
         arrange.addWidget(self.undo)
+        arrange.addWidget(self.restore_graph)
         arrange.addStretch()
         layout.addLayout(arrange)
         scope = QLabel('正文导图只研读正文；图文导图同时识别并核对图片，需要模型支持图片。扫描页需使用图文导图。')
@@ -466,6 +480,18 @@ class MapPage(QWidget):
         edit_layout.addLayout(edit_controls)
         self.editor.hide()
         aside.addWidget(self.editor)
+        actions = FlowLayout(spacing=6)
+        self.add_node = button('新增子节点', lambda: self.structure.open('add_node'))
+        self.reparent = button('调整层级', lambda: self.structure.open('reparent'))
+        self.remove_node = button('删除节点', lambda: self.structure.open('remove_node'))
+        self.add_relation = button('新增关系', lambda: self.structure.open('add_relation'))
+        self.edit_relation = button('编辑关系', lambda: self.structure.open('edit_relation'))
+        self.remove_relation = button('删除关系', lambda: self.structure.open('remove_relation'))
+        for control in (self.add_node, self.reparent, self.remove_node, self.add_relation, self.edit_relation, self.remove_relation):
+            actions.addWidget(control)
+        aside.addLayout(actions)
+        self.structure = MapStructureEditor(self)
+        aside.addWidget(self.structure)
         aside.addWidget(self.quote, 1)
         self.relations = QListWidget()
         self.relations.setMinimumHeight(90)
@@ -486,7 +512,12 @@ class MapPage(QWidget):
         self.detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.detail_scroll.setMinimumWidth(210)
         self.detail_scroll.setWidget(detail)
-        split.addWidget(self.detail_scroll)
+        detail_panel = QWidget()
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.addWidget(self.detail_scroll, 1)
+        detail_layout.addWidget(self.structure.footer)
+        split.addWidget(detail_panel)
         split.setSizes([750, 290])
         split.setChildrenCollapsible(False)
         layout.addWidget(split, 1)
@@ -514,8 +545,12 @@ class MapPage(QWidget):
         self.arrange.setEnabled(editable)
         self.reset_layout.setEnabled(editable and bool(map_customization.positions(article)))
         self.undo.setEnabled(editable and self.controller.can_undo())
+        self.restore_graph.setEnabled(editable and bool(map_customization.customization(article)))
         self.edit_label.setEnabled(editable and bool(self.selected and 'parent' in self.selected))
         self.editor.setEnabled(editable)
+        self.structure.setEnabled(editable)
+        self.structure.footer.setEnabled(editable)
+        self.update_edit_actions()
         if self.controller.job and self.arrange.isChecked():
             self.arrange.setChecked(False)
         details = []
@@ -576,6 +611,7 @@ class MapPage(QWidget):
 
     def begin_edit(self):
         if self.selected and 'parent' in self.selected and not self.controller.job:
+            self.structure.hide()
             self.label_input.setText(self.selected['label'])
             self.restore_label.setEnabled(bool(self.selected.get('manual_label')))
             self.editor.show()
@@ -596,6 +632,20 @@ class MapPage(QWidget):
     def change_depth(self, *_):
         self.depth_user_selected = True
         self.draw()
+
+    def reveal_node(self, key):
+        graph = map_customization.display_graph(self.controller.article)
+        node = next((n for n in graph.get('nodes', []) if n['id'] == key), None)
+        if not node:
+            return
+        if key not in self.view.scene().nodes:
+            self.focus_path = [node['parent']] if node.get('parent') else []
+            self.draw()
+        item = self.view.scene().nodes.get(key)
+        if item:
+            self.view.scene().clearSelection()
+            item.setSelected(True)
+            self.view.ensureVisible(item)
 
     def open_branch(self):
         if not self.selected or not self.branch.isEnabled():
@@ -627,6 +677,7 @@ class MapPage(QWidget):
         self.quote.setPlainText('选择节点查看原文依据')
         self.selected = None
         self.editor.hide()
+        self.structure.hide()
         self.edit_label.setEnabled(False)
         self.branch.setEnabled(False)
         self.back_branch.setVisible(bool(self.focus_path))
@@ -641,6 +692,7 @@ class MapPage(QWidget):
             self.fit()
         if selected in scene.nodes:
             scene.nodes[selected].setSelected(True)
+        self.update_edit_actions()
 
     def fit(self):
         if self.view.scene() and self.view.scene().items():
@@ -651,18 +703,37 @@ class MapPage(QWidget):
         selected = self.view.scene().selectedItems()
         self.selected = selected[0].data(0) if selected else None
         self.editor.hide()
+        self.structure.hide()
         self.edit_label.setEnabled(bool(self.selected) and not self.controller.job
                                    and not self.controller.article.get('superseded_by'))
         if self.selected:
             original = '\n手动修改 · 原文字：'+self.selected['original_label'] if self.selected.get('manual_label') else ''
-            self.quote.setPlainText(self.selected['label'] + original + '\n\n' + self.selected.get('quote', ''))
-        self.locate.setEnabled(bool(self.selected))
+            marker = '\n我的补充' if self.selected.get('manual_node') else ''
+            parent = '\n已手动调整层级' if self.selected.get('manual_parent') else ''
+            note = '\n\n我的说明：'+self.selected['note'] if self.selected.get('note') else ''
+            self.quote.setPlainText(self.selected['label'] + marker + original + parent + note + '\n\n' + self.selected.get('quote', ''))
+        self.locate.setEnabled(bool(self.selected and (self.selected.get('quote') or self.selected.get('evidence'))))
         graph = map_customization.display_graph(self.controller.article)
         current_root = self.focus_path[-1] if self.focus_path else graph.get('root')
         self.branch.setEnabled(bool(self.selected and self.selected['id'] != current_root and
             any(node.get('parent') == self.selected['id'] for node in graph.get('nodes', []))))
         self.images.setVisible(bool(self.image_evidence()))
         self.show_relations(self.selected.get('id') if self.selected else None)
+        self.update_edit_actions()
+
+    def update_edit_actions(self):
+        editable = bool(self.controller.article.get('map') and not self.controller.job
+                        and not self.controller.article.get('superseded_by'))
+        node = bool(self.selected and 'parent' in self.selected)
+        relation = bool(self.selected and 'src' in self.selected)
+        root = (self.controller.article.get('map') or {}).get('root')
+        for control in (self.add_node, self.reparent, self.remove_node):
+            control.setVisible(node)
+            control.setEnabled(editable and node and (control == self.add_node or self.selected['id'] != root))
+        for control in (self.edit_relation, self.remove_relation):
+            control.setVisible(relation)
+            control.setEnabled(editable and relation)
+        self.add_relation.setEnabled(editable and len(map_customization.display_graph(self.controller.article).get('nodes', [])) > 1)
 
     def show_relations(self, node=None):
         self.relations.clear()
@@ -681,18 +752,29 @@ class MapPage(QWidget):
                 continue
             if branch_ids is not None and not branch_ids.intersection((relation['src'], relation['dst'])):
                 continue
-            label = labels.get(relation['src'], '') + ' → ' + relation['label'] + ' → ' + labels.get(relation['dst'], '')
+            label = relation_caption(relation, labels)
             item = QListWidgetItem(label, self.relations)
             item.setData(Qt.ItemDataRole.UserRole, relation)
 
     def show_relation(self, item):
         self.selected = item.data(Qt.ItemDataRole.UserRole)
         self.editor.hide()
+        self.structure.hide()
         self.edit_label.setEnabled(False)
         self.branch.setEnabled(False)
-        self.quote.setPlainText(self.selected['label'] + '\n\n' + self.selected.get('quote', ''))
-        self.locate.setEnabled(True)
+        original = self.selected.get('original_relation')
+        marker = '\n手动修改' if original else '\n我的补充' if self.selected.get('manual_relation') else ''
+        before = ''
+        if original:
+            labels = {n['id']: n['label'] for n in self.controller.article['map']['nodes']
+                      +map_customization.customization(self.controller.article).get('added_nodes', [])}
+            before = '\n原关系：'+labels.get(original['src'], '已移除节点')+' → '+original['label']+' → '+labels.get(original['dst'], '已移除节点')
+        note = '\n\n我的说明：'+self.selected['note'] if self.selected.get('note') else ''
+        quote = self.selected.get('quote', '')
+        self.quote.setPlainText(self.selected['label']+marker+before+note+('\n\n'+('原关系依据：' if original else '')+quote if quote else ''))
+        self.locate.setEnabled(bool(quote or self.selected.get('evidence')))
         self.images.setVisible(bool(self.image_evidence()))
+        self.update_edit_actions()
 
     def image_evidence(self):
         return [e for e in (self.selected or {}).get('evidence', []) if e.get('kind') == 'image' and e.get('asset')]
