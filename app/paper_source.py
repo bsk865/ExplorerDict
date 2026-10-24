@@ -1,7 +1,21 @@
 """Acquire an original paper document, never silently substitute its abstract."""
 import hashlib
 import re
-from urllib.parse import urlsplit, urljoin, urldefrag
+from urllib.parse import urlsplit, urljoin, urldefrag, unquote
+
+
+def pdf_title(raw, url):
+    """Use the document's own title, with its published filename as fallback."""
+    import pymupdf
+    try:
+        with pymupdf.open(stream=raw, filetype='pdf') as document:
+            if document.needs_pass:
+                raise ValueError('PDF 需要密码，请先解锁原文件后导入。')
+            title = str((document.metadata or {}).get('title') or '').strip()
+    except (RuntimeError, pymupdf.FileDataError) as exc:
+        raise ValueError('未能读取 PDF，请确认链接提供完整的原文件。') from exc
+    name = unquote(urlsplit(url).path.rsplit('/', 1)[-1])
+    return (title or re.sub(r'\.pdf$', '', name, flags=re.I) or 'PDF 文章')[:200]
 
 
 def arxiv_identifier(url):
@@ -31,6 +45,12 @@ def pdf_links(soup, url):
     return result[:3]
 
 
+def paper_page(soup, url):
+    return bool(arxiv_identifier(url) or pdf_links(soup, url) or any(
+        str(node.get('name', '')).casefold() in {'citation_title', 'citation_doi'}
+        for node in soup.find_all('meta')))
+
+
 def pdf_document(item, store, raw, final):
     from .workspace_server import parse_file
     blocks = parse_file(store, 'paper.pdf', raw)
@@ -45,15 +65,15 @@ def pdf_document(item, store, raw, final):
     return item['title'], blocks, stats, {'asset': asset, 'format': 'pdf', 'url': final, 'bytes': len(raw)}
 
 
-def read_paper(item, store, loader):
+def read_paper(item, store, loader, *, response=None):
     identifier = arxiv_identifier(item['url'])
     url = 'https://arxiv.org/pdf/' + identifier if identifier else item['url']
     try:
-        raw, final, charset = loader(url, 28_000_000)
+        raw, final, charset = response if response is not None else loader(url, 28_000_000)
     except Exception as exc:
         raise ValueError('未能下载论文全文，尚未加入资料库。可稍后重试，或导入已下载的 PDF；摘要可单独保存。') from exc
     if raw.lstrip().startswith(b'%PDF-'):
-        return pdf_document(item, store, raw, final)
+        return pdf_document(dict(item, title=item.get('title') or pdf_title(raw, final)), store, raw, final)
     # Generic paper sources must expose a document body, not an abstract landing page.
     from bs4 import BeautifulSoup
     from .reader_source import readable_blocks

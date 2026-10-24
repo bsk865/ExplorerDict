@@ -144,15 +144,38 @@ def readable_blocks(html, url, store, load_image=None):
     return title,blocks,stats
 
 
+def source_blocks(store, url, loader):
+    """Resolve browser, publisher and PDF links through the same document rules."""
+    from .paper_source import arxiv_identifier, read_paper, pdf_document, pdf_title, paper_page
+    identifier = arxiv_identifier(url)
+    if identifier:
+        result = read_paper({'url': url, 'title': ''}, store, loader)
+        return (*result, result[3]['url'] if result[3] else url)
+    raw, final, charset = loader(url, 28_000_000)
+    if raw.lstrip().startswith(b'%PDF-'):
+        result = pdf_document({'title': pdf_title(raw, final)}, store, raw, final)
+        return (*result, final)
+    html = raw.decode(charset, errors='replace')
+    soup = BeautifulSoup(html, 'html.parser')
+    if paper_page(soup, final):
+        from .discovery import metadata
+        result = read_paper({'url': url, 'title': metadata(raw, final, charset)['title']},
+                            store, loader, response=(raw, final, charset))
+        return (*result, result[3]['url'] if result[3] else final)
+    title, blocks, stats = readable_blocks(html, final, store, lambda address: loader(address, 24_000_000)[0])
+    return title, blocks, stats, None, final
+
+
 def capture_source(store,url):
     url=urldefrag(url)[0]
     parts=urlsplit(url)
     if parts.scheme not in {'https','http'} or not parts.netloc or parts.username or parts.password:
         raise ValueError('请提供文章的 HTTP/HTTPS 原网页地址。')
     from .discovery import fetch
-    raw,final,charset=fetch(url,5_000_000)
-    title,blocks,stats=readable_blocks(raw.decode(charset,errors='replace'),final,store,lambda u:fetch(u,24_000_000)[0])
+    title,blocks,stats,document,final=source_blocks(store,url,fetch)
     a=store.import_article(title,blocks,origin='web')
     a.update(source_url=url,resolved_source_url=final,source_status='readable',source_stats=stats)
+    if document:
+        a['source_document']=document
     store.update_article(a)
     return store.article(a['id'])

@@ -158,7 +158,7 @@ def metadata(raw, url, charset='utf-8'):
             if node and node.get('content'):
                 return node['content']
         return ''
-    title = meta('og:title', 'twitter:title') or (soup.title.get_text() if soup.title else '')
+    title = meta('og:title', 'twitter:title', 'citation_title') or (soup.title.get_text() if soup.title else '')
     wx = urlsplit(url).hostname == 'mp.weixin.qq.com'
     if wx and soup.select_one('#activity-name'):
         title = soup.select_one('#activity-name').get_text(' ', strip=True)
@@ -171,6 +171,10 @@ def metadata(raw, url, charset='utf-8'):
                   cover_url=urljoin(url, cover) if cover else '',
                   published=meta('article:published_time'), source_id='links',
                   description_type='网页简介', imported_at=time.time())
+    from .paper_source import paper_page, arxiv_identifier
+    if paper_page(soup, url):
+        result['content_kind'] = 'paper'
+        result['publication'] = meta('citation_journal_title') or ('预印本' if arxiv_identifier(url) else '')
     return result
 
 
@@ -482,8 +486,14 @@ class Discovery:
         return state
 
     def add_link(self, url, loader=fetch):
-        raw, final, charset = loader(canonical(url))
-        item = metadata(raw, final, charset)
+        raw, final, charset = loader(canonical(url), 28_000_000)
+        if raw.lstrip().startswith(b'%PDF-'):
+            from .paper_source import pdf_title
+            item = entry(final, pdf_title(raw, final), urlsplit(final).hostname, 'article')
+            item.update(content_kind='paper', document_format='pdf', source_id='links',
+                        description_type='PDF 原文', imported_at=time.time())
+        else:
+            item = metadata(raw, final, charset)
         if not item['title'] or ('微信' in item['title'] and not item['summary'] and not item['cover_url']):
             raise ValueError('页面暂未提供文章信息，请确认链接可公开访问，或在原站阅读。')
         item = self.cover(item, loader)
@@ -534,10 +544,8 @@ class Discovery:
             title, blocks, stats, document = read_paper(item, self.store, loader)
             status = 'readable'
         else:
-            from .reader_source import readable_blocks
-            raw, final, charset = loader(item['url'], 5_000_000)
-            title, blocks, stats = readable_blocks(raw.decode(charset, errors='replace'), final, self.store,
-                                                  lambda address:loader(address,24_000_000)[0])
+            from .reader_source import source_blocks
+            title, blocks, stats, document, _ = source_blocks(self.store, item['url'], loader)
             status = 'readable'
         article = self.store.import_article(title, blocks, origin='web')
         article.update(source_url=item['url'], source_status=status, source_stats=stats)

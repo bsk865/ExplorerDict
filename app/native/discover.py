@@ -424,13 +424,18 @@ class DiscoverPage(QWidget):
         layout.addWidget(label(item['source']+' · '+(item.get('publication') or item.get('description_type', '来源简介')), True))
         if item.get('authors'):
             layout.addWidget(label(item['authors'], True))
-        layout.addWidget(label(item.get('summary') or '来源未提供简介，请在原站阅读。'))
-        layout.addWidget(label('这里预览来源摘要。加入资料库将读取可访问的论文全文，下载 PDF 时保留原文件；摘要可单独保存。' if paper else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
+        has_summary = bool(item.get('summary', '').strip())
+        if has_summary:
+            layout.addWidget(label(item['summary']))
+        elif item.get('document_format') != 'pdf':
+            layout.addWidget(label('来源未提供简介，请在原站阅读。'))
+        layout.addWidget(label(('获取全文将读取可访问的论文正文，并保留下载的 PDF 原文件。'
+                                + ('也可以单独保存来源摘要。' if has_summary else '')) if paper
+                               else '加入资料库将读取可访问的文章正文；受限页面不会用简介代替全文。', True))
         layout.addWidget(label(item['url'], True))
         actions = FlowLayout(spacing=8)
         actions.addWidget(button('打开原站', lambda: open_source(self.host, item['url'])))
         actions.addWidget(button('复制链接', lambda: copy_link(self.host, item['url'])))
-        has_summary = bool(item.get('summary', '').strip())
         if has_summary:
             actions.addWidget(button('翻译摘要' if paper else '翻译简介',
                                      lambda: self.host.open_translation(item['summary'], item['title'], 'discovery:' + item['id'])))
