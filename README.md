@@ -36,11 +36,11 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 
 ## 从本地资料中寻找依据
 
-![公开14页论文的实际问答与原文引用](docs/screenshots/reading-space-20261024/public-paper-rag.png)
+![三篇公开文献的实际问答与分别引用](docs/screenshots/multi-public-rag-20261024/answers.png)
 
 资料库问答默认查阅全部本地资料，后续导入的文章和抓取片段自动纳入。选择文件是可选的范围筛选，不是开始提问的前置步骤。抓取片段明确标为片段，不冒充文章全文。
 
-可以一次提出多个问题，分别查找依据；文章改名后新引用使用当前标题。回答期间相关资料或已纳入的笔记发生变化，会保留问题并提示重新提问。上图来自同一篇公开论文的实际模型回答，引用可展开核对。
+可以一次围绕多篇文章提问，分别查找依据；点击引用可回到所属文章并高亮原句。文章改名后新引用使用当前标题，回答期间相关资料或已纳入的笔记发生变化，会保留问题并提示重新提问。上图为三篇公开论文的一次真实模型回答，分别引用各篇原文。[问答与定位示例](docs/screenshots/multi-public-rag-20261024/README.md)
 
 ## 阅读、记录、安排
 
@@ -61,7 +61,7 @@ Windows 原生桌面应用。主界面负责阅读与整理，悬浮窗负责跨
 - **偏好记忆**：六套主题、明暗模式、保存天气城市；启动先恢复城市，再更新天气。
 - **模型设置**：可编辑的模型选择、推理强度、预算滑轨及预设；API 密钥由用户自备，用 Windows DPAPI 保存。
 
-截图由真实原生窗口离屏渲染，使用自编演示资料与公开内容，无个人数据或 API 密钥。[发现截图来源](docs/screenshots/discovery-recovery-20261024/README.md) · [问答截图来源](docs/screenshots/reading-space-20261024/README.md) · [阅读与翻译截图来源](docs/screenshots/reading-tools-20261024/README.md) · [基础页面截图来源](docs/screenshots/native-20261023/README.md)
+截图由真实原生窗口离屏渲染，使用自编演示资料与公开内容，无个人数据或 API 密钥。[发现截图来源](docs/screenshots/discovery-recovery-20261024/README.md) · [问答截图来源](docs/screenshots/multi-public-rag-20261024/README.md) · [阅读与翻译截图来源](docs/screenshots/reading-tools-20261024/README.md) · [基础页面截图来源](docs/screenshots/native-20261023/README.md)
 
 ## 快速启动
 
