@@ -4,6 +4,8 @@
 
 探索词典是一款 Windows 桌面学习工具。你可以收集新闻与论文，导入自己的资料，在文章旁提问和翻译，把理解整理成笔记、导图与学习计划。跨应用划词浮窗连接外部阅读与本地资料库，主界面和浮窗共用资料、模型配置及主题。
 
+**[完整项目介绍（20页 PDF）](docs/项目资料/项目介绍.pdf) · [在线阅读](docs/项目资料/项目介绍.md)**：从 AI 时代的阅读背景、核心亮点到完整功能、使用方法、关键技术与实际开发记录。
+
 [下载 Windows 版](https://github.com/bsk865/ExplorerDict/releases/tag/v1.0.20261025.3) · [使用指南](docs/使用指南.md) · [软件介绍](docs/软件介绍.md) · [技术文档](docs/项目资料/技术文档.pdf) · [开发指南](CONTRIBUTING.md) · [文档导航](docs/README.md)
 
 ![发现页：多源内容、来源筛选与最新发布](docs/screenshots/discovery-updates-20261025/latest.png)
