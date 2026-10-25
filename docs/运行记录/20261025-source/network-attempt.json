@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-25",
+  "system": "Windows-11-10.0.26200-SP0",
+  "fresh_source_checkout": true,
+  "new_virtual_environment": true,
+  "existing_os_and_python": true,
+  "pip_cache": "existing Windows user cache",
+  "model_cache": "empty in new source checkout",
+  "source_acquisition": "local independent git clone",
+  "steps": [
+    {
+      "step": "checkout",
+      "seconds": 4.906,
+      "exit_code": 0
+    },
+    {
+      "step": "prepare",
+      "seconds": 504.786,
+      "exit_code": 1
+    }
+  ],
+  "total_seconds": 509.794,
+  "source_commit": "04dc5918881b403bafa52f80144c9d530eba7fed",
+  "passed": false,
+  "error": "Model download failed: Received an unexpected EOF or 0 bytes from the transport stream.",
+  "pip_index": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+}

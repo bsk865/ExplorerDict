@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-25",
+  "source_commit": "18833baf70994cc056b36d24a22908d07fac3f12",
+  "application_baseline_commit": "3049488",
+  "system": "Windows-11-10.0.26200-SP0",
+  "conditions": {
+    "source_acquisition": "local independent Git clone, followed by local fast-forward of startup font fix",
+    "existing_os_and_python": true,
+    "virtual_environment": "created during preceding network attempt; reused for successful direct run",
+    "model_files": "SHA256-verified files downloaded earlier on the same day",
+    "pip_index": "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+    "pip_cache": "existing Windows user cache; some packages downloaded again",
+    "new_application_data_directory": true,
+    "invocation": "direct PowerShell calls; no log redirection"
+  },
+  "preparation": {
+    "seconds": 1.456,
+    "step": "prepare_direct",
+    "exit_code": 0
+  },
+  "startup_process": {
+    "seconds": 3.45,
+    "step": "startup_final",
+    "exit_code": 0
+  },
+  "startup_check": {
+    "python": "3.14.5",
+    "qt_platform": "offscreen",
+    "local_vector_dimensions": 384,
+    "native_helper_loaded": true,
+    "model_api_called": false,
+    "passed": true,
+    "article_reopened": true,
+    "startup_seconds": 2.799
+  },
+  "model_sha256": {
+    "model_quantized.onnx": "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193",
+    "tokenizer.json": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
+  },
+  "passed": true
+}

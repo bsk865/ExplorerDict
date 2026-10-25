@@ -17,12 +17,24 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [技术设计](项目资料/技术文档.md) / [PDF](项目资料/技术文档.pdf) | 数据流、架构、检索、引用与状态管理 |
+| [技术设计](项目资料/技术文档.md) / [PDF](项目资料/技术文档.pdf) | 全功能、架构、数据模型、RAG、模型任务、浮窗联动、Prompt与协作案例，共19章 |
 | [开发过程](项目资料/开发过程.md) | 从使用需求到模块实现的迭代 |
 | [协作设计](项目资料/协作设计.md) | 上下文组织、任务约束与反馈处理 |
 | [源码运行](复现指南.md) | 环境、依赖、模型与启动步骤 |
+| [源码运行记录](源码环境运行记录-20261025.md) | 独立目录准备、实际耗时与运行条件 |
 | [贡献指南](../CONTRIBUTING.md) | 问题反馈、代码修改与提交 |
 | [构建与安装](原生版构建与安装.md) | 主界面、浮窗与打包流程 |
 | [版本进展](开发状态.md) | 当前交付和后续方向 |
 
 [项目资料总览](项目资料/README.md) · [界面示例](screenshots/README.md) · [历史资料](history/README.md)
+
+## 维护技术文档
+
+技术设计的Markdown源文件为`docs/项目资料/技术文档.md`，PDF与架构图由同一工具生成。在Windows开发环境中安装可选文档依赖后执行：
+
+```powershell
+.build-env/Scripts/python.exe -m pip install -r tools/document-requirements.txt
+.build-env/Scripts/python.exe tools/build_project_pdf.py
+```
+
+工具使用Windows微软雅黑字体；输出为`docs/项目资料/技术文档.pdf`和`docs/images/architecture.png`。修改后查看实际PDF中的中文、分页、表格与链接，再同步提交源文件和输出文件。

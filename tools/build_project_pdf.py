@@ -52,9 +52,10 @@ def architecture():
 def link_url(target):
     if target.startswith(('http://','https://')):
         return target
-    resolved=(SOURCE.parent/target).resolve()
+    path, separator, fragment = target.partition('#')
+    resolved=(SOURCE.parent/path).resolve() if path else SOURCE
     relative=resolved.relative_to(ROOT).as_posix()
-    return 'https://github.com/bsk865/ExplorerDict/blob/main/'+quote(relative,safe='/')
+    return 'https://github.com/bsk865/ExplorerDict/blob/main/'+quote(relative,safe='/') + ('#'+quote(fragment) if separator else '')
 
 
 def rich(value):
@@ -65,18 +66,22 @@ def rich(value):
         pieces.append('<link href="'+escape(link_url(match[2]),{'"':'&quot;'})+'" color="#35634b">'+escape(match[1])+'</link>')
         start=match.end()
     pieces.append(escape(value[start:]).replace('`',''))
-    return ''.join(pieces)
+    return re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', ''.join(pieces))
 
 
 def main():
     architecture()
     pdfmetrics.registerFont(TTFont('Project',str(FONT),subfontIndex=0))
     pdfmetrics.registerFont(TTFont('ProjectBold',str(BOLD),subfontIndex=0))
+    pdfmetrics.registerFontFamily('Project',normal='Project',bold='ProjectBold',italic='Project',boldItalic='ProjectBold')
     common=dict(fontName='Project',textColor=HexColor('#304638'),wordWrap='CJK')
     body=ParagraphStyle('body',fontSize=10.2,leading=17.2,spaceAfter=10,**common)
     title=ParagraphStyle('title',fontName='ProjectBold',fontSize=27,leading=37,spaceAfter=20,textColor=HexColor('#244a34'),wordWrap='CJK')
     section=ParagraphStyle('section',fontName='ProjectBold',fontSize=19,leading=29,spaceBefore=16,spaceAfter=18,keepWithNext=True,textColor=HexColor('#244a34'),wordWrap='CJK')
+    subsection=ParagraphStyle('subsection',fontName='ProjectBold',fontSize=12.2,leading=21,spaceBefore=10,spaceAfter=8,keepWithNext=True,textColor=HexColor('#244a34'),wordWrap='CJK')
+    code=ParagraphStyle('code',fontSize=8.8,leading=15,spaceAfter=0,**common)
     small=ParagraphStyle('small',fontSize=8.8,leading=14,spaceAfter=10,**common)
+    item=ParagraphStyle('item',fontSize=9.6,leading=16,spaceAfter=5,**common)
     cell=ParagraphStyle('cell',fontSize=8.4,leading=12,spaceAfter=0,**common)
     lines=SOURCE.read_text(encoding='utf-8').splitlines()
     story=[];index=0
@@ -87,9 +92,22 @@ def main():
         if line.startswith('# '):
             story.append(Spacer(1,26));story.append(Paragraph(rich(line[2:]),title));index+=1
         elif line.startswith('## '):
-            if line[3:].startswith(('1.', '3.', '4.', '6.', '8.')):
-                story.append(PageBreak())
+            story.append(PageBreak())
             story.append(Paragraph(rich(line[3:]),section));index+=1
+        elif line.startswith('### '):
+            story.append(Paragraph(rich(line[4:]),subsection));index+=1
+        elif line == '<!-- pagebreak -->':
+            story.append(PageBreak());index+=1
+        elif re.match(r'^(\d+\. |[-*] )',line):
+            story.append(Paragraph(rich(line),item));index+=1
+        elif line.startswith('```'):
+            index+=1;block=[]
+            while index<len(lines) and not lines[index].startswith('```'):
+                block.append(escape(lines[index]).replace(' ', '&#160;'));index+=1
+            index+=1
+            panel=Table([[Paragraph('<br/>'.join(block),code)]],colWidths=[480],hAlign='LEFT')
+            panel.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),HexColor('#f1f5f1')),('LEFTPADDING',(0,0),(-1,-1),12),('RIGHTPADDING',(0,0),(-1,-1),12),('TOPPADDING',(0,0),(-1,-1),10),('BOTTOMPADDING',(0,0),(-1,-1),10)]))
+            story.extend([panel,Spacer(1,14)])
         elif line.startswith('!['):
             match=re.fullmatch(r'!\[([^\]]*)\]\(([^)]+)\)',line)
             path=(SOURCE.parent/match[2]).resolve()
@@ -105,7 +123,7 @@ def main():
                 if not all(re.fullmatch(r'\s*:?-+:?\s*',part) for part in row):
                     rows.append([Paragraph(rich(part.strip()),cell) for part in row])
                 index+=1
-            table=Table(rows,colWidths=[230,250] if len(rows[0])==2 else None,repeatRows=1,hAlign='LEFT')
+            table=Table(rows,colWidths=[165,315] if len(rows[0])==2 else None,repeatRows=1,hAlign='LEFT')
             table.setStyle(TableStyle([
                 ('BACKGROUND',(0,0),(-1,0),HexColor('#e1ebe1')),
                 ('ROWBACKGROUNDS',(0,1),(-1,-1),[HexColor('#f4f7f4'),HexColor('#ffffff')]),
@@ -116,7 +134,7 @@ def main():
             story.extend([table,Spacer(1,12)])
         else:
             paragraph=[line];index+=1
-            while index<len(lines) and lines[index].strip() and not lines[index].startswith(('#','|','![')):
+            while index<len(lines) and lines[index].strip() and not lines[index].startswith(('#','|','![','```','<!-- pagebreak -->')) and not re.match(r'^(\d+\. |[-*] )',lines[index]):
                 paragraph.append(lines[index].strip());index+=1
             story.append(Paragraph(rich(' '.join(paragraph)),body))
     def footer(canvas,doc):
