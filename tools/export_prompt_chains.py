@@ -8,6 +8,58 @@ import re
 import shutil
 
 
+def runtime_message(role, text):
+    return role == 'user' and bool(re.search(
+        r'<(?:environment_context|codex_internal_context)\b|Another language model started to solve', text))
+
+
+def public_entries(path):
+    text = path.read_text(encoding='utf-8')
+    pattern = re.compile(r'^<a id="([^"]+)"></a>\n### \1 · (用户|AI) · [^\n]+\n\n', re.M)
+    matches = list(pattern.finditer(text))
+    for number, match in enumerate(matches):
+        end = matches[number + 1].start() if number + 1 < len(matches) else len(text)
+        boundary = text.find('\n## 会话区间 ', match.end(), end)
+        if boundary >= 0:
+            end = boundary
+        yield match[1], 'user' if match[2] == '用户' else 'assistant', text[match.end():end].strip(), match.start(), end
+
+
+def check_public(output, clean=False):
+    index_path = output / '导出索引.json'
+    manifest = json.loads(index_path.read_text(encoding='utf-8'))
+    records = {(row['chain'], row['entry']): row for row in manifest}
+    seen, removed = set(), set()
+    for path in sorted(output.glob('[ABC]-*.md')):
+        text = path.read_text(encoding='utf-8')
+        deletions = []
+        count = 0
+        for ident, role, body, start, end in public_entries(path):
+            key = (path.stem, ident)
+            if clean and runtime_message(role, body):
+                removed.add(key)
+                deletions.append((start, end))
+                continue
+            if runtime_message(role, body):
+                raise ValueError(f'Runtime message in public chain: {key}')
+            row = records[key]
+            if row['role'] != role or hashlib.sha256(body.encode()).hexdigest() != row['public_text_sha256']:
+                raise ValueError(f'Public text digest mismatch: {key}')
+            seen.add(key)
+            count += 1
+        for start, end in reversed(deletions):
+            text = text[:start] + text[end:]
+        if deletions:
+            path.write_text(text, encoding='utf-8', newline='\n')
+        print(path.stem, count)
+    if set(records) != seen | removed:
+        raise ValueError('Manifest entries do not match the public chains')
+    if removed:
+        manifest = [row for row in manifest if (row['chain'], row['entry']) not in removed]
+        index_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
+    print(f'Checked {len(seen)} public messages; removed {len(removed)} runtime messages.')
+
+
 def messages(path):
     rows = []
     for line in path.open(encoding='utf-8'):
@@ -44,9 +96,7 @@ def export(early, late, output):
             lines += [f'## 会话区间 {source} · {start}–{end}', '']
             for index in range(start, end + 1):
                 role, stamp, original = sources[source][index]
-                if role == 'user' and any(t in original for t in (
-                        '<environment_context>', '<codex_internal_context>',
-                        'Another language model started to solve')):
+                if runtime_message(role, original):
                     continue
                 body = original
                 attachments = re.findall(r'<image[^>]*path="([^"]+)"[^>]*>.*?</image>', body, re.S)
@@ -71,15 +121,22 @@ def export(early, late, output):
                     'timestamp': stamp, 'source_text_sha256': hashlib.sha256(original.encode()).hexdigest(),
                     'public_text_sha256': hashlib.sha256(body.strip().encode()).hexdigest()})
                 count += 1
-        (output / (title + '.md')).write_text('\n'.join(lines), encoding='utf-8')
+        (output / (title + '.md')).write_text('\n'.join(lines), encoding='utf-8', newline='\n')
         print(title, count)
-    (output / '导出索引.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+    (output / '导出索引.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--early', type=Path, required=True)
-    parser.add_argument('--late', type=Path, required=True)
+    parser.add_argument('--early', type=Path)
+    parser.add_argument('--late', type=Path)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--check-public', action='store_true')
+    parser.add_argument('--clean-public', action='store_true')
     args = parser.parse_args()
-    export(args.early, args.late, args.output)
+    if args.check_public or args.clean_public:
+        check_public(args.output, clean=args.clean_public)
+    else:
+        if not args.early or not args.late:
+            parser.error('Export requires --early and --late')
+        export(args.early, args.late, args.output)

@@ -537,14 +537,6 @@
   },
   {
     "chain": "C-学习规划与任务进度",
-    "entry": "early-008",
-    "role": "user",
-    "timestamp": "2026-10-20T11:20:57.881Z",
-    "source_text_sha256": "c8a7616076eb3eb0d172292fb478ec9336d2c2716c3ffb2e6ace81a3eda410e8",
-    "public_text_sha256": "c8a7616076eb3eb0d172292fb478ec9336d2c2716c3ffb2e6ace81a3eda410e8"
-  },
-  {
-    "chain": "C-学习规划与任务进度",
     "entry": "early-009",
     "role": "assistant",
     "timestamp": "2026-10-20T11:21:03.890Z",
@@ -582,14 +574,6 @@
     "timestamp": "2026-10-20T11:25:35.369Z",
     "source_text_sha256": "c06fa7f8ed07b77324c5a75c9b85f78bfaf0515b154fb86b291c4d7cbc4d59cf",
     "public_text_sha256": "c06fa7f8ed07b77324c5a75c9b85f78bfaf0515b154fb86b291c4d7cbc4d59cf"
-  },
-  {
-    "chain": "C-学习规划与任务进度",
-    "entry": "early-014",
-    "role": "user",
-    "timestamp": "2026-10-20T11:25:35.785Z",
-    "source_text_sha256": "eeb3299db0d81110014954353caa8d0acc93d8b10e688af675bfaf05a0ceec9d",
-    "public_text_sha256": "eeb3299db0d81110014954353caa8d0acc93d8b10e688af675bfaf05a0ceec9d"
   },
   {
     "chain": "C-学习规划与任务进度",
@@ -657,14 +641,6 @@
   },
   {
     "chain": "C-学习规划与任务进度",
-    "entry": "early-023",
-    "role": "user",
-    "timestamp": "2026-10-20T11:37:18.000Z",
-    "source_text_sha256": "25af8066462834f29a97cc7dd87b9e84e0728b80692e1ce40f8f1005893e8190",
-    "public_text_sha256": "25af8066462834f29a97cc7dd87b9e84e0728b80692e1ce40f8f1005893e8190"
-  },
-  {
-    "chain": "C-学习规划与任务进度",
     "entry": "early-024",
     "role": "assistant",
     "timestamp": "2026-10-20T11:37:23.770Z",
@@ -710,14 +686,6 @@
     "timestamp": "2026-10-20T11:44:09.782Z",
     "source_text_sha256": "07a911a6445a14602e2d69342fabe6b8adb5a1b191f25e082138c38ffb90a201",
     "public_text_sha256": "07a911a6445a14602e2d69342fabe6b8adb5a1b191f25e082138c38ffb90a201"
-  },
-  {
-    "chain": "C-学习规划与任务进度",
-    "entry": "early-030",
-    "role": "user",
-    "timestamp": "2026-10-20T11:44:10.138Z",
-    "source_text_sha256": "252a2975fec7c195bca7b95286bffd1641b75841819e99e252fa8e8c68b9b473",
-    "public_text_sha256": "252a2975fec7c195bca7b95286bffd1641b75841819e99e252fa8e8c68b9b473"
   },
   {
     "chain": "C-学习规划与任务进度",

@@ -1,4 +1,4 @@
-﻿# 10 分钟复现脚本（Windows PowerShell 5.1+）
+﻿# 源码环境准备（Windows PowerShell 5.1+ / CPython 3.14 x64）
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File scripts\setup-repro.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\setup-repro.ps1 -SkipModel
@@ -21,12 +21,14 @@ function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor C
 
 Write-Step "检查 Python"
 $version = & $PythonCommand -c "import sys; print('%d.%d' % sys.version_info[:2])"
-if ($LASTEXITCODE -ne 0) { throw "找不到可用的 Python，请先安装 Python 3.12+ 并确保 python 在 PATH 中。" }
+if ($LASTEXITCODE -ne 0) { throw "找不到可用的 Python，请先安装 CPython 3.14 x64 并确保 python 在 PATH 中。" }
 $major, $minor = $version.Split('.')
-if ([int]$major -lt 3 -or ([int]$major -eq 3 -and [int]$minor -lt 12)) {
-    throw "需要 Python 3.12 或更高版本，当前为 $version。"
+if ([int]$major -ne 3 -or [int]$minor -ne 14) {
+    throw "固定依赖使用 CPython 3.14，当前为 $version。请用 -PythonCommand 指定 3.14 的 python.exe。"
 }
-Write-Host "Python $version OK"
+$bits = & $PythonCommand -c "import struct; print(struct.calcsize('P') * 8)"
+if ($bits -ne '64') { throw '请使用 64 位 CPython 3.14。' }
+Write-Host "Python $version x64 OK"
 
 $venv = Join-Path $Root ".build-env"
 if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
@@ -46,7 +48,7 @@ if (-not $SkipModel) {
     $revision = "761b726dd34fb83930e26aab4e9ac3899aa1fa78"
     $files = @(
         @{
-            Path = "onnx\model_quantized.onnx"
+            Path = "model_quantized.onnx"
             Url  = "$ModelMirror/Xenova/multilingual-e5-small/resolve/$revision/onnx/model_quantized.onnx"
             Sha  = "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"
         },
@@ -63,7 +65,7 @@ if (-not $SkipModel) {
         Write-Host ("下载 " + $item.Path + " ...")
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
         $tmp = "$target.download"
-        Invoke-WebRequest -Uri $item.Url -OutFile $tmp -UseBasicParsing
+        Invoke-WebRequest -Uri $item.Url -OutFile $tmp -UseBasicParsing -TimeoutSec 180
         $hash = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower()
         if ($hash -ne $item.Sha) { Remove-Item $tmp -Force; throw ("校验失败：" + $item.Path + "，期望 " + $item.Sha + "，实际 " + $hash) }
         Move-Item -Force $tmp $target
@@ -74,7 +76,7 @@ if (-not $SkipModel) {
 }
 
 if (-not $SkipTests) {
-    Write-Step "冒烟测试（完整测试约 90 秒）"
+    Write-Step "运行模块检查"
     & $venvPython -X utf8 -m unittest discover -s tests -t .
     if ($LASTEXITCODE -ne 0) { throw "测试未全部通过，请查看输出。" }
 }
