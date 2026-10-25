@@ -170,6 +170,9 @@ class ThemeRooms(ThemeList):
         self.setMinimumWidth(0)
         self.setViewMode(QListWidget.ViewMode.IconMode)
         self.setMovement(QListWidget.Movement.Static)
+        # Static icon layout disables drops on QListView's viewport. Keep the
+        # cards stationary while allowing articles to be filed onto them.
+        self.viewport().setAcceptDrops(True)
         self.setResizeMode(QListWidget.ResizeMode.Adjust)
         self.setGridSize(QSize(214, 170))
         self.setItemDelegate(RoomDelegate(palette, self))

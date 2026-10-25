@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import Mock
 
 from PySide6.QtCore import Qt, QMimeData, QPointF, QTimer
-from PySide6.QtGui import QDragMoveEvent, QDragLeaveEvent, QDropEvent
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDragLeaveEvent, QDropEvent
 from PySide6.QtWidgets import QApplication, QListWidgetItem, QLineEdit, QPushButton, QScrollArea, QLabel
 from PySide6.QtTest import QTest
 
@@ -67,6 +67,34 @@ class ThemeDragTests(unittest.TestCase):
         self.assertFalse(self.move(1).isAccepted())
         self.assertIsNone(self.widget.drop_target)
         self.assertFalse(self.move(0).isAccepted())
+
+    def test_theme_card_receives_drop_through_its_viewport(self):
+        rooms = ThemeRooms(colors('clay', 'light'))
+        item = QListWidgetItem('阅读\n0 篇文章', rooms)
+        item.setData(Qt.ItemDataRole.UserRole, 'theme')
+        assigned = []
+        rooms.assigned.connect(lambda key, ids: assigned.append((key, ids)))
+        rooms.resize(500, 200)
+        rooms.show()
+        self.app.processEvents()
+        try:
+            self.assertTrue(rooms.viewport().acceptDrops())
+            point = rooms.visualItemRect(item).center()
+            events = [
+                QDragEnterEvent(point, Qt.DropAction.CopyAction, self.mime,
+                                Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier),
+                QDragMoveEvent(point, Qt.DropAction.CopyAction, self.mime,
+                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier),
+                QDropEvent(QPointF(point), Qt.DropAction.CopyAction, self.mime,
+                           Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier),
+            ]
+            for event in events:
+                self.app.sendEvent(rooms.viewport(), event)
+                self.assertTrue(event.isAccepted())
+            self.assertEqual([('theme', ['article'])], assigned)
+            self.assertIsNone(rooms.drop_target)
+        finally:
+            rooms.close()
 
 
 class ShelfActionsTests(unittest.TestCase):
