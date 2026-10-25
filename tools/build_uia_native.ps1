@@ -10,8 +10,14 @@ if (-not (Test-Path -LiteralPath $compiler)) {
     $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
 }
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Missing .NET Framework C# compiler.' }
-& $compiler /nologo /target:library /optimize+ "/out:$output" $source
-if ($LASTEXITCODE -ne 0) { throw 'UIA native helper build failed.' }
+$temporaryOutput = Join-Path ([IO.Path]::GetTempPath()) ('ExplorerDict.Native.' + [Guid]::NewGuid().ToString('N') + '.dll')
+try {
+    & $compiler /nologo /target:library /optimize+ "/out:$temporaryOutput" $source
+    if ($LASTEXITCODE -ne 0) { throw 'UIA native helper build failed.' }
+    Move-Item -LiteralPath $temporaryOutput -Destination $output -Force
+} finally {
+    if (Test-Path -LiteralPath $temporaryOutput) { Remove-Item -LiteralPath $temporaryOutput -Force }
+}
 $sourceStream = [IO.File]::OpenRead($source)
 $sourceHasher = [Security.Cryptography.SHA256]::Create()
 try {
