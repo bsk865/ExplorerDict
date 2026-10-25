@@ -137,11 +137,17 @@ function Get-ValueOf($el) {
 
 # ---------------------------------------------------------------- foreground gate
 # Minimal Win32 foreground query (no injection, no memory reads, no modules).
+$script:NativeReady = $false
+$script:NativeError = ''
 try {
     # Built ahead of time: avoid invoking the C# compiler on first use/resume.
     $nativeDll = Join-Path $PSScriptRoot 'ExplorerDict.Native.dll'
     if (Test-Path -LiteralPath $nativeDll) {
-        try { Add-Type -Path $nativeDll } catch { }
+        # Windows PowerShell's Add-Type -Path can reject a local assembly and
+        # fall back to a compiler that requires a writable TEMP directory.
+        # This bundled assembly has no managed dependencies: load its bytes
+        # directly, without invoking the compiler or writing temporary files.
+        $null = [System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($nativeDll))
     }
     if (-not ([System.Management.Automation.PSTypeName]'ExplorerDict.Native').Type) {
         Add-Type -Namespace ExplorerDict -Name Native -MemberDefinition @'
@@ -149,6 +155,25 @@ try {
 public static extern System.IntPtr GetForegroundWindow();
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern System.IntPtr GetAncestor(System.IntPtr hwnd, uint flags);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern int GetClassNameW(System.IntPtr hwnd, System.Text.StringBuilder name, int size);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern uint GetLongPathNameW(string path, System.Text.StringBuilder buffer, uint length);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)]
+public static extern System.IntPtr OpenProcess(uint access, bool inherit, uint processId);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode, SetLastError=true)]
+public static extern bool QueryFullProcessImageNameW(System.IntPtr process, uint flags, System.Text.StringBuilder path, ref uint length);
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern bool CloseHandle(System.IntPtr handle);
+public static string GetProcessPath(uint processId) {
+    System.IntPtr process = OpenProcess(0x1000, false, processId);
+    if (process == System.IntPtr.Zero) return "";
+    try {
+        var path = new System.Text.StringBuilder(32768);
+        uint length = (uint)path.Capacity;
+        return QueryFullProcessImageNameW(process, 0, path, ref length) ? path.ToString() : "";
+    } finally { CloseHandle(process); }
+}
 [System.Runtime.InteropServices.DllImport("user32.dll")]
 public static extern uint GetWindowThreadProcessId(System.IntPtr hwnd, out uint processId);
 [System.Runtime.InteropServices.DllImport("oleacc.dll")]
@@ -156,8 +181,12 @@ public static extern int AccessibleObjectFromWindow(System.IntPtr hwnd, uint obj
     ref System.Guid iid, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Interface)] out object value);
 '@
     }
+    $script:NativeReady = [bool]([System.Management.Automation.PSTypeName]'ExplorerDict.Native').Type
+    if (-not $script:NativeReady) { throw 'Native helper type is unavailable.' }
 } catch {
     # Without the helper type the foreground check cannot be made -> everything fails closed.
+    $script:NativeError = $_.Exception.Message
+    [Console]::Error.WriteLine('Native helper initialization failed: ' + $_.Exception.Message)
 }
 
 # Live foreground top-level HWND; 0 when it cannot be determined (fail-closed).
@@ -171,6 +200,7 @@ function Get-ForegroundHwnd {
         if ($v -le 0) { return 0 }
         return [int]$v
     } catch {
+        [Console]::Error.WriteLine('Foreground query failed: ' + $_.Exception.Message)
         return 0
     }
 }
@@ -230,10 +260,18 @@ function Get-ProcessIdentity($processId) {
     if ($key -le 0) { return $none }
     if ($script:ProcessImages.ContainsKey($key)) { return $script:ProcessImages[$key] }
     try {
-        $p = Get-Process -Id $key -ErrorAction Stop
-        $name = ([string]$p.ProcessName).ToLowerInvariant() + '.exe'
-        $path = ''
-        try { $path = ([string]$p.Path).ToLowerInvariant() } catch { }
+        # Query only the executable path with limited process-query rights.
+        # Get-Process can report an existing Office process as missing when
+        # its broader process query is denied.
+        $path = [ExplorerDict.Native]::GetProcessPath([uint32]$key)
+        $name = [IO.Path]::GetFileName($path).ToLowerInvariant()
+        if ($path) {
+            try {
+                $buffer = New-Object System.Text.StringBuilder 32768
+                $length = [ExplorerDict.Native]::GetLongPathNameW($path, $buffer, [uint32]$buffer.Capacity)
+                if ($length -gt 0 -and $length -lt $buffer.Capacity) { $path = $buffer.ToString().ToLowerInvariant() }
+            } catch { }
+        }
         $script:ProcessImages[$key] = @{ name = $name; path = $path }
     } catch { $script:ProcessImages[$key] = $none }
     return $script:ProcessImages[$key]
@@ -475,13 +513,26 @@ function Test-OfficeHwnd($handle, $exp) {
     } catch { return $false }
 }
 
-function Get-NativeOfficeWindow($handle) {
+function Get-NativeOfficeWindow($handle, $exp = $null) {
     $iid = [Guid]'00020400-0000-0000-C000-000000000046'
-    $window = $null
-    $hr = [ExplorerDict.Native]::AccessibleObjectFromWindow(
-        [IntPtr]$handle, [uint32]4294967280, [ref]$iid, [ref]$window)
-    if ($hr -ne 0) { return $null }
-    return $window
+    $script:OfficeBindStatus = @{ attempts = 0; hresult = '' }
+    # Bind to the verified body, then its bounded native view ancestors. Office
+    # versions expose OBJID_NATIVEOM at different levels of the document view.
+    # No running-object lookup, application creation or ActiveDocument access.
+    for ($attempt = 0; $attempt -lt 4 -and $handle -gt 0; $attempt++) {
+        if ($null -ne $exp -and -not (Test-OfficeHwnd $handle $exp)) { return $null }
+        $className = New-Object System.Text.StringBuilder 128
+        $null = [ExplorerDict.Native]::GetClassNameW([IntPtr]$handle, $className, $className.Capacity)
+        if ($className.ToString() -notin @('_WwG', 'KxWpsView', '_WwB', '_WwF', 'OpusApp')) { return $null }
+        $window = $null
+        $hr = [ExplorerDict.Native]::AccessibleObjectFromWindow(
+            [IntPtr]$handle, [uint32]4294967280, [ref]$iid, [ref]$window)
+        $script:OfficeBindStatus = @{ attempts = ($attempt + 1); hresult = ('{0:X8}' -f $hr); view = $className.ToString() }
+        if ($hr -eq 0 -and $null -ne $window) { return $window }
+        if ($null -eq $exp) { return $null }
+        $handle = [ExplorerDict.Native]::GetAncestor([IntPtr]$handle, 1).ToInt64()
+    }
+    return $null
 }
 
 function Try-OfficeSelectionFrom($el, $exp, $chars) {
@@ -498,9 +549,9 @@ function Try-OfficeSelectionFrom($el, $exp, $chars) {
         if ((Test-Candidate $el $exp) -ne '' -or -not (Test-ForegroundIs $exp)) { return $result }
         if ($el.Current.ClassName -notin @('_WwG', 'KxWpsView')) { return $result }
         $handle = [int]$el.Current.NativeWindowHandle
-        if (-not (Test-OfficeHwnd $handle $exp)) { return $result }
-        $window = Get-NativeOfficeWindow $handle
-        if ($null -eq $window) { return $result }
+        if (-not (Test-OfficeHwnd $handle $exp)) { $result.reason = 'office_body_identity'; return $result }
+        $window = Get-NativeOfficeWindow $handle $exp
+        if ($null -eq $window) { $result.reason = 'office_native_window'; $result.diagnostic = $script:OfficeBindStatus; return $result }
         $officeHandle = [int]$window.Hwnd
         if (-not (Test-OfficeHwnd $officeHandle $exp)) { return $result }
         $selection = $window.Selection
@@ -546,7 +597,7 @@ function Try-OfficeSelectionFrom($el, $exp, $chars) {
         } catch { }
         if (-not (Test-OfficeHwnd $officeHandle $exp)) { $result.ok = $false }
         return $result
-    } catch { return $result }
+    } catch { $result.reason = 'office_selection_error'; return $result }
     finally {
         foreach ($obj in @($document, $clone, $range, $selection, $window)) {
             if ($null -ne $obj -and [System.Runtime.InteropServices.Marshal]::IsComObject($obj)) {
@@ -592,6 +643,8 @@ function Handle-Selection($req) {
     # and native Office fallback). It stays 0 when identity checks fail.
     $reads = 0
     $lastReason = 'no_candidate_element'
+    $officeFailure = ''
+    $officeDiagnostic = $null
     $index = 0
     $topSearched = $false
     $ancestorsAdded = $false
@@ -620,6 +673,7 @@ function Handle-Selection($req) {
             $r = Try-SelectionFrom $cand.el $chars
             if ($cand.el.Current.ClassName -in @('_WwG', 'KxWpsView')) {
                 $office = Try-OfficeSelectionFrom $cand.el $exp $chars
+                if (-not $office.ok) { $officeFailure = $office.reason; $officeDiagnostic = $office.diagnostic }
                 if ($office.ok -or $office.reason -in @('empty_selection', 'empty_text')) { $r = $office }
             }
             if ($r.ok) {
@@ -674,8 +728,9 @@ function Handle-Selection($req) {
         }
     }
     if ($null -ne $result) { return $result }
+    if ($officeFailure -and $lastReason -ne 'foreground_changed') { $lastReason = $officeFailure }
     return @{ ok = $false; reason = $lastReason; text = ''; context = ''; method = ''
-              reads = $reads; candidates = $candidates.Count; top_search = $topSearched }
+              reads = $reads; candidates = $candidates.Count; top_search = $topSearched; diagnostic = $officeDiagnostic }
 }
 
 function Handle-OfficeDocument($req) {
@@ -684,7 +739,7 @@ function Handle-OfficeDocument($req) {
     try {
         if ($null -eq $exp -or -not $req.document) { return @{ok=$false; reason='expected_document_required'} }
         if (-not (Test-OfficeHwnd ([int]$req.officeHandle) $exp)) { return @{ok=$false; reason='foreground_changed'} }
-        $window = Get-NativeOfficeWindow ([int]$req.officeHandle)
+        $window = Get-NativeOfficeWindow ([int]$req.officeHandle) $exp
         if ($null -eq $window -or -not (Test-OfficeHwnd ([int]$window.Hwnd) $exp)) { return @{ok=$false; reason='window_mismatch'} }
         $selection = $window.Selection
         $selected = $selection.Range
@@ -772,7 +827,12 @@ while ($true) {
     try {
         switch ($cmd) {
             'ping' {
-                $resp = @{ ok = $true; pong = $true; version = 1; ps = $PSVersionTable.PSVersion.ToString() }
+                $resp = @{ ok = $script:NativeReady; pong = $true; version = 1;
+                           native_ready = $script:NativeReady; ps = $PSVersionTable.PSVersion.ToString() }
+                if (-not $script:NativeReady) {
+                    $resp.reason = 'native_helper_unavailable'
+                    $resp.error = $script:NativeError
+                }
             }
             'selection' {
                 $resp = Handle-Selection $req

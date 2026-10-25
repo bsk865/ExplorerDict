@@ -131,6 +131,7 @@ class UiaBridge:
                         exe,
                         "-NoProfile",
                         "-NonInteractive",
+                        "-STA",
                         "-ExecutionPolicy", "Bypass",
                         "-File", str(self.script),
                     ],
@@ -454,6 +455,8 @@ class UiaBridge:
         log.info("UIA selection ready_wait_ms=%.1f request_ms=%.1f ok=%s reason=%s",
                  ready_ms, (time.monotonic() - began) * 1000 - ready_ms,
                  bool(resp.get("ok")), resp.get("reason", ""))
+        if not resp.get("ok") and resp.get("diagnostic"):
+            log.info("Office selection diagnostic: %s", resp['diagnostic'])
         return resp
 
     def get_office_document(self, *, hwnd: int, pid: int, handle: int, document: str) -> dict:

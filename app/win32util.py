@@ -46,6 +46,7 @@ WM_LBUTTONUP = 0x0202
 WM_MOUSEMOVE = 0x0200
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
+WM_TIMER = 0x0113
 
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -135,6 +136,9 @@ user32.UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
 user32.CallNextHookEx.argtypes = [ctypes.c_void_p, ctypes.c_int, wt.WPARAM, wt.LPARAM]
 user32.CallNextHookEx.restype = LONG_PTR
 user32.GetMessageW.argtypes = [ctypes.POINTER(MSG), wt.HWND, wt.UINT, wt.UINT]
+user32.SetTimer.argtypes = [wt.HWND, ctypes.c_size_t, wt.UINT, ctypes.c_void_p]
+user32.SetTimer.restype = ctypes.c_size_t
+user32.KillTimer.argtypes = [wt.HWND, ctypes.c_size_t]
 user32.PostThreadMessageW.argtypes = [wt.DWORD, wt.UINT, wt.WPARAM, wt.LPARAM]
 user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
 user32.MonitorFromPoint.argtypes = [wt.POINT, wt.DWORD]
@@ -278,6 +282,10 @@ def get_cursor_pos() -> tuple[int, int]:
     pt = wt.POINT()
     user32.GetCursorPos(ctypes.byref(pt))
     return (pt.x, pt.y)
+
+
+def left_button_down() -> bool:
+    return bool(user32.GetAsyncKeyState(0x01) & 0x8000)
 
 
 def is_self_window(hwnd: int) -> bool:
@@ -712,6 +720,15 @@ def call_next_hook(handle: int, n_code: int, w_param: int, l_param: int) -> int:
 
 def get_message(msg: MSG) -> int:
     return int(user32.GetMessageW(ctypes.byref(msg), None, 0, 0))
+
+
+def start_thread_timer(milliseconds: int) -> int:
+    return int(user32.SetTimer(None, 0, milliseconds, None))
+
+
+def stop_thread_timer(timer: int) -> None:
+    if timer:
+        user32.KillTimer(None, timer)
 
 
 def current_thread_id() -> int:
