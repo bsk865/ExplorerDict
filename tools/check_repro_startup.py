@@ -37,6 +37,17 @@ def main():
         raise RuntimeError('Unexpected local embedding shape.')
     app = QApplication([])
     app.setStyle('Fusion')
+    if app.platformName() == 'offscreen':
+        from PySide6.QtGui import QFontDatabase, QFont
+        fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+        family = None
+        for name in ('msyh.ttc', 'msyhbd.ttc'):
+            font_id = QFontDatabase.addApplicationFont(str(fonts / name))
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families and family is None:
+                family = families[0]
+        if family:
+            app.setFont(QFont(family, 10))
     service = NativeService(output / 'data')
     article = service.import_text('源码启动示例', '探索词典把文章和笔记保存在本机。\n\n阅读时可以查找原句，记录自己的理解。')
     window = NativeWindow(service, discovery_updates=False)
