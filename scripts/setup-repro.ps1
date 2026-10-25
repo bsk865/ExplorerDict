@@ -19,6 +19,12 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 function Write-Step([string]$Text) { Write-Host "`n==> $Text" -ForegroundColor Cyan }
+function Get-Sha256([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $algorithm.Dispose() }
+}
 
 Write-Step "检查 Python"
 $version = & $PythonCommand -c "import sys; print('%d.%d' % sys.version_info[:2])"
@@ -61,13 +67,13 @@ if (-not $SkipModel) {
     )
     foreach ($item in $files) {
         $target = Join-Path $modelDir $item.Path
-        $ok = (Test-Path $target) -and ((Get-FileHash $target -Algorithm SHA256).Hash.ToLower() -eq $item.Sha)
+        $ok = (Test-Path $target) -and ((Get-Sha256 $target) -eq $item.Sha)
         if ($ok) { Write-Host ("已存在且校验通过：" + $item.Path); continue }
         Write-Host ("下载 " + $item.Path + " ...")
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
         $tmp = "$target.download"
         Invoke-WebRequest -Uri $item.Url -OutFile $tmp -UseBasicParsing -TimeoutSec 180
-        $hash = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower()
+        $hash = Get-Sha256 $tmp
         if ($hash -ne $item.Sha) { Remove-Item $tmp -Force; throw ("校验失败：" + $item.Path + "，期望 " + $item.Sha + "，实际 " + $hash) }
         Move-Item -Force $tmp $target
         Write-Host ("校验通过：" + $item.Path)

@@ -12,5 +12,13 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Missing .NET Framework C# compiler.' }
 & $compiler /nologo /target:library /optimize+ "/out:$output" $source
 if ($LASTEXITCODE -ne 0) { throw 'UIA native helper build failed.' }
-(Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath (Join-Path $targetDirectory 'source.sha256') -Encoding ascii
+$sourceStream = [IO.File]::OpenRead($source)
+$sourceHasher = [Security.Cryptography.SHA256]::Create()
+try {
+    $sourceHash = [BitConverter]::ToString($sourceHasher.ComputeHash($sourceStream)).Replace('-', '').ToLowerInvariant()
+} finally {
+    $sourceStream.Dispose()
+    $sourceHasher.Dispose()
+}
+$sourceHash | Set-Content -LiteralPath (Join-Path $targetDirectory 'source.sha256') -Encoding ascii
 Write-Output "Built $output from scripts/UiaNative.cs."
